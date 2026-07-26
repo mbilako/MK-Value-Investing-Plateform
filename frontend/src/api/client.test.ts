@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createApiClient } from "./client";
+import { ApiError, createApiClient } from "./client";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -8,24 +8,77 @@ afterEach(() => {
 
 describe("API client authentication", () => {
   it("sends credentials and exposes the authenticated user", async () => {
+    const expectedUser = {
+      id: "user-1",
+      email: "alice@example.com",
+      created_at: "2026-07-26T10:00:00Z",
+    };
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
-        JSON.stringify({
-          id: "user-1",
-          email: "alice@example.com",
-          created_at: "2026-07-26T10:00:00Z",
-        }),
+        JSON.stringify(expectedUser),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
     const client = createApiClient();
 
-    await client.getCurrentUser();
+    await expect(client.getCurrentUser()).resolves.toEqual(expectedUser);
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/auth/me",
       expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("registers with the submitted credentials and returns the created user", async () => {
+    const credentials = { email: "alice@example.com", password: "new-password" };
+    const expectedUser = {
+      id: "user-1",
+      email: "alice@example.com",
+      created_at: "2026-07-26T10:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(expectedUser), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createApiClient().register(credentials)).resolves.toEqual(
+      expectedUser,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/register",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(credentials),
+        credentials: "include",
+      }),
+    );
+  });
+
+  it("logs in with the submitted credentials and returns the authenticated user", async () => {
+    const credentials = { email: "alice@example.com", password: "correct-password" };
+    const expectedUser = {
+      id: "user-1",
+      email: "alice@example.com",
+      created_at: "2026-07-26T10:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(expectedUser), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createApiClient().login(credentials)).resolves.toEqual(
+      expectedUser,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(credentials),
+        credentials: "include",
+      }),
     );
   });
 
@@ -58,10 +111,38 @@ describe("API client authentication", () => {
   });
 
   it("accepts the empty 204 logout response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createApiClient().logout()).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/logout",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+  });
+
+  it("preserves a non-401 API error without notifying subscribers", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "Email already registered" }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
-    await expect(createApiClient().logout()).resolves.toBeUndefined();
+    const client = createApiClient();
+    const handler = vi.fn();
+    client.onUnauthorized(handler);
+
+    const request = client.listCompanies();
+
+    await expect(request).rejects.toMatchObject({
+      status: 409,
+      message: "Email already registered",
+    });
+    await expect(request).rejects.toBeInstanceOf(ApiError);
+    expect(handler).not.toHaveBeenCalled();
   });
 });
