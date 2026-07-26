@@ -10,6 +10,8 @@ from mkvip.models import (  # noqa: F401
     CompanyOrm,
     FinancialSnapshotOrm,
     ScoringAnalysisOrm,
+    SessionOrm,
+    UserOrm,
     ValuationAnalysisOrm,
 )
 
