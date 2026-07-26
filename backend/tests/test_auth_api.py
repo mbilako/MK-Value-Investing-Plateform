@@ -26,6 +26,17 @@ def set_session_token(client: TestClient, token: str) -> None:
     client.cookies.set("mkvip_session", token, path="/api")
 
 
+def contains_input_key(value: object) -> bool:
+    if isinstance(value, dict):
+        return "input" in value or any(
+            contains_input_key(item)
+            for item in value.values()
+        )
+    if isinstance(value, list):
+        return any(contains_input_key(item) for item in value)
+    return False
+
+
 def test_register_sets_secure_server_session(
     database_client: TestClient,
 ) -> None:
@@ -119,6 +130,31 @@ def test_duplicate_registration_returns_conflict(
     assert response.json() == {
         "detail": "Cette adresse email est déjà inscrite."
     }
+
+
+@pytest.mark.parametrize("path", ["register", "login"])
+def test_invalid_auth_password_is_not_reflected_in_validation_error(
+    database_client: TestClient,
+    path: str,
+) -> None:
+    submitted_secret = "S" * 129
+
+    response = database_client.post(
+        f"/api/v1/auth/{path}",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={
+            "email": "alice@example.com",
+            "password": submitted_secret,
+        },
+    )
+
+    assert response.status_code == 422
+    assert submitted_secret not in response.text
+    assert not contains_input_key(response.json())
+    assert any(
+        "at most 128 characters" in error["msg"]
+        for error in response.json()["detail"]
+    )
 
 
 def test_auth_response_bodies_never_expose_raw_session_tokens(

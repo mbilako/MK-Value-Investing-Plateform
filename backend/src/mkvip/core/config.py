@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, SecretStr
+from pydantic import Field, PositiveInt, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:5173"]
     session_cookie_name: str = "mkvip_session"
     session_cookie_secure: bool = False
-    session_duration_days: int = 30
-    login_max_attempts: int = 5
-    login_lock_minutes: int = 15
+    session_duration_days: PositiveInt = 30
+    login_max_attempts: PositiveInt = 5
+    login_lock_minutes: PositiveInt = 15
 
     model_config = SettingsConfigDict(
         env_file=("../.env.local", ".env.local", ".env"),

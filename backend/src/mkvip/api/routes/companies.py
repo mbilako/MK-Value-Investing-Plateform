@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from mkvip.api.dependencies import get_company_repository
-from mkvip.repositories.company import CompanyRepository
+from mkvip.repositories.company import CompanyRepository, DuplicateTickerError
 from mkvip.schemas.company import CompanyCreate, CompanyRead
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -30,4 +30,10 @@ async def create_company(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Le ticker {payload.ticker} existe déjà.",
         )
-    return await repository.create(payload)
+    try:
+        return await repository.create(payload)
+    except DuplicateTickerError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Le ticker {payload.ticker} existe déjà.",
+        ) from error

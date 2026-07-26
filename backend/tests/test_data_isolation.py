@@ -183,6 +183,42 @@ def test_two_users_cannot_discover_or_use_each_others_company(
     assert [item["id"] for item in alice_companies] == [alice_company]
 
 
+def test_explicit_foreign_valuation_is_hidden(
+    database_client: TestClient,
+) -> None:
+    database_client.headers["Origin"] = "http://localhost:5173"
+    register_user(database_client, "alice@example.com")
+    alice_company = create_company(database_client, ticker="AI.PA")
+    assert database_client.post(
+        f"/api/v1/companies/{alice_company}/financials",
+        json=FINANCIAL_PAYLOAD,
+    ).status_code == 201
+    alice_valuation = database_client.post(
+        f"/api/v1/companies/{alice_company}/valuations",
+        json=VALUATION_PAYLOAD,
+    )
+    assert alice_valuation.status_code == 201
+
+    database_client.cookies.clear()
+    register_user(database_client, "bob@example.com")
+    bob_company = create_company(database_client, ticker="OR.PA")
+    assert database_client.post(
+        f"/api/v1/companies/{bob_company}/financials",
+        json=FINANCIAL_PAYLOAD,
+    ).status_code == 201
+
+    response = database_client.post(
+        f"/api/v1/companies/{bob_company}/scores",
+        json={
+            "fiscal_year": 2025,
+            "valuation_id": alice_valuation.json()["id"],
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Valorisation introuvable."}
+
+
 @pytest.mark.asyncio
 async def test_repository_hides_foreign_derived_rows() -> None:
     engine = create_async_engine("sqlite+aiosqlite://")

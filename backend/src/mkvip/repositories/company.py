@@ -12,6 +12,10 @@ from mkvip.schemas.scoring import ScoringAnalysisRead
 from mkvip.schemas.valuation import ValuationAnalysisRead
 
 
+class DuplicateTickerError(Exception):
+    pass
+
+
 class CompanyRepository(Protocol):
     async def list(self) -> list[CompanyRead]: ...
 
@@ -43,6 +47,12 @@ class CompanyRepository(Protocol):
         self,
         company_id: uuid.UUID,
     ) -> list[ValuationAnalysisRead]: ...
+
+    async def get_valuation_analysis(
+        self,
+        company_id: uuid.UUID,
+        valuation_id: uuid.UUID,
+    ) -> ValuationAnalysisRead | None: ...
 
     async def create_valuation_analysis(
         self,

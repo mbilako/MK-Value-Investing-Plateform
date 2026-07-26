@@ -15,11 +15,15 @@ def create_company(client: TestClient) -> str:
     return response.json()["id"]
 
 
-def import_financials(client: TestClient, company_id: str) -> None:
+def import_financials(
+    client: TestClient,
+    company_id: str,
+    fiscal_year: int = 2025,
+) -> None:
     client.post(
         f"/api/v1/companies/{company_id}/financials",
         json={
-            "fiscal_year": 2025,
+            "fiscal_year": fiscal_year,
             "source": "Rapport annuel 2025",
             "currency": "EUR",
             "revenue": 1_000,
@@ -104,6 +108,43 @@ def test_requires_a_valuation_for_the_selected_year(client: TestClient) -> None:
     )
 
     assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Une valorisation calculable est requise pour cet exercice."
+    )
+
+
+def test_explicit_unknown_valuation_returns_not_found(
+    client: TestClient,
+) -> None:
+    company_id = create_company(client)
+    import_financials(client, company_id)
+
+    response = client.post(
+        f"/api/v1/companies/{company_id}/scores",
+        json={
+            "fiscal_year": 2025,
+            "valuation_id": "30000000-0000-0000-0000-000000000001",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Valorisation introuvable."}
+
+
+def test_explicit_valuation_from_another_year_is_not_calculable(
+    client: TestClient,
+) -> None:
+    company_id = create_company(client)
+    import_financials(client, company_id)
+    valuation_id = create_valuation(client, company_id)
+    import_financials(client, company_id, fiscal_year=2024)
+
+    response = client.post(
+        f"/api/v1/companies/{company_id}/scores",
+        json={"fiscal_year": 2024, "valuation_id": valuation_id},
+    )
+
+    assert response.status_code == 409, response.json()
     assert response.json()["detail"] == (
         "Une valorisation calculable est requise pour cet exercice."
     )

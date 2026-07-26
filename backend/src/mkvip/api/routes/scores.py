@@ -58,17 +58,31 @@ async def create_score(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Analyse financière {payload.fiscal_year} introuvable.",
         )
-    valuations = await repository.list_valuation_analyses(company_id)
-    valuation = next(
-        (
-            item
-            for item in valuations
-            if item.fiscal_year == payload.fiscal_year
-            and (payload.valuation_id is None or item.id == payload.valuation_id)
-        ),
-        None,
-    )
-    if valuation is None or valuation.market_gap is None:
+    if payload.valuation_id is not None:
+        valuation = await repository.get_valuation_analysis(
+            company_id,
+            payload.valuation_id,
+        )
+        if valuation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Valorisation introuvable.",
+            )
+    else:
+        valuations = await repository.list_valuation_analyses(company_id)
+        valuation = next(
+            (
+                item
+                for item in valuations
+                if item.fiscal_year == payload.fiscal_year
+            ),
+            None,
+        )
+    if (
+        valuation is None
+        or valuation.fiscal_year != payload.fiscal_year
+        or valuation.market_gap is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(

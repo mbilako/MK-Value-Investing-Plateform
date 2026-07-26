@@ -1,5 +1,8 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from mkvip import __version__
 from mkvip.api.dependencies import get_current_user
@@ -18,12 +21,41 @@ from mkvip.core.config import get_settings
 from mkvip.core.origin import OriginValidationMiddleware
 
 
+def _exclude_validation_inputs(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            key: _exclude_validation_inputs(item)
+            for key, item in value.items()
+            if key != "input"
+        }
+    if isinstance(value, (list, tuple)):
+        return [_exclude_validation_inputs(item) for item in value]
+    return value
+
+
+async def validation_error_handler(
+    request: Request,
+    error: RequestValidationError,
+) -> JSONResponse:
+    del request
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content=jsonable_encoder(
+            {"detail": _exclude_validation_inputs(error.errors())}
+        ),
+    )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(
         title="MK-VIP API",
         version=__version__,
         description="API d'analyse fondamentale de MK Value Investing Platform.",
+    )
+    application.add_exception_handler(
+        RequestValidationError,
+        validation_error_handler,
     )
     application.add_middleware(
         CORSMiddleware,

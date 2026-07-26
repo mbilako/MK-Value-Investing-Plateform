@@ -72,6 +72,21 @@ class InMemoryCompanyRepository:
             reverse=True,
         )
 
+    async def get_valuation_analysis(
+        self,
+        company_id: uuid.UUID,
+        valuation_id: uuid.UUID,
+    ) -> ValuationAnalysisRead | None:
+        return next(
+            (
+                valuation
+                for valuation in self._valuations
+                if valuation.company_id == company_id
+                and valuation.id == valuation_id
+            ),
+            None,
+        )
+
     async def create_valuation_analysis(
         self,
         company_id: uuid.UUID,
