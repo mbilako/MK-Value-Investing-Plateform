@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mkvip}
+      POSTGRES_USER: ${POSTGRES_USER:-mkvip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mkvip}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mkvip} -d ${POSTGRES_DB:-mkvip}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      MKVIP_DATABASE_URL: ${MKVIP_DATABASE_URL:-postgresql+asyncpg://mkvip:mkvip@db:5432/mkvip}
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn mkvip.main:app --host 0.0.0.0 --port 8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  postgres_data:

@@ -1,0 +1,35 @@
+# Local product references
+*.docx
+*.xlsx
+
+# Codex working files
+.codex_*/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+backend/.venv/
+backend/.piptmp/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.tsbuildinfo
+
+# Environment and local data
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite3
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

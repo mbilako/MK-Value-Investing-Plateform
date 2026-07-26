@@ -1,0 +1,84 @@
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from mkvip.analysis.financials import FinancialAnalysis
+from mkvip.models.company import CompanyOrm
+from mkvip.models.financial import FinancialSnapshotOrm
+from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyStatus
+from mkvip.schemas.financial import (
+    FinancialAnalysisRead,
+    FinancialSnapshotCreate,
+)
+
+
+class SqlAlchemyCompanyRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list(self) -> list[CompanyRead]:
+        result = await self._session.scalars(
+            select(CompanyOrm).order_by(CompanyOrm.name)
+        )
+        return [CompanyRead.model_validate(company) for company in result]
+
+    async def get_by_ticker(self, ticker: str) -> CompanyRead | None:
+        company = await self._session.scalar(
+            select(CompanyOrm).where(CompanyOrm.ticker == ticker.upper())
+        )
+        return CompanyRead.model_validate(company) if company else None
+
+    async def get_by_id(self, company_id: uuid.UUID) -> CompanyRead | None:
+        company = await self._session.get(CompanyOrm, company_id)
+        return CompanyRead.model_validate(company) if company else None
+
+    async def create(self, company: CompanyCreate) -> CompanyRead:
+        record = CompanyOrm(**company.model_dump())
+        self._session.add(record)
+        await self._session.commit()
+        await self._session.refresh(record)
+        return CompanyRead.model_validate(record)
+
+    async def get_financial_analysis(
+        self,
+        company_id: uuid.UUID,
+        fiscal_year: int,
+    ) -> FinancialAnalysisRead | None:
+        snapshot = await self._session.scalar(
+            select(FinancialSnapshotOrm).where(
+                FinancialSnapshotOrm.company_id == company_id,
+                FinancialSnapshotOrm.fiscal_year == fiscal_year,
+            )
+        )
+        return FinancialAnalysisRead.model_validate(snapshot) if snapshot else None
+
+    async def create_financial_analysis(
+        self,
+        company_id: uuid.UUID,
+        snapshot: FinancialSnapshotCreate,
+        analysis: FinancialAnalysis,
+    ) -> FinancialAnalysisRead:
+        record = FinancialSnapshotOrm(
+            company_id=company_id,
+            metrics=[
+                {
+                    "key": metric.key,
+                    "label": metric.label,
+                    "value": metric.value,
+                    "status": metric.status.value,
+                    "source_note": metric.source_note,
+                }
+                for metric in analysis.metrics
+            ],
+            mk_score=analysis.mk_score,
+            **snapshot.model_dump(),
+        )
+        company = await self._session.get(CompanyOrm, company_id)
+        if company is not None:
+            company.status = CompanyStatus.READY.value
+            company.latest_mk_score = analysis.mk_score
+        self._session.add(record)
+        await self._session.commit()
+        await self._session.refresh(record)
+        return FinancialAnalysisRead.model_validate(record)

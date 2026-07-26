@@ -1,0 +1,29 @@
+import uuid
+from typing import Protocol
+
+from mkvip.analysis.financials import FinancialAnalysis
+from mkvip.schemas.company import CompanyCreate, CompanyRead
+from mkvip.schemas.financial import FinancialAnalysisRead, FinancialSnapshotCreate
+
+
+class CompanyRepository(Protocol):
+    async def list(self) -> list[CompanyRead]: ...
+
+    async def get_by_ticker(self, ticker: str) -> CompanyRead | None: ...
+
+    async def get_by_id(self, company_id: uuid.UUID) -> CompanyRead | None: ...
+
+    async def create(self, company: CompanyCreate) -> CompanyRead: ...
+
+    async def get_financial_analysis(
+        self,
+        company_id: uuid.UUID,
+        fiscal_year: int,
+    ) -> FinancialAnalysisRead | None: ...
+
+    async def create_financial_analysis(
+        self,
+        company_id: uuid.UUID,
+        snapshot: FinancialSnapshotCreate,
+        analysis: FinancialAnalysis,
+    ) -> FinancialAnalysisRead: ...
