@@ -145,4 +145,42 @@ describe("API client authentication", () => {
     await expect(request).rejects.toBeInstanceOf(ApiError);
     expect(handler).not.toHaveBeenCalled();
   });
+
+  it("formats structured FastAPI validation details as a safe message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            detail: [
+              {
+                type: "value_error",
+                loc: ["body", "email"],
+                msg: "value is not a valid email address: An email address must have an @-sign.",
+                input: "not-an-email",
+                ctx: {
+                  reason: "An email address must have an @-sign.",
+                },
+              },
+            ],
+          }),
+          {
+            status: 422,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    const request = createApiClient().register({
+      email: "not-an-email",
+      password: "valid-password",
+    });
+
+    await expect(request).rejects.toMatchObject({
+      status: 422,
+      message:
+        "value is not a valid email address: An email address must have an @-sign.",
+    });
+  });
 });

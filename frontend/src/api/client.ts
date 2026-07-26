@@ -294,6 +294,38 @@ export interface CompanyClient {
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "/api/v1";
 
+function formatErrorDetail(detail: unknown): string | undefined {
+  if (typeof detail === "string") {
+    return detail || undefined;
+  }
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map(formatErrorDetail)
+      .filter((message): message is string => message !== undefined);
+    return messages.length > 0 ? messages.join("; ") : undefined;
+  }
+  if (typeof detail === "object" && detail !== null && "msg" in detail) {
+    return formatErrorDetail((detail as { msg: unknown }).msg);
+  }
+  return undefined;
+}
+
+function getErrorMessage(errorBody: unknown, status: number): string {
+  if (
+    typeof errorBody === "object" &&
+    errorBody !== null &&
+    "detail" in errorBody
+  ) {
+    const detailMessage = formatErrorDetail(
+      (errorBody as { detail: unknown }).detail,
+    );
+    if (detailMessage !== undefined) {
+      return detailMessage;
+    }
+  }
+  return `API request failed with status ${status}`;
+}
+
 export function createApiClient(): CompanyClient {
   const unauthorizedListeners = new Set<() => void>();
 
@@ -311,15 +343,13 @@ export function createApiClient(): CompanyClient {
       },
     });
     if (!response.ok) {
-      const errorBody = (await response.json().catch(() => null)) as {
-        detail?: string;
-      } | null;
+      const errorBody: unknown = await response.json().catch(() => null);
       if (response.status === 401 && notifyUnauthorized) {
         unauthorizedListeners.forEach((listener) => listener());
       }
       throw new ApiError(
         response.status,
-        errorBody?.detail ?? `API request failed with status ${response.status}`,
+        getErrorMessage(errorBody, response.status),
       );
     }
     if (response.status === 204) {
