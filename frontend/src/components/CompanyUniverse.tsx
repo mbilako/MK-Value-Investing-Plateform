@@ -7,6 +7,7 @@ interface CompanyUniverseProps {
   scores: Record<string, number>;
   onImport: () => void;
   onFinancialImport: (company: Company) => void;
+  onAnalysis: (company: Company) => void;
 }
 
 export function CompanyUniverse({
@@ -14,6 +15,7 @@ export function CompanyUniverse({
   scores,
   onImport,
   onFinancialImport,
+  onAnalysis,
 }: CompanyUniverseProps) {
   const scoreFor = (company: Company) =>
     scores[company.id] ?? company.latest_mk_score;
@@ -52,13 +54,17 @@ export function CompanyUniverse({
                     Ajouter les données
                   </button>
                 ) : (
-                  <span className="company-status company-status--ready">
+                  <button
+                    className="company-status company-status--ready company-analysis"
+                    onClick={() => onAnalysis(company)}
+                    aria-label={`Voir l’analyse financière de ${company.name}`}
+                  >
                     <span className="status-dot" aria-hidden="true" />
                     <span>Analyse prête</span>
                     {scoreFor(company) != null && (
                       <strong>MK Score {scoreFor(company)}</strong>
                     )}
-                  </span>
+                  </button>
                 )}
               </div>
             ))}

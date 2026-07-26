@@ -301,6 +301,12 @@ class YahooFinanceProvider:
             records,
             lambda period, values: ProviderCashFlow(
                 fiscal_year=_year(period),
+                operating_cash_flow=_required(
+                    values,
+                    "flux de trésorerie d'exploitation",
+                    "OperatingCashFlow",
+                    "TotalCashFromOperatingActivities",
+                ),
                 capex=_required(
                     values,
                     "investissements",

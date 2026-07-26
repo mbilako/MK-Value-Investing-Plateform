@@ -10,7 +10,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - interface React/TypeScript ;
 - import des entreprises et de leurs données financières annuelles ;
 - import automatique du dernier exercice public via Yahoo Finance ;
-- calcul automatique de dix ratios et du MK Score ;
+- calcul de dix ratios, six indicateurs et trois scores explicables ;
 - premiers critères Graham/Buffett issus du classeur métier ;
 - tests automatisés, Docker et CI GitHub.
 
@@ -32,7 +32,9 @@ Le parcours applicatif se déroule en deux temps :
 
 1. importer une entreprise ;
 2. utiliser « Ajouter les données », puis choisir l’import public automatique
-   ou la saisie manuelle d’un exercice financier normalisé.
+   ou la saisie manuelle d’un exercice financier normalisé ;
+3. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
+   indicateurs et tendances historiques.
 
 Les montants du formulaire sont exprimés en millions dans la devise de
 l’entreprise. La source doit identifier le rapport annuel ou le dépôt
@@ -90,11 +92,23 @@ docker-compose.yml
 ```text
 POST /api/v1/companies/{company_id}/financials
 POST /api/v1/companies/{company_id}/financials/automatic
+GET  /api/v1/companies/{company_id}/financials
 ```
 
-Les deux routes valident les données, refusent un second import pour le même
-exercice, historisent le snapshot, calculent les dix ratios et passent
-l’entreprise à l’état `ready`.
+Les routes d’import valident les données, refusent un second import pour le
+même exercice, historisent le snapshot, calculent les ratios et scores, puis
+passent l’entreprise à l’état `ready`. La route de lecture restitue les
+exercices du plus récent au plus ancien et leurs tendances.
+
+## Financial Engine
+
+Le moteur v0.4 calcule le Free Cash Flow, sa marge, le ROE, un ROIC avant impôt,
+la couverture des intérêts et la dette nette. Il complète le MK Score par un
+score de qualité et un score de sécurité, puis calcule les taux de croissance
+annualisés lorsque deux exercices comparables sont disponibles.
+
+Les formules, conventions et limites sont détaillées dans
+[`docs/financial-engine.md`](docs/financial-engine.md).
 
 ## Source publique et limites
 
@@ -110,6 +124,6 @@ reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
 ## Prochain incrément
 
-Le prochain incrément développera le Financial Engine : Free Cash Flow, ROE,
-ROIC, croissance pluriannuelle et premiers scores spécialisés, tout en
-conservant le contrat normalisé comme frontière avec les fournisseurs.
+Le prochain incrément développera le Valuation Engine : méthodes Graham,
+Buffett, EPV, multiples et DCF, en conservant une restitution explicable des
+hypothèses.

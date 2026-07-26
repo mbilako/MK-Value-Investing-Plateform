@@ -61,6 +61,9 @@ async def load_latest_snapshot(
             ),
             ebit=_to_millions(income.ebit),
             interest_expense=_to_millions(abs(income.interest_expense)),
+            operating_cash_flow=_to_millions(
+                cash_flow.operating_cash_flow
+            ),
             capex=_to_millions(abs(cash_flow.capex)),
             net_income=_to_millions(income.net_income),
             market_cap=_to_millions(profile.market_cap),

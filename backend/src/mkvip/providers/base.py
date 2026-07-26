@@ -52,6 +52,7 @@ class ProviderBalanceSheet:
 @dataclass(frozen=True)
 class ProviderCashFlow:
     fiscal_year: int
+    operating_cash_flow: float
     capex: float
 
 

@@ -72,3 +72,13 @@ The import interaction uses a right-side drawer with a simple company form.
   `Importer automatiquement avec Yahoo Finance`, `Calculer le MK Score` and
   the ready-state score are the intentional v0.3
   additions that complete the financial-analysis workflow.
+
+## v0.4 analysis drawer
+
+- Clicking a ready company opens a right-side financial analysis drawer.
+- The first level shows MK, quality and safety scores.
+- The second level shows the six latest indicators and available CAGR trends.
+- Source, fiscal year and a non-recommendation notice remain visible.
+- With a single exercise, one concise insufficient-history message replaces
+  empty or invented charts.
+- Below 800px, the drawer occupies the full viewport width.

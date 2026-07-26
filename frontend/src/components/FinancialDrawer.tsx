@@ -30,6 +30,10 @@ const numericFields: Array<{
   },
   { key: "ebit", label: "EBIT" },
   { key: "interest_expense", label: "Charges d’intérêts" },
+  {
+    key: "operating_cash_flow",
+    label: "Flux de trésorerie d’exploitation",
+  },
   { key: "capex", label: "Investissements (Capex)" },
   { key: "net_income", label: "Résultat net" },
   { key: "market_cap", label: "Capitalisation boursière" },
@@ -191,7 +195,7 @@ export function FinancialDrawer({
                     id={`financial-${key}`}
                     type="number"
                     step="any"
-                    min="0"
+                    min={key === "operating_cash_flow" ? undefined : 0}
                     required
                     value={values[key]}
                     onChange={(event) =>

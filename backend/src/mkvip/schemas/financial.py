@@ -15,6 +15,7 @@ class FinancialSnapshotCreate(BaseModel):
     depreciation_amortization: float = Field(ge=0)
     ebit: float = Field(gt=0)
     interest_expense: float = Field(ge=0)
+    operating_cash_flow: float
     capex: float = Field(ge=0)
     net_income: float = Field(gt=0)
     market_cap: float = Field(gt=0)
@@ -44,11 +45,39 @@ class FinancialMetricRead(BaseModel):
     source_note: str
 
 
+class FinancialIndicatorRead(BaseModel):
+    key: str
+    label: str
+    value: float | None
+    unit: str
+    formula: str
+
+
 class FinancialAnalysisRead(FinancialSnapshotCreate):
     id: uuid.UUID
     company_id: uuid.UUID
     metrics: list[FinancialMetricRead]
+    indicators: list[FinancialIndicatorRead]
     mk_score: float
+    quality_score: float
+    safety_score: float
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FinancialTrendRead(BaseModel):
+    periods: int
+    first_year: int | None
+    last_year: int | None
+    revenue_cagr: float | None
+    net_income_cagr: float | None
+    free_cash_flow_cagr: float | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FinancialHistoryRead(BaseModel):
+    company_id: uuid.UUID
+    snapshots: list[FinancialAnalysisRead]
+    trend: FinancialTrendRead

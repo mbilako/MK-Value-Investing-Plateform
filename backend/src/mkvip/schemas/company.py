@@ -32,5 +32,7 @@ class CompanyRead(CompanyCreate):
     id: uuid.UUID
     status: CompanyStatus
     latest_mk_score: float | None = None
+    latest_quality_score: float | None = None
+    latest_safety_score: float | None = None
 
     model_config = ConfigDict(from_attributes=True)

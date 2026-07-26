@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 - 2026-07-26
+
+### Added
+
+- Six indicateurs financiers : Free Cash Flow, marge de Free Cash Flow, ROE,
+  ROIC, couverture des intérêts et dette nette.
+- Scores spécialisés de qualité et de sécurité en complément du MK Score.
+- Historique financier par entreprise et calcul des croissances pluriannuelles.
+- Tiroir d’analyse responsive avec indicateurs, tendances, source et limites.
+- Migration PostgreSQL du Financial Engine avec reprise des snapshots existants.
+
+### Changed
+
+- Le contrat fournisseur normalisé inclut désormais le flux de trésorerie
+  opérationnel.
+
 ## 0.3.0 - 2026-07-26
 
 ### Added

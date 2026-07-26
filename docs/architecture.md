@@ -1,4 +1,4 @@
-# Architecture v0.3 Data Engine
+# Architecture v0.4 Financial Engine
 
 MK-VIP est organisé en monorepo afin de garder le domaine financier, l’API,
 l’interface et l’exploitation versionnés ensemble.
@@ -30,6 +30,10 @@ Le frontend React est découpé par responsabilité :
 - tiroir d’import d’entreprise ;
 - client API typé.
 
+Le tiroir d’analyse charge l’historique d’une entreprise à la demande. Il
+présente séparément les scores, les indicateurs du dernier exercice et les
+tendances calculées, sans transformer ces résultats en recommandation.
+
 ## Flux initial
 
 1. L’utilisateur importe une entreprise.
@@ -50,6 +54,16 @@ Le frontend React est découpé par responsabilité :
 6. Le MK Score correspond au pourcentage de règles favorables.
 7. Le snapshot, les ratios et le score sont historisés dans PostgreSQL.
 8. L’entreprise passe au statut `ready`.
+
+## Financial Engine
+
+Le moteur enrichit chaque snapshot avec six indicateurs indépendants des
+fournisseurs et trois scores explicables. Le dépôt expose aussi tous les
+exercices d’une entreprise afin que le domaine calcule les CAGR sans logique
+financière dans l’API ou l’interface.
+
+Les valeurs normalisées, indicateurs et scores sont persistés ensemble. Les
+tendances sont calculées à la lecture pour refléter l’historique disponible.
 
 La contrainte `(company_id, fiscal_year)` garantit un seul snapshot par
 entreprise et par exercice.

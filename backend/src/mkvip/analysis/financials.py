@@ -1,13 +1,65 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from mkvip.analysis.rules import RULES, RuleResult, RuleStatus, evaluate_rule
 from mkvip.schemas.financial import FinancialSnapshotCreate
 
+QUALITY_RULE_KEYS = (
+    "ebitda_margin",
+    "depreciation_to_ebit",
+    "capex_to_net_income",
+    "net_margin",
+)
+SAFETY_RULE_KEYS = (
+    "interest_to_ebit",
+    "financial_leverage",
+    "current_ratio",
+    "net_debt_to_ebitda",
+)
+
+
+@dataclass(frozen=True)
+class FinancialIndicator:
+    key: str
+    label: str
+    value: float | None
+    unit: str
+    formula: str
+
 
 @dataclass(frozen=True)
 class FinancialAnalysis:
     metrics: list[RuleResult]
+    indicators: list[FinancialIndicator]
     mk_score: float
+    quality_score: float
+    safety_score: float
+
+
+@dataclass(frozen=True)
+class FinancialTrend:
+    periods: int
+    first_year: int | None
+    last_year: int | None
+    revenue_cagr: float | None
+    net_income_cagr: float | None
+    free_cash_flow_cagr: float | None
+
+
+def _score(metrics: list[RuleResult], rule_keys: tuple[str, ...]) -> float:
+    selected = [metric for metric in metrics if metric.key in rule_keys]
+    passing = sum(metric.status == RuleStatus.PASS for metric in selected)
+    return round(passing / len(selected) * 100, 2)
+
+
+def _rounded_ratio(numerator: float, denominator: float) -> float | None:
+    if denominator <= 0:
+        return None
+    return round(numerator / denominator, 6)
+
+
+def _free_cash_flow(snapshot: FinancialSnapshotCreate) -> float:
+    return round(snapshot.operating_cash_flow - snapshot.capex, 6)
 
 
 def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
@@ -30,7 +82,109 @@ def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
         for key in RULES
     ]
     passing = sum(metric.status == RuleStatus.PASS for metric in metrics)
+    free_cash_flow = _free_cash_flow(snapshot)
+    invested_capital = (
+        snapshot.total_equity + snapshot.financial_debt - snapshot.cash
+    )
+    indicators = [
+        FinancialIndicator(
+            key="free_cash_flow",
+            label="Free Cash Flow",
+            value=free_cash_flow,
+            unit=snapshot.currency,
+            formula="Flux de trésorerie d’exploitation − investissements",
+        ),
+        FinancialIndicator(
+            key="free_cash_flow_margin",
+            label="Marge de Free Cash Flow",
+            value=_rounded_ratio(free_cash_flow, snapshot.revenue),
+            unit="ratio",
+            formula="Free Cash Flow / chiffre d’affaires",
+        ),
+        FinancialIndicator(
+            key="return_on_equity",
+            label="Rendement des capitaux propres (ROE)",
+            value=_rounded_ratio(snapshot.net_income, snapshot.total_equity),
+            unit="ratio",
+            formula="Résultat net / capitaux propres",
+        ),
+        FinancialIndicator(
+            key="return_on_invested_capital",
+            label="ROIC avant impôt (proxy)",
+            value=_rounded_ratio(snapshot.ebit, invested_capital),
+            unit="ratio",
+            formula="EBIT / (capitaux propres + dette financière − trésorerie)",
+        ),
+        FinancialIndicator(
+            key="interest_coverage",
+            label="Couverture des intérêts",
+            value=_rounded_ratio(snapshot.ebit, snapshot.interest_expense),
+            unit="multiple",
+            formula="EBIT / charges d’intérêts",
+        ),
+        FinancialIndicator(
+            key="net_debt",
+            label="Dette financière nette",
+            value=round(snapshot.financial_debt - snapshot.cash, 6),
+            unit=snapshot.currency,
+            formula="Dette financière − trésorerie",
+        ),
+    ]
     return FinancialAnalysis(
         metrics=metrics,
+        indicators=indicators,
         mk_score=round(passing / len(metrics) * 100, 2),
+        quality_score=_score(metrics, QUALITY_RULE_KEYS),
+        safety_score=_score(metrics, SAFETY_RULE_KEYS),
+    )
+
+
+def _cagr(first: float, last: float, elapsed_years: int) -> float | None:
+    if first <= 0 or last <= 0 or elapsed_years <= 0:
+        return None
+    return round((last / first) ** (1 / elapsed_years) - 1, 6)
+
+
+def calculate_financial_trend(
+    snapshots: Sequence[FinancialSnapshotCreate],
+) -> FinancialTrend:
+    ordered = sorted(snapshots, key=lambda snapshot: snapshot.fiscal_year)
+    if not ordered:
+        return FinancialTrend(
+            periods=0,
+            first_year=None,
+            last_year=None,
+            revenue_cagr=None,
+            net_income_cagr=None,
+            free_cash_flow_cagr=None,
+        )
+
+    first = ordered[0]
+    last = ordered[-1]
+    elapsed_years = last.fiscal_year - first.fiscal_year
+    if len(ordered) < 2 or elapsed_years <= 0:
+        return FinancialTrend(
+            periods=len(ordered),
+            first_year=first.fiscal_year,
+            last_year=last.fiscal_year,
+            revenue_cagr=None,
+            net_income_cagr=None,
+            free_cash_flow_cagr=None,
+        )
+
+    return FinancialTrend(
+        periods=len(ordered),
+        first_year=first.fiscal_year,
+        last_year=last.fiscal_year,
+        revenue_cagr=_cagr(first.revenue, last.revenue, elapsed_years),
+        net_income_cagr=_cagr(
+            first.net_income,
+            last.net_income,
+            elapsed_years,
+        ),
+        free_cash_flow_cagr=_cagr(
+            _free_cash_flow(first),
+            _free_cash_flow(last),
+            elapsed_years,
+        ),
     )

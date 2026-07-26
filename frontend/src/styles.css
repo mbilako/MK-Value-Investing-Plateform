@@ -211,6 +211,7 @@ button {
 
 .button:focus-visible,
 .icon-button:focus-visible,
+.company-analysis:focus-visible,
 input:focus-visible,
 a:focus-visible {
   outline: 3px solid rgba(8, 122, 87, 0.2);
@@ -380,6 +381,20 @@ a:focus-visible {
 
 .company-status--ready .status-dot {
   background: var(--emerald);
+}
+
+.company-analysis {
+  width: fit-content;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+}
+
+.company-analysis:hover {
+  border-color: rgba(8, 122, 87, 0.22);
+  background: var(--emerald-tint);
 }
 
 .company-action {
@@ -691,6 +706,149 @@ a:focus-visible {
   border-top: 1px solid var(--border);
 }
 
+.analysis-drawer__body {
+  display: grid;
+  gap: 26px;
+  padding: 28px 32px 36px;
+  overflow-y: auto;
+}
+
+.analysis-message {
+  margin: 0;
+  color: var(--muted);
+}
+
+.analysis-context {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.analysis-context span:first-child {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.score-card {
+  display: grid;
+  min-height: 132px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--navy);
+  background: #fff;
+}
+
+.score-card > svg {
+  color: var(--emerald);
+}
+
+.score-card span {
+  align-self: end;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.score-card strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+}
+
+.score-card--global {
+  border-color: rgba(8, 122, 87, 0.25);
+  background: var(--emerald-tint);
+}
+
+.analysis-section {
+  display: grid;
+  gap: 14px;
+}
+
+.analysis-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analysis-section__head h3 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 17px;
+}
+
+.analysis-section__head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.indicator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.indicator-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--subtle);
+}
+
+.indicator-card > span,
+.growth-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.indicator-card strong,
+.growth-grid strong {
+  color: var(--navy);
+  font-size: 17px;
+}
+
+.indicator-card small {
+  line-height: 1.4;
+}
+
+.growth-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.growth-grid article {
+  display: grid;
+  gap: 7px;
+  min-height: 82px;
+  padding: 13px;
+  border: 1px solid rgba(8, 122, 87, 0.18);
+  border-radius: 9px;
+  background: var(--emerald-tint);
+}
+
+.analysis-disclaimer {
+  padding-top: 16px;
+  margin: 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 82px minmax(0, 1fr);
@@ -861,6 +1019,20 @@ a:focus-visible {
   .financial-context,
   .financial-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analysis-drawer__body {
+    padding-inline: 20px;
+  }
+
+  .score-grid,
+  .indicator-grid,
+  .growth-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .score-card {
+    min-height: 110px;
   }
 }
 

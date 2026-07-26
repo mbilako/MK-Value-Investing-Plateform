@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from mkvip.analysis.financials import analyse_financials
+from mkvip.analysis.financials import analyse_financials, calculate_financial_trend
 from mkvip.api.dependencies import (
     get_company_repository,
     get_financial_data_provider,
@@ -11,7 +11,11 @@ from mkvip.api.dependencies import (
 from mkvip.providers.base import FinancialDataProvider, ProviderDataError
 from mkvip.providers.normalization import load_latest_snapshot
 from mkvip.repositories.company import CompanyRepository
-from mkvip.schemas.financial import FinancialAnalysisRead, FinancialSnapshotCreate
+from mkvip.schemas.financial import (
+    FinancialAnalysisRead,
+    FinancialHistoryRead,
+    FinancialSnapshotCreate,
+)
 
 router = APIRouter(
     prefix="/companies/{company_id}/financials",
@@ -22,6 +26,25 @@ Provider = Annotated[
     FinancialDataProvider,
     Depends(get_financial_data_provider),
 ]
+
+
+@router.get("", response_model=FinancialHistoryRead)
+async def list_financials(
+    company_id: uuid.UUID,
+    repository: Repository,
+) -> FinancialHistoryRead:
+    company = await repository.get_by_id(company_id)
+    if company is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Entreprise introuvable.",
+        )
+    snapshots = await repository.list_financial_analyses(company_id)
+    return FinancialHistoryRead(
+        company_id=company_id,
+        snapshots=snapshots,
+        trend=calculate_financial_trend(snapshots),
+    )
 
 
 @router.post(

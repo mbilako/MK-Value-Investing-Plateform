@@ -27,6 +27,7 @@ comme Air Liquide, le ticker attendu est `AI.PA`.
 | Trésorerie | `CashCashEquivalentsAndShortTermInvestments`, `CashAndCashEquivalents` |
 | Capitaux propres | `StockholdersEquity`, `TotalEquityGrossMinorityInterest` |
 | Investissements | `CapitalExpenditure`, `PurchaseOfPPE` |
+| Flux de trésorerie opérationnel | `OperatingCashFlow`, `TotalCashFromOperatingActivities` |
 
 Le normalisateur conserve le dernier exercice complet présent dans le compte
 de résultat, le bilan et le tableau de flux. Les exercices historiques

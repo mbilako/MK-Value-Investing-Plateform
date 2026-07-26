@@ -14,6 +14,10 @@ const unusedAutomaticImport = async () => {
   throw new Error("Import automatique non utilisé dans ce scénario.");
 };
 
+const unusedFinancialHistory = async () => {
+  throw new Error("Historique financier non utilisé dans ce scénario.");
+};
+
 describe("MK-VIP dashboard", () => {
   it("shows the empty investment universe", () => {
     render(<App />);
@@ -24,7 +28,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Aucune entreprise importée")).toBeInTheDocument();
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.3 Data Engine")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.4 Financial Engine")).toBeInTheDocument();
   });
 
   it("opens the Air Liquide import form with normalized defaults", async () => {
@@ -59,6 +63,7 @@ describe("MK-VIP dashboard", () => {
         throw new Error("Non utilisé dans ce scénario.");
       },
       importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: unusedFinancialHistory,
     };
     render(<App client={client} />);
 
@@ -97,6 +102,7 @@ describe("MK-VIP dashboard", () => {
         throw new Error("Non utilisé dans ce scénario.");
       },
       importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: unusedFinancialHistory,
     };
     render(<App client={client} />);
 
@@ -136,6 +142,7 @@ describe("MK-VIP dashboard", () => {
         throw new Error("Non utilisé dans ce scénario.");
       },
       importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: unusedFinancialHistory,
     };
 
     render(<App client={client} />);
@@ -147,6 +154,7 @@ describe("MK-VIP dashboard", () => {
   it("submits normalized financials and displays the MK score", async () => {
     const user = userEvent.setup();
     let importedRevenue: number | undefined;
+    let importedOperatingCashFlow: number | undefined;
     const client = {
       listCompanies: async () => [
         {
@@ -169,16 +177,21 @@ describe("MK-VIP dashboard", () => {
         payload: FinancialPayload,
       ) => {
         importedRevenue = payload.revenue;
+        importedOperatingCashFlow = payload.operating_cash_flow;
         return {
           ...payload,
           id: "analysis-1",
           company_id: "company-1",
           mk_score: 100,
           metrics: [],
+          indicators: [],
+          quality_score: 100,
+          safety_score: 100,
           created_at: "2026-07-25T00:00:00Z",
         };
       },
       importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: unusedFinancialHistory,
     };
     render(<App client={client} />);
 
@@ -195,6 +208,7 @@ describe("MK-VIP dashboard", () => {
       ["Dotations aux amortissements", "20"],
       ["EBIT", "400"],
       ["Charges d’intérêts", "40"],
+      ["Flux de trésorerie d’exploitation", "-25"],
       ["Investissements (Capex)", "40"],
       ["Résultat net", "250"],
       ["Capitalisation boursière", "4500"],
@@ -213,6 +227,7 @@ describe("MK-VIP dashboard", () => {
     );
 
     expect(importedRevenue).toBe(1000);
+    expect(importedOperatingCashFlow).toBe(-25);
     expect(await screen.findByText("MK Score 100")).toBeInTheDocument();
     expect(screen.getByText("Analyse prête")).toBeInTheDocument();
     expect(screen.getByLabelText("analyses : 1")).toBeInTheDocument();
@@ -257,6 +272,7 @@ describe("MK-VIP dashboard", () => {
           depreciation_amortization: 20,
           ebit: 400,
           interest_expense: 40,
+          operating_cash_flow: 300,
           capex: 40,
           net_income: 250,
           market_cap: 4500,
@@ -268,9 +284,13 @@ describe("MK-VIP dashboard", () => {
           total_equity: 1000,
           mk_score: 80,
           metrics: [],
+          indicators: [],
+          quality_score: 75,
+          safety_score: 100,
           created_at: "2026-07-26T00:00:00Z",
         };
       },
+      getFinancialHistory: unusedFinancialHistory,
     };
     render(<App client={client} />);
 
@@ -287,5 +307,109 @@ describe("MK-VIP dashboard", () => {
 
     expect(await screen.findByText("MK Score 80")).toBeInTheDocument();
     expect(screen.getByText("Analyse prête")).toBeInTheDocument();
+  });
+
+  it("opens the financial engine analysis for a ready company", async () => {
+    const user = userEvent.setup();
+    const client = {
+      listCompanies: async () => [
+        {
+          id: "company-1",
+          name: "Air Liquide",
+          ticker: "AI.PA",
+          exchange: "Euronext Paris",
+          country: "France",
+          currency: "EUR",
+          status: "ready" as const,
+          latest_mk_score: 80,
+          latest_quality_score: 75,
+          latest_safety_score: 100,
+        },
+      ],
+      createCompany: async (
+        payload: Parameters<CompanyClient["createCompany"]>[0],
+      ) => ({
+        id: "company-2",
+        status: "pending" as const,
+        ...payload,
+      }),
+      importFinancials: async () => {
+        throw new Error("Import manuel non utilisé.");
+      },
+      importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: async (companyId: string) => ({
+        company_id: companyId,
+        snapshots: [
+          {
+            id: "analysis-1",
+            company_id: companyId,
+            fiscal_year: 2025,
+            source: "Rapport annuel 2025",
+            currency: "EUR",
+            revenue: 1_000,
+            ebitda: 450,
+            depreciation_amortization: 20,
+            ebit: 400,
+            interest_expense: 40,
+            operating_cash_flow: 300,
+            capex: 40,
+            net_income: 250,
+            market_cap: 4_500,
+            total_assets: 4_000,
+            current_assets: 600,
+            current_liabilities: 250,
+            financial_debt: 600,
+            cash: 100,
+            total_equity: 1_000,
+            metrics: [],
+            indicators: [
+              {
+                key: "free_cash_flow",
+                label: "Free Cash Flow",
+                value: 260,
+                unit: "EUR",
+                formula:
+                  "Flux de trésorerie d’exploitation − investissements",
+              },
+              {
+                key: "return_on_equity",
+                label: "Rendement des capitaux propres (ROE)",
+                value: 0.25,
+                unit: "ratio",
+                formula: "Résultat net / capitaux propres",
+              },
+            ],
+            mk_score: 80,
+            quality_score: 75,
+            safety_score: 100,
+            created_at: "2026-07-26T00:00:00Z",
+          },
+        ],
+        trend: {
+          periods: 1,
+          first_year: 2025,
+          last_year: 2025,
+          revenue_cagr: null,
+          net_income_cagr: null,
+          free_cash_flow_cagr: null,
+        },
+      }),
+    };
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Voir l’analyse financière de Air Liquide",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Analyse financière" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Quality Score")).toBeInTheDocument();
+    expect(screen.getByText("Safety Score")).toBeInTheDocument();
+    expect(screen.getAllByText("Free Cash Flow").length).toBeGreaterThan(0);
+    expect(screen.getByText("260 M EUR")).toBeInTheDocument();
+    expect(screen.getByText("Historique insuffisant")).toBeInTheDocument();
   });
 });

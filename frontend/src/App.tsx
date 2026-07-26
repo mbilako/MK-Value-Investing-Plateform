@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 
-import { apiClient, type Company, type CompanyClient } from "./api/client";
+import {
+  apiClient,
+  type Company,
+  type CompanyClient,
+  type FinancialAnalysis,
+  type FinancialHistory,
+} from "./api/client";
+import { AnalysisDrawer } from "./components/AnalysisDrawer";
 import { AnalysisPipeline } from "./components/AnalysisPipeline";
 import { CompanyUniverse } from "./components/CompanyUniverse";
 import { FinancialDrawer } from "./components/FinancialDrawer";
@@ -20,10 +27,15 @@ export function App({ client = apiClient }: AppProps) {
     null,
   );
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [analysisCompany, setAnalysisCompany] = useState<Company | null>(null);
+  const [financialHistory, setFinancialHistory] =
+    useState<FinancialHistory | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const completeFinancialImport = (
     companyId: string,
-    mkScore: number,
+    analysis: FinancialAnalysis,
   ) => {
     setCompanies((current) =>
       current.map((company) =>
@@ -31,16 +43,36 @@ export function App({ client = apiClient }: AppProps) {
           ? {
               ...company,
               status: "ready",
-              latest_mk_score: mkScore,
+              latest_mk_score: analysis.mk_score,
+              latest_quality_score: analysis.quality_score,
+              latest_safety_score: analysis.safety_score,
             }
           : company,
       ),
     );
     setScores((current) => ({
       ...current,
-      [companyId]: mkScore,
+      [companyId]: analysis.mk_score,
     }));
     setFinancialCompany(null);
+  };
+
+  const openAnalysis = async (company: Company) => {
+    setAnalysisCompany(company);
+    setFinancialHistory(null);
+    setAnalysisError(null);
+    setAnalysisLoading(true);
+    try {
+      setFinancialHistory(await client.getFinancialHistory(company.id));
+    } catch (caughtError) {
+      setAnalysisError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "L’analyse financière n’a pas pu être chargée.",
+      );
+    } finally {
+      setAnalysisLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -90,6 +122,7 @@ export function App({ client = apiClient }: AppProps) {
             scores={scores}
             onImport={() => setImportOpen(true)}
             onFinancialImport={setFinancialCompany}
+            onAnalysis={openAnalysis}
           />
           <AnalysisPipeline />
         </div>
@@ -116,20 +149,26 @@ export function App({ client = apiClient }: AppProps) {
             const analysis = await client.importFinancialsAutomatically(
               financialCompany.id,
             );
-            completeFinancialImport(
-              financialCompany.id,
-              analysis.mk_score,
-            );
+            completeFinancialImport(financialCompany.id, analysis);
           }}
           onSubmit={async (payload) => {
             const analysis = await client.importFinancials(
               financialCompany.id,
               payload,
             );
-            completeFinancialImport(
-              financialCompany.id,
-              analysis.mk_score,
-            );
+            completeFinancialImport(financialCompany.id, analysis);
+          }}
+        />
+      )}
+      {analysisCompany && (
+        <AnalysisDrawer
+          company={analysisCompany}
+          history={financialHistory}
+          loading={analysisLoading}
+          error={analysisError}
+          onClose={() => {
+            setAnalysisCompany(null);
+            setFinancialHistory(null);
           }}
         />
       )}

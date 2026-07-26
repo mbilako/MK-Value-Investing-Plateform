@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 from typing import Protocol
 
@@ -20,6 +22,11 @@ class CompanyRepository(Protocol):
         company_id: uuid.UUID,
         fiscal_year: int,
     ) -> FinancialAnalysisRead | None: ...
+
+    async def list_financial_analyses(
+        self,
+        company_id: uuid.UUID,
+    ) -> list[FinancialAnalysisRead]: ...
 
     async def create_financial_analysis(
         self,

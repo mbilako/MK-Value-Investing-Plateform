@@ -39,6 +39,8 @@ def test_create_company_normalizes_ticker(client: TestClient) -> None:
         "currency": "EUR",
         "status": "pending",
         "latest_mk_score": None,
+        "latest_quality_score": None,
+        "latest_safety_score": None,
     }
 
 

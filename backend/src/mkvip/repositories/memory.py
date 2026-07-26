@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
 
@@ -5,6 +7,7 @@ from mkvip.analysis.financials import FinancialAnalysis
 from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyStatus
 from mkvip.schemas.financial import (
     FinancialAnalysisRead,
+    FinancialIndicatorRead,
     FinancialMetricRead,
     FinancialSnapshotCreate,
 )
@@ -47,6 +50,20 @@ class InMemoryCompanyRepository:
     ) -> FinancialAnalysisRead | None:
         return self._financials.get((company_id, fiscal_year))
 
+    async def list_financial_analyses(
+        self,
+        company_id: uuid.UUID,
+    ) -> list[FinancialAnalysisRead]:
+        return sorted(
+            (
+                analysis
+                for (stored_company_id, _), analysis in self._financials.items()
+                if stored_company_id == company_id
+            ),
+            key=lambda analysis: analysis.fiscal_year,
+            reverse=True,
+        )
+
     async def create_financial_analysis(
         self,
         company_id: uuid.UUID,
@@ -66,7 +83,19 @@ class InMemoryCompanyRepository:
                 )
                 for metric in analysis.metrics
             ],
+            indicators=[
+                FinancialIndicatorRead(
+                    key=indicator.key,
+                    label=indicator.label,
+                    value=indicator.value,
+                    unit=indicator.unit,
+                    formula=indicator.formula,
+                )
+                for indicator in analysis.indicators
+            ],
             mk_score=analysis.mk_score,
+            quality_score=analysis.quality_score,
+            safety_score=analysis.safety_score,
             created_at=datetime.now(UTC),
             **snapshot.model_dump(),
         )
@@ -77,6 +106,8 @@ class InMemoryCompanyRepository:
                 update={
                     "status": CompanyStatus.READY,
                     "latest_mk_score": analysis.mk_score,
+                    "latest_quality_score": analysis.quality_score,
+                    "latest_safety_score": analysis.safety_score,
                 }
             )
         return record

@@ -80,6 +80,7 @@ async def test_latest_snapshot_uses_shared_year_and_converts_to_millions() -> No
             return [
                 ProviderCashFlow(
                     fiscal_year=2024,
+                    operating_cash_flow=3_000_000_000,
                     capex=-400_000_000,
                 )
             ]
@@ -98,6 +99,7 @@ async def test_latest_snapshot_uses_shared_year_and_converts_to_millions() -> No
         "depreciation_amortization": 200,
         "ebit": 4_000,
         "interest_expense": 400,
+        "operating_cash_flow": 3_000,
         "capex": 400,
         "net_income": 2_500,
         "market_cap": 50_000,
@@ -166,6 +168,7 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
             assert freq == "yearly"
             return {
                 "2024-12-31": {
+                    "OperatingCashFlow": 3_000_000_000,
                     "CapitalExpenditure": -400_000_000,
                 }
             }
@@ -181,6 +184,7 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
     assert income[0].depreciation_amortization == 200_000_000
     assert balance[0].financial_debt == 6_000_000_000
     assert balance[0].cash == 1_000_000_000
+    assert cash_flow[0].operating_cash_flow == 3_000_000_000
     assert cash_flow[0].capex == -400_000_000
 
 
@@ -389,7 +393,13 @@ async def test_latest_snapshot_rejects_values_the_analysis_cannot_use() -> None:
             self,
             ticker: str,
         ) -> list[ProviderCashFlow]:
-            return [ProviderCashFlow(fiscal_year=2024, capex=-50_000_000)]
+            return [
+                ProviderCashFlow(
+                    fiscal_year=2024,
+                    operating_cash_flow=70_000_000,
+                    capex=-50_000_000,
+                )
+            ]
 
     with pytest.raises(
         ProviderDataIncompleteError,
@@ -412,8 +422,14 @@ async def test_yahoo_provider_skips_incomplete_historical_periods() -> None:
             assert as_dict is True
             assert freq == "yearly"
             return {
-                "2025-12-31": {"CapitalExpenditure": -3_843_400_000},
-                "2021-12-31": {"CapitalExpenditure": float("nan")},
+                "2025-12-31": {
+                    "OperatingCashFlow": 5_000_000_000,
+                    "CapitalExpenditure": -3_843_400_000,
+                },
+                "2021-12-31": {
+                    "OperatingCashFlow": 4_000_000_000,
+                    "CapitalExpenditure": float("nan"),
+                },
             }
 
     provider = YahooFinanceProvider(ticker_factory=lambda _ticker: YahooTicker())

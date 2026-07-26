@@ -17,3 +17,5 @@ class CompanyOrm(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     latest_mk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_safety_score: Mapped[float | None] = mapped_column(Float, nullable=True)

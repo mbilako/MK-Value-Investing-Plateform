@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 
 from sqlalchemy import select
@@ -53,6 +55,20 @@ class SqlAlchemyCompanyRepository:
         )
         return FinancialAnalysisRead.model_validate(snapshot) if snapshot else None
 
+    async def list_financial_analyses(
+        self,
+        company_id: uuid.UUID,
+    ) -> list[FinancialAnalysisRead]:
+        snapshots = await self._session.scalars(
+            select(FinancialSnapshotOrm)
+            .where(FinancialSnapshotOrm.company_id == company_id)
+            .order_by(FinancialSnapshotOrm.fiscal_year.desc())
+        )
+        return [
+            FinancialAnalysisRead.model_validate(snapshot)
+            for snapshot in snapshots
+        ]
+
     async def create_financial_analysis(
         self,
         company_id: uuid.UUID,
@@ -71,13 +87,27 @@ class SqlAlchemyCompanyRepository:
                 }
                 for metric in analysis.metrics
             ],
+            indicators=[
+                {
+                    "key": indicator.key,
+                    "label": indicator.label,
+                    "value": indicator.value,
+                    "unit": indicator.unit,
+                    "formula": indicator.formula,
+                }
+                for indicator in analysis.indicators
+            ],
             mk_score=analysis.mk_score,
+            quality_score=analysis.quality_score,
+            safety_score=analysis.safety_score,
             **snapshot.model_dump(),
         )
         company = await self._session.get(CompanyOrm, company_id)
         if company is not None:
             company.status = CompanyStatus.READY.value
             company.latest_mk_score = analysis.mk_score
+            company.latest_quality_score = analysis.quality_score
+            company.latest_safety_score = analysis.safety_score
         self._session.add(record)
         await self._session.commit()
         await self._session.refresh(record)

@@ -12,6 +12,8 @@ export interface Company extends CompanyPayload {
   id: string;
   status: CompanyStatus;
   latest_mk_score?: number | null;
+  latest_quality_score?: number | null;
+  latest_safety_score?: number | null;
 }
 
 export interface FinancialPayload {
@@ -23,6 +25,7 @@ export interface FinancialPayload {
   depreciation_amortization: number;
   ebit: number;
   interest_expense: number;
+  operating_cash_flow: number;
   capex: number;
   net_income: number;
   market_cap: number;
@@ -42,12 +45,38 @@ export interface FinancialMetric {
   source_note: string;
 }
 
+export interface FinancialIndicator {
+  key: string;
+  label: string;
+  value: number | null;
+  unit: string;
+  formula: string;
+}
+
 export interface FinancialAnalysis extends FinancialPayload {
   id: string;
   company_id: string;
   metrics: FinancialMetric[];
+  indicators: FinancialIndicator[];
   mk_score: number;
+  quality_score: number;
+  safety_score: number;
   created_at: string;
+}
+
+export interface FinancialTrend {
+  periods: number;
+  first_year: number | null;
+  last_year: number | null;
+  revenue_cagr: number | null;
+  net_income_cagr: number | null;
+  free_cash_flow_cagr: number | null;
+}
+
+export interface FinancialHistory {
+  company_id: string;
+  snapshots: FinancialAnalysis[];
+  trend: FinancialTrend;
 }
 
 export interface CompanyClient {
@@ -58,6 +87,7 @@ export interface CompanyClient {
     payload: FinancialPayload,
   ): Promise<FinancialAnalysis>;
   importFinancialsAutomatically(companyId: string): Promise<FinancialAnalysis>;
+  getFinancialHistory(companyId: string): Promise<FinancialHistory>;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "/api/v1";
@@ -98,4 +128,6 @@ export const apiClient: CompanyClient = {
       `/companies/${companyId}/financials/automatic`,
       { method: "POST" },
     ),
+  getFinancialHistory: (companyId) =>
+    request<FinancialHistory>(`/companies/${companyId}/financials`),
 };

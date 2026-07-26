@@ -42,6 +42,7 @@ def financial_payload() -> dict[str, int | str]:
         "depreciation_amortization": 20,
         "ebit": 400,
         "interest_expense": 40,
+        "operating_cash_flow": 300,
         "capex": 40,
         "net_income": 250,
         "market_cap": 4500,
@@ -68,6 +69,16 @@ def test_import_financials_calculates_rules_and_marks_company_ready(
     assert body["company_id"] == company_id
     assert body["fiscal_year"] == 2025
     assert body["mk_score"] == 100.0
+    assert body["quality_score"] == 100.0
+    assert body["safety_score"] == 100.0
+    assert {indicator["key"]: indicator["value"] for indicator in body["indicators"]} == {
+        "free_cash_flow": 260.0,
+        "free_cash_flow_margin": 0.26,
+        "return_on_equity": 0.25,
+        "return_on_invested_capital": 0.266667,
+        "interest_coverage": 10.0,
+        "net_debt": 500.0,
+    }
     assert {metric["key"]: metric["value"] for metric in body["metrics"]} == {
         "ebitda_margin": 0.45,
         "depreciation_to_ebit": 0.05,
@@ -85,6 +96,8 @@ def test_import_financials_calculates_rules_and_marks_company_ready(
     companies = client.get("/api/v1/companies").json()
     assert companies[0]["status"] == "ready"
     assert companies[0]["latest_mk_score"] == 100.0
+    assert companies[0]["latest_quality_score"] == 100.0
+    assert companies[0]["latest_safety_score"] == 100.0
 
 
 def test_import_financials_rejects_unknown_company(client: TestClient) -> None:
@@ -203,6 +216,7 @@ def test_automatic_import_creates_latest_available_analysis(
             return [
                 ProviderCashFlow(
                     fiscal_year=2025,
+                    operating_cash_flow=300_000_000,
                     capex=-40_000_000,
                 )
             ]
@@ -219,3 +233,46 @@ def test_automatic_import_creates_latest_available_analysis(
     assert response.json()["company_id"] == company_id
     assert response.json()["source"] == "Public Test Data · AI.PA · exercice 2025"
     assert response.json()["mk_score"] == 100.0
+
+
+def test_financial_history_returns_snapshots_and_growth(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    first = financial_payload()
+    first.update(
+        {
+            "fiscal_year": 2023,
+            "revenue": 1_000,
+            "net_income": 100,
+            "operating_cash_flow": 140,
+        }
+    )
+    latest = financial_payload()
+    latest.update(
+        {
+            "fiscal_year": 2025,
+            "revenue": 1_210,
+            "net_income": 121,
+            "operating_cash_flow": 184,
+        }
+    )
+    client.post(f"/api/v1/companies/{company_id}/financials", json=first)
+    client.post(f"/api/v1/companies/{company_id}/financials", json=latest)
+
+    response = client.get(f"/api/v1/companies/{company_id}/financials")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [snapshot["fiscal_year"] for snapshot in body["snapshots"]] == [
+        2025,
+        2023,
+    ]
+    assert body["trend"] == {
+        "periods": 2,
+        "first_year": 2023,
+        "last_year": 2025,
+        "revenue_cagr": pytest.approx(0.10),
+        "net_income_cagr": pytest.approx(0.10),
+        "free_cash_flow_cagr": pytest.approx(0.20),
+    }

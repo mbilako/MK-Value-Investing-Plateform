@@ -45,3 +45,15 @@ nombre de règles favorables / nombre total de règles × 100
 
 Une règle au statut `review` ou `fail` ne contribue pas au score. Ce score est
 un outil de présélection explicable, pas une recommandation d’investissement.
+
+## Scores spécialisés
+
+Le score de qualité agrège les règles de marge EBITDA, amortissements / EBIT,
+investissements / résultat net et marge nette. Le score de sécurité agrège les
+règles de charges d’intérêts / EBIT, levier financier, ratio courant et dette
+nette / EBITDA. Chaque score suit la même convention que le MK Score :
+pourcentage de règles favorables dans son groupe.
+
+Le Free Cash Flow, sa marge, le ROE, le ROIC, la couverture des intérêts et la
+dette nette restent des indicateurs informatifs en v0.4. Aucun seuil nouveau
+n’est inventé pour ces indicateurs.
