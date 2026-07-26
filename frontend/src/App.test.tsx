@@ -96,6 +96,24 @@ describe("MK-VIP authentication", () => {
     ).toBeInTheDocument();
   });
 
+  it("clears protected content when the logout request fails", async () => {
+    const user = userEvent.setup();
+    const logout = vi
+      .fn()
+      .mockRejectedValue(new ApiError(503, "Service indisponible."));
+
+    render(<App client={createTestClient({ logout })} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Se déconnecter" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Se connecter" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Vue d’ensemble")).not.toBeInTheDocument();
+  });
+
   it("returns to login when a business request reports an expired session", async () => {
     let expire: () => void = () => undefined;
     const client = createTestClient({
