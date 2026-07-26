@@ -11,26 +11,16 @@ from mkvip.db.session import get_session
 from mkvip.main import app
 
 
-@pytest.fixture(autouse=True)
-def trusted_test_client_origin(monkeypatch: pytest.MonkeyPatch) -> None:
-    original_request = TestClient.request
-
-    def request_with_trusted_origin(self, method, url, **kwargs):
-        headers = {"Origin": "http://localhost:5173"}
-        headers.update(kwargs.pop("headers", None) or {})
-        return original_request(
-            self,
-            method,
-            url,
-            headers=headers,
-            **kwargs,
-        )
-
-    monkeypatch.setattr(TestClient, "request", request_with_trusted_origin)
+@pytest.fixture
+def trusted_origin_headers() -> dict[str, str]:
+    return {"Origin": "http://localhost:5173"}
 
 
 @pytest.fixture
-def database_client(tmp_path) -> Iterator[TestClient]:
+def database_client(
+    tmp_path,
+    request: pytest.FixtureRequest,
+) -> Iterator[TestClient]:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'mkvip.db'}"
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -43,14 +33,16 @@ def database_client(tmp_path) -> Iterator[TestClient]:
         async with factory() as session:
             yield session
 
-    settings = Settings(database_url=database_url, _env_file=None)
+    settings_overrides = getattr(request, "param", {})
+    settings = Settings(
+        database_url=database_url,
+        _env_file=None,
+        **settings_overrides,
+    )
     asyncio.run(prepare_database())
     app.dependency_overrides[get_session] = override_session
     app.dependency_overrides[get_settings] = lambda: settings
-    with TestClient(
-        app,
-        headers={"Origin": "http://localhost:5173"},
-    ) as test_client:
+    with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
     asyncio.run(engine.dispose())

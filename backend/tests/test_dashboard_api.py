@@ -9,10 +9,10 @@ from mkvip.repositories.memory import InMemoryCompanyRepository
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def client(trusted_origin_headers: dict[str, str]) -> Iterator[TestClient]:
     repository = InMemoryCompanyRepository()
     app.dependency_overrides[get_company_repository] = lambda: repository
-    with TestClient(app) as test_client:
+    with TestClient(app, headers=trusted_origin_headers) as test_client:
         yield test_client
     app.dependency_overrides.clear()
 

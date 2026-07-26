@@ -40,12 +40,12 @@ class FakeAIAnalystProvider:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def client(trusted_origin_headers: dict[str, str]) -> Iterator[TestClient]:
     repository = InMemoryCompanyRepository()
     provider = FakeAIAnalystProvider()
     app.dependency_overrides[get_company_repository] = lambda: repository
     app.state.ai_analyst_provider = provider
-    with TestClient(app) as test_client:
+    with TestClient(app, headers=trusted_origin_headers) as test_client:
         yield test_client
     app.dependency_overrides.clear()
     del app.state.ai_analyst_provider
