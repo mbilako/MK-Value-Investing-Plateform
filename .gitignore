@@ -4,6 +4,7 @@
 
 # Codex working files
 .codex_*/
+.worktrees/
 
 # Python
 __pycache__/
