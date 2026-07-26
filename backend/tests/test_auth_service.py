@@ -1,7 +1,9 @@
 from datetime import UTC, datetime, timedelta
+from sqlite3 import IntegrityError as SQLiteIntegrityError
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from mkvip.auth.security import hash_password
@@ -149,6 +151,33 @@ async def test_duplicate_normalized_email_raises_duplicate_error(
                 password="another correct password",
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_non_unique_constraint_failure_on_user_email_is_propagated(
+    auth_service: AuthService,
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_error = IntegrityError(
+        statement=None,
+        params=None,
+        orig=SQLiteIntegrityError("NOT NULL constraint failed: users.email"),
+    )
+
+    async def fail_flush() -> None:
+        raise database_error
+
+    monkeypatch.setattr(session, "flush", fail_flush)
+
+    with pytest.raises(IntegrityError) as error:
+        await auth_service.register(
+            RegisterRequest(
+                email="alice@example.com",
+                password="correct horse battery",
+            )
+        )
+    assert error.value is database_error
 
 
 @pytest.mark.asyncio

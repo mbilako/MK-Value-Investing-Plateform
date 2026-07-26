@@ -226,4 +226,7 @@ def _is_user_email_collision(error: IntegrityError) -> bool:
     if constraint_name == "uq_users_email":
         return True
     error_text = str(original).casefold()
-    return "uq_users_email" in error_text or "users.email" in error_text
+    return (
+        "uq_users_email" in error_text
+        or error_text == "unique constraint failed: users.email"
+    )
