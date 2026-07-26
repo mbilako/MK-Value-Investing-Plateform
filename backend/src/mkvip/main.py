@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from mkvip import __version__
 from mkvip.api.routes import (
     ai,
+    auth,
     companies,
     dashboard,
     financials,
@@ -12,9 +13,12 @@ from mkvip.api.routes import (
     scores,
     valuations,
 )
+from mkvip.core.config import get_settings
+from mkvip.core.origin import OriginValidationMiddleware
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     application = FastAPI(
         title="MK-VIP API",
         version=__version__,
@@ -22,12 +26,17 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173"],
+        allow_origins=settings.allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    application.add_middleware(
+        OriginValidationMiddleware,
+        allowed_origins=settings.allowed_origins,
+    )
     application.include_router(health.router, prefix="/api/v1")
+    application.include_router(auth.router, prefix="/api/v1")
     application.include_router(ai.router, prefix="/api/v1")
     application.include_router(companies.router, prefix="/api/v1")
     application.include_router(dashboard.router, prefix="/api/v1")
