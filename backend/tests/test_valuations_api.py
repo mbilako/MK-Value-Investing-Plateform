@@ -1,20 +1,5 @@
-from collections.abc import Iterator
-
 import pytest
 from fastapi.testclient import TestClient
-
-from mkvip.api.dependencies import get_company_repository
-from mkvip.main import app
-from mkvip.repositories.memory import InMemoryCompanyRepository
-
-
-@pytest.fixture
-def client(trusted_origin_headers: dict[str, str]) -> Iterator[TestClient]:
-    repository = InMemoryCompanyRepository()
-    app.dependency_overrides[get_company_repository] = lambda: repository
-    with TestClient(app, headers=trusted_origin_headers) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture

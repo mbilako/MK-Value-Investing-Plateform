@@ -4,9 +4,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from mkvip.api.dependencies import get_company_repository
 from mkvip.main import app
-from mkvip.repositories.memory import InMemoryCompanyRepository
 
 
 class FakeAIAnalystProvider:
@@ -39,15 +37,11 @@ class FakeAIAnalystProvider:
         }
 
 
-@pytest.fixture
-def client(trusted_origin_headers: dict[str, str]) -> Iterator[TestClient]:
-    repository = InMemoryCompanyRepository()
+@pytest.fixture(autouse=True)
+def ai_analyst_provider() -> Iterator[FakeAIAnalystProvider]:
     provider = FakeAIAnalystProvider()
-    app.dependency_overrides[get_company_repository] = lambda: repository
     app.state.ai_analyst_provider = provider
-    with TestClient(app, headers=trusted_origin_headers) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
+    yield provider
     del app.state.ai_analyst_provider
 
 

@@ -14,12 +14,6 @@ from mkvip.repositories.sqlalchemy import SqlAlchemyCompanyRepository
 from mkvip.schemas.auth import UserRead
 
 
-def get_company_repository(
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> CompanyRepository:
-    return SqlAlchemyCompanyRepository(session)
-
-
 def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -44,6 +38,13 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[UserRead, Depends(get_current_user)]
+
+
+def get_company_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: CurrentUser,
+) -> CompanyRepository:
+    return SqlAlchemyCompanyRepository(session, current_user.id)
 
 
 def get_financial_data_provider() -> FinancialDataProvider:

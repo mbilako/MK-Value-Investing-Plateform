@@ -23,27 +23,41 @@ from mkvip.schemas.valuation import ValuationAnalysisRead
 
 
 class SqlAlchemyCompanyRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, owner_id: uuid.UUID) -> None:
         self._session = session
+        self._owner_id = owner_id
 
     async def list(self) -> list[CompanyRead]:
         result = await self._session.scalars(
-            select(CompanyOrm).order_by(CompanyOrm.name)
+            select(CompanyOrm)
+            .where(CompanyOrm.owner_id == self._owner_id)
+            .order_by(CompanyOrm.name)
         )
         return [CompanyRead.model_validate(company) for company in result]
 
     async def get_by_ticker(self, ticker: str) -> CompanyRead | None:
         company = await self._session.scalar(
-            select(CompanyOrm).where(CompanyOrm.ticker == ticker.upper())
+            select(CompanyOrm).where(
+                CompanyOrm.owner_id == self._owner_id,
+                CompanyOrm.ticker == ticker.upper(),
+            )
         )
         return CompanyRead.model_validate(company) if company else None
 
     async def get_by_id(self, company_id: uuid.UUID) -> CompanyRead | None:
-        company = await self._session.get(CompanyOrm, company_id)
+        company = await self._session.scalar(
+            select(CompanyOrm).where(
+                CompanyOrm.id == company_id,
+                CompanyOrm.owner_id == self._owner_id,
+            )
+        )
         return CompanyRead.model_validate(company) if company else None
 
     async def create(self, company: CompanyCreate) -> CompanyRead:
-        record = CompanyOrm(**company.model_dump())
+        record = CompanyOrm(
+            owner_id=self._owner_id,
+            **company.model_dump(),
+        )
         self._session.add(record)
         await self._session.commit()
         await self._session.refresh(record)
@@ -55,9 +69,15 @@ class SqlAlchemyCompanyRepository:
         fiscal_year: int,
     ) -> FinancialAnalysisRead | None:
         snapshot = await self._session.scalar(
-            select(FinancialSnapshotOrm).where(
+            select(FinancialSnapshotOrm)
+            .join(
+                CompanyOrm,
+                CompanyOrm.id == FinancialSnapshotOrm.company_id,
+            )
+            .where(
                 FinancialSnapshotOrm.company_id == company_id,
                 FinancialSnapshotOrm.fiscal_year == fiscal_year,
+                CompanyOrm.owner_id == self._owner_id,
             )
         )
         return FinancialAnalysisRead.model_validate(snapshot) if snapshot else None
@@ -68,7 +88,14 @@ class SqlAlchemyCompanyRepository:
     ) -> list[FinancialAnalysisRead]:
         snapshots = await self._session.scalars(
             select(FinancialSnapshotOrm)
-            .where(FinancialSnapshotOrm.company_id == company_id)
+            .join(
+                CompanyOrm,
+                CompanyOrm.id == FinancialSnapshotOrm.company_id,
+            )
+            .where(
+                FinancialSnapshotOrm.company_id == company_id,
+                CompanyOrm.owner_id == self._owner_id,
+            )
             .order_by(FinancialSnapshotOrm.fiscal_year.desc())
         )
         return [
@@ -82,6 +109,7 @@ class SqlAlchemyCompanyRepository:
         snapshot: FinancialSnapshotCreate,
         analysis: FinancialAnalysis,
     ) -> FinancialAnalysisRead:
+        company = await self._get_owned_company_record(company_id)
         record = FinancialSnapshotOrm(
             company_id=company_id,
             metrics=[
@@ -109,12 +137,10 @@ class SqlAlchemyCompanyRepository:
             safety_score=analysis.safety_score,
             **snapshot.model_dump(),
         )
-        company = await self._session.get(CompanyOrm, company_id)
-        if company is not None:
-            company.status = CompanyStatus.READY.value
-            company.latest_mk_score = analysis.mk_score
-            company.latest_quality_score = analysis.quality_score
-            company.latest_safety_score = analysis.safety_score
+        company.status = CompanyStatus.READY.value
+        company.latest_mk_score = analysis.mk_score
+        company.latest_quality_score = analysis.quality_score
+        company.latest_safety_score = analysis.safety_score
         self._session.add(record)
         await self._session.commit()
         await self._session.refresh(record)
@@ -126,7 +152,14 @@ class SqlAlchemyCompanyRepository:
     ) -> list[ValuationAnalysisRead]:
         records = await self._session.scalars(
             select(ValuationAnalysisOrm)
-            .where(ValuationAnalysisOrm.company_id == company_id)
+            .join(
+                CompanyOrm,
+                CompanyOrm.id == ValuationAnalysisOrm.company_id,
+            )
+            .where(
+                ValuationAnalysisOrm.company_id == company_id,
+                CompanyOrm.owner_id == self._owner_id,
+            )
             .order_by(ValuationAnalysisOrm.created_at.desc())
         )
         return [
@@ -141,6 +174,7 @@ class SqlAlchemyCompanyRepository:
         assumptions: ValuationAssumptions,
         analysis: ValuationAnalysis,
     ) -> ValuationAnalysisRead:
+        await self._get_owned_company_record(company_id)
         record = ValuationAnalysisOrm(
             company_id=company_id,
             financial_snapshot_id=snapshot.id,
@@ -164,7 +198,14 @@ class SqlAlchemyCompanyRepository:
     ) -> list[ScoringAnalysisRead]:
         records = await self._session.scalars(
             select(ScoringAnalysisOrm)
-            .where(ScoringAnalysisOrm.company_id == company_id)
+            .join(
+                CompanyOrm,
+                CompanyOrm.id == ScoringAnalysisOrm.company_id,
+            )
+            .where(
+                ScoringAnalysisOrm.company_id == company_id,
+                CompanyOrm.owner_id == self._owner_id,
+            )
             .order_by(ScoringAnalysisOrm.created_at.desc())
         )
         return [
@@ -179,6 +220,7 @@ class SqlAlchemyCompanyRepository:
         valuation: ValuationAnalysisRead,
         analysis: ScoringAnalysis,
     ) -> ScoringAnalysisRead:
+        await self._get_owned_company_record(company_id)
         record = ScoringAnalysisOrm(
             company_id=company_id,
             financial_snapshot_id=snapshot.id,
@@ -200,3 +242,17 @@ class SqlAlchemyCompanyRepository:
         await self._session.commit()
         await self._session.refresh(record)
         return ScoringAnalysisRead.model_validate(record)
+
+    async def _get_owned_company_record(
+        self,
+        company_id: uuid.UUID,
+    ) -> CompanyOrm:
+        company = await self._session.scalar(
+            select(CompanyOrm).where(
+                CompanyOrm.id == company_id,
+                CompanyOrm.owner_id == self._owner_id,
+            )
+        )
+        if company is None:
+            raise PermissionError("Company is outside repository scope")
+        return company

@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from mkvip import __version__
+from mkvip.api.dependencies import get_current_user
 from mkvip.api.routes import (
     ai,
     auth,
@@ -37,13 +38,41 @@ def create_app() -> FastAPI:
     )
     application.include_router(health.router, prefix="/api/v1")
     application.include_router(auth.router, prefix="/api/v1")
-    application.include_router(ai.router, prefix="/api/v1")
-    application.include_router(companies.router, prefix="/api/v1")
-    application.include_router(dashboard.router, prefix="/api/v1")
-    application.include_router(financials.router, prefix="/api/v1")
-    application.include_router(valuations.router, prefix="/api/v1")
-    application.include_router(scores.router, prefix="/api/v1")
-    application.include_router(rules.router, prefix="/api/v1")
+    application.include_router(
+        ai.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
+    application.include_router(
+        companies.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
+    application.include_router(
+        dashboard.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
+    application.include_router(
+        financials.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
+    application.include_router(
+        valuations.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
+    application.include_router(
+        scores.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
+    application.include_router(
+        rules.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
     return application
 
 
