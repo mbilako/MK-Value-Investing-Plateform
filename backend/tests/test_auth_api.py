@@ -184,6 +184,30 @@ def test_session_cookie_secure_flag_follows_settings(
     assert ("Secure" in logout_attributes) is expected_secure
 
 
+@pytest.mark.parametrize(
+    "database_client",
+    [{"session_duration_days": 7}],
+    indirect=True,
+)
+def test_non_default_duration_aligns_registration_and_login_cookies(
+    database_client: TestClient,
+) -> None:
+    registration = register_user(database_client)
+    assert "Max-Age=604800" in registration.headers["set-cookie"]
+
+    database_client.cookies.clear()
+    login = database_client.post(
+        "/api/v1/auth/login",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={
+            "email": "alice@example.com",
+            "password": "correct horse battery",
+        },
+    )
+    assert login.status_code == 200
+    assert "Max-Age=604800" in login.headers["set-cookie"]
+
+
 def test_allows_trusted_write_origin(
     database_client: TestClient,
 ) -> None:

@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from mkvip.auth.security import hash_password
+from mkvip.auth.security import digest_session_token, hash_password
 from mkvip.auth.service import (
     AuthService,
     DuplicateEmailError,
@@ -15,6 +15,7 @@ from mkvip.auth.service import (
 from mkvip.core.config import Settings
 from mkvip.db.base import Base
 from mkvip.models.company import CompanyOrm
+from mkvip.models.session import SessionOrm
 from mkvip.models.user import LEGACY_OWNER_EMAIL, LEGACY_OWNER_ID, UserOrm
 from mkvip.schemas.auth import LoginRequest, RegisterRequest
 
@@ -132,6 +133,49 @@ async def test_second_registration_starts_without_companies(
         .where(CompanyOrm.owner_id == second.user.id)
     )
     assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_non_default_duration_controls_registration_and_login_expiry(
+    session: AsyncSession,
+    clock: MutableClock,
+) -> None:
+    service = AuthService(
+        session,
+        Settings(session_duration_days=7, _env_file=None),
+        now=clock,
+    )
+
+    registration = await service.register(
+        RegisterRequest(
+            email="alice@example.com",
+            password="correct horse battery",
+        )
+    )
+    login = await service.login(
+        LoginRequest(
+            email="alice@example.com",
+            password="correct horse battery",
+        )
+    )
+
+    expected_expiry = FIXED_NOW + timedelta(days=7)
+    registration_expiry = await session.scalar(
+        select(SessionOrm.expires_at).where(
+            SessionOrm.token_hash == digest_session_token(registration.token)
+        )
+    )
+    login_expiry = await session.scalar(
+        select(SessionOrm.expires_at).where(
+            SessionOrm.token_hash == digest_session_token(login.token)
+        )
+    )
+    assert registration.expires_at == expected_expiry
+    assert login.expires_at == expected_expiry
+    assert registration_expiry is not None
+    assert registration_expiry.replace(tzinfo=UTC) == expected_expiry
+    assert login_expiry is not None
+    assert login_expiry.replace(tzinfo=UTC) == expected_expiry
 
 
 @pytest.mark.asyncio

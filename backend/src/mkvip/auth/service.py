@@ -21,7 +21,6 @@ from mkvip.models.session import SessionOrm
 from mkvip.models.user import UserOrm
 from mkvip.schemas.auth import LoginRequest, RegisterRequest, UserRead
 
-SESSION_DURATION = timedelta(days=30)
 INVALID_CREDENTIALS_MESSAGE = "Identifiants invalides."
 
 
@@ -67,7 +66,9 @@ class AuthService:
     async def register(self, payload: RegisterRequest) -> AuthGrant:
         email = normalize_email(str(payload.email))
         now = _as_utc(self._now())
-        expires_at = now + SESSION_DURATION
+        expires_at = now + timedelta(
+            days=self._settings.session_duration_days
+        )
 
         try:
             async with self._session.begin():
@@ -164,7 +165,9 @@ class AuthService:
                 else:
                     user.failed_login_attempts = 0
                     user.locked_until = None
-                    expires_at = now + SESSION_DURATION
+                    expires_at = now + timedelta(
+                        days=self._settings.session_duration_days
+                    )
                     token = self._token_factory()
                     self._session.add(
                         SessionOrm(
