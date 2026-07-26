@@ -1,14 +1,15 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import { ApiError } from "./api/client";
 import type {
   AIAnalysisPayload,
   CompanyClient,
   FinancialPayload,
 } from "./api/client";
-import { createTestClient } from "./test/client";
+import { createTestClient, testUser } from "./test/client";
 
 afterEach(cleanup);
 
@@ -32,12 +33,99 @@ const unusedCreateScore = async () => {
   throw new Error("Scoring non utilisé dans ce scénario.");
 };
 
+describe("MK-VIP authentication", () => {
+  it("shows a neutral loader while checking the existing session", () => {
+    const client = createTestClient({
+      getCurrentUser: () => new Promise(() => undefined),
+    });
+
+    render(<App client={client} />);
+
+    expect(
+      screen.getByText("Vérification de votre session…"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Vue d’ensemble")).not.toBeInTheDocument();
+  });
+
+  it("registers and opens the personal workspace", async () => {
+    const user = userEvent.setup();
+    const register = vi.fn().mockResolvedValue(testUser);
+    const client = createTestClient({
+      getCurrentUser: async () => {
+        throw new ApiError(401, "Session absente ou expirée.");
+      },
+      register,
+    });
+
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Créer un compte" }),
+    );
+    await user.type(
+      screen.getByLabelText("Adresse email"),
+      "alice@example.com",
+    );
+    await user.type(
+      screen.getByLabelText("Mot de passe"),
+      "correct horse battery",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Créer mon compte" }),
+    );
+
+    expect(register).toHaveBeenCalledWith({
+      email: "alice@example.com",
+      password: "correct horse battery",
+    });
+    expect(await screen.findByText("investor@example.com")).toBeInTheDocument();
+  });
+
+  it("logs out and returns to the login screen", async () => {
+    const user = userEvent.setup();
+    const logout = vi.fn().mockResolvedValue(undefined);
+
+    render(<App client={createTestClient({ logout })} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Se déconnecter" }),
+    );
+    expect(logout).toHaveBeenCalledOnce();
+    expect(
+      await screen.findByRole("heading", { name: "Se connecter" }),
+    ).toBeInTheDocument();
+  });
+
+  it("returns to login when a business request reports an expired session", async () => {
+    let expire: () => void = () => undefined;
+    const client = createTestClient({
+      onUnauthorized: (handler) => {
+        expire = handler;
+        return () => undefined;
+      },
+    });
+
+    render(<App client={client} />);
+
+    expect(await screen.findByText("investor@example.com")).toBeInTheDocument();
+
+    act(() => expire());
+
+    expect(
+      await screen.findByText(
+        "Votre session a expiré. Connectez-vous de nouveau.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Vue d’ensemble")).not.toBeInTheDocument();
+  });
+});
+
 describe("MK-VIP dashboard", () => {
-  it("shows the empty investment universe", () => {
+  it("shows the empty investment universe", async () => {
     render(<App client={createTestClient()} />);
 
     expect(
-      screen.getByRole("heading", { name: "Vue d’ensemble" }),
+      await screen.findByRole("heading", { name: "Vue d’ensemble" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Aucune entreprise importée")).toBeInTheDocument();
     expect(screen.getByText("Import")).toBeInTheDocument();
@@ -50,7 +138,9 @@ describe("MK-VIP dashboard", () => {
     render(<App client={createTestClient()} />);
 
     await user.click(
-      screen.getByRole("button", { name: "Commencer avec Air Liquide" }),
+      await screen.findByRole("button", {
+        name: "Commencer avec Air Liquide",
+      }),
     );
 
     expect(
@@ -86,7 +176,9 @@ describe("MK-VIP dashboard", () => {
     render(<App client={client} />);
 
     await user.click(
-      screen.getByRole("button", { name: "Commencer avec Air Liquide" }),
+      await screen.findByRole("button", {
+        name: "Commencer avec Air Liquide",
+      }),
     );
     await user.click(screen.getByRole("button", { name: "Importer" }));
 
