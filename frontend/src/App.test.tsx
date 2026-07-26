@@ -8,6 +8,7 @@ import type {
   CompanyClient,
   FinancialPayload,
 } from "./api/client";
+import { createTestClient } from "./test/client";
 
 afterEach(cleanup);
 
@@ -33,7 +34,7 @@ const unusedCreateScore = async () => {
 
 describe("MK-VIP dashboard", () => {
   it("shows the empty investment universe", () => {
-    render(<App />);
+    render(<App client={createTestClient()} />);
 
     expect(
       screen.getByRole("heading", { name: "Vue d’ensemble" }),
@@ -46,7 +47,7 @@ describe("MK-VIP dashboard", () => {
 
   it("opens the Air Liquide import form with normalized defaults", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    render(<App client={createTestClient()} />);
 
     await user.click(
       screen.getByRole("button", { name: "Commencer avec Air Liquide" }),
@@ -63,7 +64,7 @@ describe("MK-VIP dashboard", () => {
 
   it("adds an imported company to the universe", async () => {
     const user = userEvent.setup();
-    const client: CompanyClient = {
+    const client = createTestClient({
       listCompanies: async () => [],
       createCompany: async (payload) => ({
         id: "company-1",
@@ -81,7 +82,7 @@ describe("MK-VIP dashboard", () => {
       createValuation: unusedCreateValuation,
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
     render(<App client={client} />);
 
     await user.click(
@@ -98,7 +99,7 @@ describe("MK-VIP dashboard", () => {
 
   it("opens the financial import for a pending company", async () => {
     const user = userEvent.setup();
-    const client: CompanyClient = {
+    const client = createTestClient({
       listCompanies: async () => [
         {
           id: "company-1",
@@ -124,7 +125,7 @@ describe("MK-VIP dashboard", () => {
       createValuation: unusedCreateValuation,
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
     render(<App client={client} />);
 
     await user.click(
@@ -141,7 +142,7 @@ describe("MK-VIP dashboard", () => {
   });
 
   it("restores the latest MK score when companies are loaded", async () => {
-    const client: CompanyClient = {
+    const client = createTestClient({
       listCompanies: async () => [
         {
           id: "company-1",
@@ -168,7 +169,7 @@ describe("MK-VIP dashboard", () => {
       createValuation: unusedCreateValuation,
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
 
     render(<App client={client} />);
 
@@ -180,7 +181,7 @@ describe("MK-VIP dashboard", () => {
     const user = userEvent.setup();
     let importedRevenue: number | undefined;
     let importedOperatingCashFlow: number | undefined;
-    const client: CompanyClient = {
+    const client = createTestClient({
       listCompanies: async () => [
         {
           id: "company-1",
@@ -221,7 +222,7 @@ describe("MK-VIP dashboard", () => {
       createValuation: unusedCreateValuation,
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
     render(<App client={client} />);
 
     await user.click(
@@ -264,7 +265,7 @@ describe("MK-VIP dashboard", () => {
 
   it("imports the latest public financial data automatically", async () => {
     const user = userEvent.setup();
-    const client = {
+    const client = createTestClient({
       listCompanies: async () => [
         {
           id: "company-1",
@@ -324,7 +325,7 @@ describe("MK-VIP dashboard", () => {
       createValuation: unusedCreateValuation,
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
     render(<App client={client} />);
 
     await user.click(
@@ -344,7 +345,7 @@ describe("MK-VIP dashboard", () => {
 
   it("opens the financial engine analysis for a ready company", async () => {
     const user = userEvent.setup();
-    const client = {
+    const client = createTestClient({
       listCompanies: async () => [
         {
           id: "company-1",
@@ -431,7 +432,7 @@ describe("MK-VIP dashboard", () => {
       createValuation: unusedCreateValuation,
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
     render(<App client={client} />);
 
     await user.click(
@@ -453,7 +454,7 @@ describe("MK-VIP dashboard", () => {
   it("creates an explainable valuation from the latest analysis", async () => {
     const user = userEvent.setup();
     let submittedGrowthRate: number | undefined;
-    const client: CompanyClient = {
+    const client = createTestClient({
       listCompanies: async () => [
         {
           id: "company-1",
@@ -599,7 +600,7 @@ describe("MK-VIP dashboard", () => {
       },
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
     render(<App client={client} />);
 
     await user.click(
@@ -638,7 +639,7 @@ describe("MK-VIP dashboard", () => {
   it("creates an explainable global score from the latest valuation", async () => {
     const user = userEvent.setup();
     let submittedValuationId: string | undefined;
-    const client = {
+    const client = createTestClient({
       listCompanies: async () => [
         {
           id: "company-1",
@@ -810,7 +811,7 @@ describe("MK-VIP dashboard", () => {
           created_at: "2026-07-26T00:00:00Z",
         };
       },
-    };
+    });
     render(<App client={client} />);
 
     await user.click(
@@ -873,7 +874,7 @@ describe("MK-VIP dashboard", () => {
         status: "pending" as const,
       },
     ];
-    const client = {
+    const client = createTestClient({
       listCompanies: async () => companies,
       getDashboard: async () => ({
         summary: {
@@ -1019,7 +1020,7 @@ describe("MK-VIP dashboard", () => {
       createValuation: unusedCreateValuation,
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
     render(<App client={client} />);
 
     expect(
@@ -1081,7 +1082,7 @@ describe("MK-VIP dashboard", () => {
         status: "ready" as const,
       },
     ];
-    const client = {
+    const client = createTestClient({
       listCompanies: async () => companies,
       createCompany: async (
         payload: Parameters<CompanyClient["createCompany"]>[0],
@@ -1134,7 +1135,7 @@ describe("MK-VIP dashboard", () => {
             "Analyse informative fondée uniquement sur les données MK-VIP ; elle ne constitue pas un conseil en investissement.",
         };
       },
-    };
+    });
     render(<App client={client} />);
 
     await user.click(
@@ -1191,7 +1192,7 @@ describe("MK-VIP dashboard", () => {
 
   it("filters the investment universe by company name or ticker", async () => {
     const user = userEvent.setup();
-    const client: CompanyClient = {
+    const client = createTestClient({
       listCompanies: async () => [
         {
           id: "company-1",
@@ -1226,7 +1227,7 @@ describe("MK-VIP dashboard", () => {
       createValuation: unusedCreateValuation,
       listScores: unusedScores,
       createScore: unusedCreateScore,
-    };
+    });
     render(<App client={client} />);
     const universe = await screen.findByRole("region", {
       name: "Univers d’investissement",

@@ -16,6 +16,27 @@ export interface Company extends CompanyPayload {
   latest_safety_score?: number | null;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  created_at: string;
+}
+
+export interface AuthCredentials {
+  email: string;
+  password: string;
+}
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export interface FinancialPayload {
   fiscal_year: number;
   source: string;
@@ -244,6 +265,11 @@ export interface AIAnalysis {
 }
 
 export interface CompanyClient {
+  getCurrentUser(): Promise<User>;
+  register(credentials: AuthCredentials): Promise<User>;
+  login(credentials: AuthCredentials): Promise<User>;
+  logout(): Promise<void>;
+  onUnauthorized(handler: () => void): () => void;
   listCompanies(): Promise<Company[]>;
   getDashboard?(): Promise<Dashboard>;
   analyzeWithAI?(payload: AIAnalysisPayload): Promise<AIAnalysis>;
@@ -268,62 +294,97 @@ export interface CompanyClient {
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "/api/v1";
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
-  if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as {
-      detail?: string;
-    } | null;
-    throw new Error(
-      errorBody?.detail ?? `API request failed with status ${response.status}`,
-    );
+export function createApiClient(): CompanyClient {
+  const unauthorizedListeners = new Set<() => void>();
+
+  async function request<T>(
+    path: string,
+    options?: RequestInit,
+    notifyUnauthorized = true,
+  ): Promise<T> {
+    const response = await fetch(`${apiUrl}${path}`, {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+    if (!response.ok) {
+      const errorBody = (await response.json().catch(() => null)) as {
+        detail?: string;
+      } | null;
+      if (response.status === 401 && notifyUnauthorized) {
+        unauthorizedListeners.forEach((listener) => listener());
+      }
+      throw new ApiError(
+        response.status,
+        errorBody?.detail ?? `API request failed with status ${response.status}`,
+      );
+    }
+    if (response.status === 204) {
+      return undefined as T;
+    }
+    return response.json() as Promise<T>;
   }
-  return response.json() as Promise<T>;
+
+  return {
+    getCurrentUser: () => request<User>("/auth/me", undefined, false),
+    register: (credentials) =>
+      request<User>(
+        "/auth/register",
+        { method: "POST", body: JSON.stringify(credentials) },
+        false,
+      ),
+    login: (credentials) =>
+      request<User>(
+        "/auth/login",
+        { method: "POST", body: JSON.stringify(credentials) },
+        false,
+      ),
+    logout: () => request<void>("/auth/logout", { method: "POST" }, false),
+    onUnauthorized: (handler) => {
+      unauthorizedListeners.add(handler);
+      return () => unauthorizedListeners.delete(handler);
+    },
+    listCompanies: () => request<Company[]>("/companies"),
+    getDashboard: () => request<Dashboard>("/dashboard"),
+    analyzeWithAI: (payload) =>
+      request<AIAnalysis>("/ai/analyses", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    createCompany: (payload) =>
+      request<Company>("/companies", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    importFinancials: (companyId, payload) =>
+      request<FinancialAnalysis>(`/companies/${companyId}/financials`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    importFinancialsAutomatically: (companyId) =>
+      request<FinancialAnalysis>(
+        `/companies/${companyId}/financials/automatic`,
+        { method: "POST" },
+      ),
+    getFinancialHistory: (companyId) =>
+      request<FinancialHistory>(`/companies/${companyId}/financials`),
+    listValuations: (companyId) =>
+      request<ValuationAnalysis[]>(`/companies/${companyId}/valuations`),
+    createValuation: (companyId, payload) =>
+      request<ValuationAnalysis>(`/companies/${companyId}/valuations`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    listScores: (companyId) => request<ScoringAnalysis[]>(`/companies/${companyId}/scores`),
+    createScore: (companyId, payload) =>
+      request<ScoringAnalysis>(`/companies/${companyId}/scores`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+  };
 }
 
-export const apiClient: CompanyClient = {
-  listCompanies: () => request<Company[]>("/companies"),
-  getDashboard: () => request<Dashboard>("/dashboard"),
-  analyzeWithAI: (payload) =>
-    request<AIAnalysis>("/ai/analyses", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  createCompany: (payload) =>
-    request<Company>("/companies", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  importFinancials: (companyId, payload) =>
-    request<FinancialAnalysis>(`/companies/${companyId}/financials`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  importFinancialsAutomatically: (companyId) =>
-    request<FinancialAnalysis>(
-      `/companies/${companyId}/financials/automatic`,
-      { method: "POST" },
-    ),
-  getFinancialHistory: (companyId) =>
-    request<FinancialHistory>(`/companies/${companyId}/financials`),
-  listValuations: (companyId) =>
-    request<ValuationAnalysis[]>(`/companies/${companyId}/valuations`),
-  createValuation: (companyId, payload) =>
-    request<ValuationAnalysis>(`/companies/${companyId}/valuations`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  listScores: (companyId) =>
-    request<ScoringAnalysis[]>(`/companies/${companyId}/scores`),
-  createScore: (companyId, payload) =>
-    request<ScoringAnalysis>(`/companies/${companyId}/scores`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-};
+export const apiClient = createApiClient();
