@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.0 - 2026-07-26
+
+### Added
+
+- Création de compte, connexion, restauration de session et déconnexion.
+- Sessions personnelles conservées côté serveur avec une durée configurable.
+- Documentation de sécurité et de configuration dans
+  [`docs/authentication.md`](docs/authentication.md).
+- Validation PostgreSQL en CI de la migration v0.8 vers v0.9 et de la
+  concurrence entre deux premières inscriptions.
+
+### Changed
+
+- Chaque entreprise et toutes ses analyses sont désormais rattachées à son
+  propriétaire.
+- Le premier compte créé reprend atomiquement les entreprises historiques ;
+  les comptes suivants commencent avec un univers vide.
+- L’interface affiche l’email du compte courant et un état dédié lorsque la
+  session expire.
+
+### Security
+
+- Mots de passe hachés avec Argon2id et verrouillage temporaire après cinq
+  échecs de connexion.
+- Cookie de session `HttpOnly`, `SameSite=Strict`, limité à `/api` et
+  configurable avec `Secure` obligatoire derrière HTTPS en production.
+- Validation de l’origine des écritures et CORS limité aux origines
+  explicitement autorisées.
+- Les UUID appartenant à un autre compte répondent `404` sans divulguer
+  l’existence des données.
+
 ## 0.8.0 - 2026-07-26
 
 ### Added

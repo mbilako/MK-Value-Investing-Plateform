@@ -148,7 +148,9 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Aucune entreprise importée")).toBeInTheDocument();
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.8 Analyste IA")).toBeInTheDocument();
+    expect(
+      screen.getByText("Version 0.9 Comptes personnels"),
+    ).toBeInTheDocument();
   });
 
   it("opens the Air Liquide import form with normalized defaults", async () => {

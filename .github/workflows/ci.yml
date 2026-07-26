@@ -11,6 +11,23 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      MKVIP_DATABASE_URL: postgresql+asyncpg://mkvip:mkvip@localhost:5432/mkvip
+      MKVIP_TEST_POSTGRES_URL: postgresql+asyncpg://mkvip:mkvip@localhost:5432/mkvip
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: mkvip
+          POSTGRES_USER: mkvip
+          POSTGRES_PASSWORD: mkvip
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mkvip -d mkvip"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -22,6 +39,7 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev]"
       - run: ruff check .
+      - run: alembic upgrade head
       - run: pytest -q
 
   frontend:

@@ -8,6 +8,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - API Python/FastAPI ;
 - PostgreSQL et migrations Alembic ;
 - interface React/TypeScript ;
+- comptes personnels et isolation des données par utilisateur ;
 - import des entreprises et de leurs données financières annuelles ;
 - import automatique du dernier exercice public via Yahoo Finance ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
@@ -33,19 +34,20 @@ Puis ouvrir :
 - documentation API : <http://localhost:8000/docs>
 - santé API : <http://localhost:8000/api/v1/health>
 
-Le parcours applicatif se déroule en deux temps :
+Le parcours applicatif commence par un compte personnel :
 
-1. importer une entreprise ;
-2. utiliser « Ajouter les données », puis choisir l’import public automatique
+1. créer un compte ou se connecter ;
+2. importer une entreprise ;
+3. utiliser « Ajouter les données », puis choisir l’import public automatique
    ou la saisie manuelle d’un exercice financier normalisé ;
-3. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
+4. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
    indicateurs et tendances historiques ;
-4. préparer une valorisation, ajuster les hypothèses et comparer les cinq
+5. préparer une valorisation, ajuster les hypothèses et comparer les cinq
    méthodes à la capitalisation observée ;
-5. calculer le scoring global et lire les quatre contributions et explications.
-6. revenir au tableau de décision pour comparer les derniers scorings, filtrer
+6. calculer le scoring global et lire les quatre contributions et explications ;
+7. revenir au tableau de décision pour comparer les derniers scorings, filtrer
    les signaux et rouvrir un dossier prioritaire.
-7. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
+8. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
    entreprises ou poser une question sur les analyses MK-VIP disponibles.
 
 Les montants du formulaire sont exprimés en millions dans la devise de
@@ -112,6 +114,23 @@ GET  /api/v1/companies/{company_id}/scores
 GET  /api/v1/dashboard
 POST /api/v1/ai/analyses
 ```
+
+## Comptes personnels
+
+```text
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+GET  /api/v1/auth/me
+POST /api/v1/auth/logout
+```
+
+Les sessions restent côté serveur et le navigateur reçoit un cookie
+`HttpOnly`. Toutes les entreprises, analyses financières, valorisations,
+scorings, données du dashboard et comparaisons IA sont isolés par
+propriétaire. Un identifiant appartenant à un autre compte est traité comme
+inconnu. La configuration, la migration du premier compte et les garanties de
+sécurité sont détaillées dans
+[`docs/authentication.md`](docs/authentication.md).
 
 Les routes d’import valident les données, refusent un second import pour le
 même exercice, historisent le snapshot, calculent les ratios et scores, puis
@@ -197,5 +216,6 @@ reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 ## Limites actuelles
 
 Les analyses IA sont produites à la demande et ne sont pas encore historisées.
-L’authentification, les quotas par utilisateur et la mise en cache restent à
-ajouter avant une exploitation multi-utilisateur.
+Les quotas par utilisateur, la mise en cache, la vérification d’adresse email
+et la réinitialisation du mot de passe restent à ajouter avant une exploitation
+multi-utilisateur à grande échelle.

@@ -21,6 +21,11 @@ services:
         required: false
     environment:
       MKVIP_DATABASE_URL: ${MKVIP_DATABASE_URL:-postgresql+asyncpg://mkvip:mkvip@db:5432/mkvip}
+      MKVIP_ALLOWED_ORIGINS: '${MKVIP_ALLOWED_ORIGINS:-["http://localhost:5173"]}'
+      MKVIP_SESSION_COOKIE_SECURE: ${MKVIP_SESSION_COOKIE_SECURE:-false}
+      MKVIP_SESSION_DURATION_DAYS: ${MKVIP_SESSION_DURATION_DAYS:-30}
+      MKVIP_LOGIN_MAX_ATTEMPTS: ${MKVIP_LOGIN_MAX_ATTEMPTS:-5}
+      MKVIP_LOGIN_LOCK_MINUTES: ${MKVIP_LOGIN_LOCK_MINUTES:-15}
       MKVIP_OPENAI_MODEL: ${MKVIP_OPENAI_MODEL:-gpt-5.6-sol}
     command: >
       sh -c "alembic upgrade head &&
