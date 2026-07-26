@@ -14,6 +14,12 @@ class Settings(BaseSettings):
         validation_alias="OPENAI_API_KEY",
     )
     openai_model: str = "gpt-5.6-sol"
+    allowed_origins: list[str] = ["http://localhost:5173"]
+    session_cookie_name: str = "mkvip_session"
+    session_cookie_secure: bool = False
+    session_duration_days: int = 30
+    login_max_attempts: int = 5
+    login_lock_minutes: int = 15
 
     model_config = SettingsConfigDict(
         env_file=("../.env.local", ".env.local", ".env"),
