@@ -82,3 +82,15 @@ The import interaction uses a right-side drawer with a simple company form.
 - With a single exercise, one concise insufficient-history message replaces
   empty or invented charts.
 - Below 800px, the drawer occupies the full viewport width.
+
+## v0.5 valuation workflow
+
+- The existing analysis drawer gains one `Valorisation` section after trends.
+- A single secondary action reveals the assumptions instead of presenting a
+  second competing drawer.
+- The result starts with central estimate, safety value and market gap, then
+  lists the five methods with their formula and limitation.
+- Percentage fields show their unit beside the value and remain fully labelled.
+- The navy, emerald, border, radius and typography tokens remain unchanged.
+- Below 800px, summaries, methods and assumptions collapse to one column
+  without horizontal scrolling.

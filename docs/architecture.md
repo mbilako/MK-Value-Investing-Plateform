@@ -1,4 +1,4 @@
-# Architecture v0.4 Financial Engine
+# Architecture v0.5 Valuation Engine
 
 MK-VIP est organisé en monorepo afin de garder le domaine financier, l’API,
 l’interface et l’exploitation versionnés ensemble.
@@ -32,7 +32,8 @@ Le frontend React est découpé par responsabilité :
 
 Le tiroir d’analyse charge l’historique d’une entreprise à la demande. Il
 présente séparément les scores, les indicateurs du dernier exercice et les
-tendances calculées, sans transformer ces résultats en recommandation.
+tendances calculées. Il charge en parallèle l’historique des valorisations et
+permet de créer un scénario sans transformer ces résultats en recommandation.
 
 ## Flux initial
 
@@ -67,6 +68,29 @@ tendances sont calculées à la lecture pour refléter l’historique disponible
 
 La contrainte `(company_id, fiscal_year)` garantit un seul snapshot par
 entreprise et par exercice.
+
+## Valuation Engine
+
+Le domaine `analysis/valuation.py` reçoit un snapshot financier normalisé et un
+jeu d’hypothèses validé. Il calcule cinq méthodes sans dépendre de l’API, de la
+base de données ou d’un fournisseur externe.
+
+Une valorisation référence explicitement son entreprise et son snapshot. La
+table `valuation_analyses` conserve l’exercice, la devise, la capitalisation,
+les hypothèses, le détail des méthodes, l’estimation centrale, la valeur après
+marge de sécurité et l’écart de marché. Plusieurs scénarios peuvent ainsi
+coexister pour un même exercice.
+
+Le flux est le suivant :
+
+1. Le tiroir charge en parallèle l’historique financier et les valorisations.
+2. L’utilisateur ajuste les hypothèses du dernier exercice.
+3. Pydantic contrôle notamment que le taux d’actualisation dépasse la
+   croissance terminale.
+4. Le domaine calcule les cinq méthodes et la médiane des valeurs utilisables.
+5. Le dépôt persiste le scénario complet.
+6. L’interface présente l’estimation centrale puis les formules et limites de
+   chaque méthode.
 
 ## Frontière fournisseur
 

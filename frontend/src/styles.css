@@ -244,6 +244,18 @@ a:focus-visible {
   background: var(--emerald-tint);
 }
 
+.button--text {
+  height: auto;
+  padding: 6px 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+}
+
+.button--text:hover {
+  color: var(--navy);
+}
+
 .summary-strip {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -840,6 +852,163 @@ a:focus-visible {
   background: var(--emerald-tint);
 }
 
+.valuation-section {
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.valuation-summary {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 0.8fr;
+  gap: 10px;
+}
+
+.valuation-summary article {
+  display: grid;
+  gap: 7px;
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--subtle);
+}
+
+.valuation-summary__primary {
+  border-color: rgba(8, 122, 87, 0.25) !important;
+  background: var(--emerald-tint) !important;
+}
+
+.valuation-summary svg {
+  color: var(--emerald);
+}
+
+.valuation-summary span,
+.valuation-methods span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.valuation-summary strong {
+  align-self: end;
+  color: var(--navy);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 19px;
+}
+
+.valuation-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.valuation-methods article {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.valuation-methods article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.valuation-methods strong,
+.valuation-methods b {
+  color: var(--navy);
+}
+
+.valuation-methods strong {
+  font-size: 14px;
+}
+
+.valuation-methods b {
+  font-size: 17px;
+}
+
+.valuation-methods small {
+  line-height: 1.45;
+}
+
+.valuation-methods p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.valuation-action {
+  justify-self: start;
+}
+
+.valuation-form {
+  display: grid !important;
+  flex: none !important;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(8, 122, 87, 0.22);
+  border-radius: 10px;
+  background: var(--emerald-tint);
+}
+
+.valuation-form__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.valuation-form h4,
+.valuation-form p {
+  margin: 0;
+}
+
+.valuation-form h4 {
+  color: var(--navy);
+  font-size: 16px;
+}
+
+.valuation-form__head p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.valuation-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.input-with-suffix {
+  position: relative;
+}
+
+.input-with-suffix input {
+  padding-right: 42px;
+  background: #fff;
+}
+
+.input-with-suffix span {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.valuation-form > .button--primary {
+  justify-self: start;
+}
+
 .analysis-disclaimer {
   padding-top: 16px;
   margin: 0;
@@ -1027,7 +1196,10 @@ a:focus-visible {
 
   .score-grid,
   .indicator-grid,
-  .growth-grid {
+  .growth-grid,
+  .valuation-summary,
+  .valuation-methods,
+  .valuation-fields {
     grid-template-columns: 1fr;
   }
 

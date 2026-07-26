@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from mkvip.core.config import get_settings
 from mkvip.db.base import Base
-from mkvip.models import CompanyOrm, FinancialSnapshotOrm  # noqa: F401
+from mkvip.models import (  # noqa: F401
+    CompanyOrm,
+    FinancialSnapshotOrm,
+    ValuationAnalysisOrm,
+)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

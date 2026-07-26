@@ -11,6 +11,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - import des entreprises et de leurs données financières annuelles ;
 - import automatique du dernier exercice public via Yahoo Finance ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
+- valorisation par DCF, Owner Earnings, EPV, Graham et multiple de résultat ;
 - premiers critères Graham/Buffett issus du classeur métier ;
 - tests automatisés, Docker et CI GitHub.
 
@@ -34,7 +35,9 @@ Le parcours applicatif se déroule en deux temps :
 2. utiliser « Ajouter les données », puis choisir l’import public automatique
    ou la saisie manuelle d’un exercice financier normalisé ;
 3. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
-   indicateurs et tendances historiques.
+   indicateurs et tendances historiques ;
+4. préparer une valorisation, ajuster les hypothèses et comparer les cinq
+   méthodes à la capitalisation observée.
 
 Les montants du formulaire sont exprimés en millions dans la devise de
 l’entreprise. La source doit identifier le rapport annuel ou le dépôt
@@ -93,6 +96,8 @@ docker-compose.yml
 POST /api/v1/companies/{company_id}/financials
 POST /api/v1/companies/{company_id}/financials/automatic
 GET  /api/v1/companies/{company_id}/financials
+POST /api/v1/companies/{company_id}/valuations
+GET  /api/v1/companies/{company_id}/valuations
 ```
 
 Les routes d’import valident les données, refusent un second import pour le
@@ -110,6 +115,17 @@ annualisés lorsque deux exercices comparables sont disponibles.
 Les formules, conventions et limites sont détaillées dans
 [`docs/financial-engine.md`](docs/financial-engine.md).
 
+## Valuation Engine
+
+Le moteur v0.5 rattache chaque scénario à un snapshot financier précis. Il
+calcule cinq estimations de la valeur totale des capitaux propres, retient la
+médiane des valeurs positives comme estimation centrale, applique une marge de
+sécurité configurable et mesure l’écart avec la capitalisation saisie.
+
+Chaque résultat conserve ses hypothèses, sa formule, sa catégorie et une note
+d’interprétation. Les formules, approximations et sources méthodologiques sont
+détaillées dans [`docs/valuation-engine.md`](docs/valuation-engine.md).
+
 ## Source publique et limites
 
 Le connecteur s’appuie sur `yfinance`, un projet open source non affilié à
@@ -124,6 +140,6 @@ reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
 ## Prochain incrément
 
-Le prochain incrément développera le Valuation Engine : méthodes Graham,
-Buffett, EPV, multiples et DCF, en conservant une restitution explicable des
-hypothèses.
+Le prochain incrément développera le Scoring Engine afin de consolider la
+qualité, la sécurité, la valorisation et les règles Graham/Buffett dans une
+lecture multicritère explicable.

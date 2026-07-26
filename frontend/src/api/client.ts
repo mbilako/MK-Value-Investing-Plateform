@@ -79,6 +79,48 @@ export interface FinancialHistory {
   trend: FinancialTrend;
 }
 
+export interface ValuationAssumptions {
+  growth_rate: number;
+  terminal_growth_rate: number;
+  cost_of_equity: number;
+  wacc: number;
+  tax_rate: number;
+  projection_years: number;
+  target_pe: number;
+  corporate_bond_yield: number;
+  margin_of_safety: number;
+}
+
+export interface ValuationPayload {
+  fiscal_year: number;
+  assumptions: ValuationAssumptions;
+}
+
+export interface ValuationMethod {
+  key: string;
+  label: string;
+  value: number | null;
+  category: "intrinsic" | "relative" | "proxy";
+  formula: string;
+  base_metric: string;
+  note: string;
+}
+
+export interface ValuationAnalysis {
+  id: string;
+  company_id: string;
+  financial_snapshot_id: string;
+  fiscal_year: number;
+  currency: string;
+  market_cap: number;
+  assumptions: ValuationAssumptions;
+  methods: ValuationMethod[];
+  central_estimate: number | null;
+  margin_of_safety_value: number | null;
+  market_gap: number | null;
+  created_at: string;
+}
+
 export interface CompanyClient {
   listCompanies(): Promise<Company[]>;
   createCompany(payload: CompanyPayload): Promise<Company>;
@@ -88,6 +130,11 @@ export interface CompanyClient {
   ): Promise<FinancialAnalysis>;
   importFinancialsAutomatically(companyId: string): Promise<FinancialAnalysis>;
   getFinancialHistory(companyId: string): Promise<FinancialHistory>;
+  listValuations(companyId: string): Promise<ValuationAnalysis[]>;
+  createValuation(
+    companyId: string,
+    payload: ValuationPayload,
+  ): Promise<ValuationAnalysis>;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "/api/v1";
@@ -130,4 +177,11 @@ export const apiClient: CompanyClient = {
     ),
   getFinancialHistory: (companyId) =>
     request<FinancialHistory>(`/companies/${companyId}/financials`),
+  listValuations: (companyId) =>
+    request<ValuationAnalysis[]>(`/companies/${companyId}/valuations`),
+  createValuation: (companyId, payload) =>
+    request<ValuationAnalysis>(`/companies/${companyId}/valuations`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 - 2026-07-26
+
+### Added
+
+- Cinq méthodes de valorisation explicables : DCF, Buffett Owner Earnings,
+  Earnings Power Value, formule de Graham et multiple de résultat.
+- Scénarios persistés avec hypothèses, résultat central, marge de sécurité et
+  écart avec la capitalisation observée.
+- Routes API de création et d’historique des valorisations par entreprise.
+- Formulaire responsive intégré au tiroir d’analyse, avec détail de chaque
+  méthode et de ses limites.
+- Migration PostgreSQL dédiée au Valuation Engine.
+
 ## 0.4.0 - 2026-07-26
 
 ### Added

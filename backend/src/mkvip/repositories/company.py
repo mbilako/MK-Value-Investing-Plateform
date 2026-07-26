@@ -4,8 +4,10 @@ import uuid
 from typing import Protocol
 
 from mkvip.analysis.financials import FinancialAnalysis
+from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
 from mkvip.schemas.company import CompanyCreate, CompanyRead
 from mkvip.schemas.financial import FinancialAnalysisRead, FinancialSnapshotCreate
+from mkvip.schemas.valuation import ValuationAnalysisRead
 
 
 class CompanyRepository(Protocol):
@@ -34,3 +36,16 @@ class CompanyRepository(Protocol):
         snapshot: FinancialSnapshotCreate,
         analysis: FinancialAnalysis,
     ) -> FinancialAnalysisRead: ...
+
+    async def list_valuation_analyses(
+        self,
+        company_id: uuid.UUID,
+    ) -> list[ValuationAnalysisRead]: ...
+
+    async def create_valuation_analysis(
+        self,
+        company_id: uuid.UUID,
+        snapshot: FinancialAnalysisRead,
+        assumptions: ValuationAssumptions,
+        analysis: ValuationAnalysis,
+    ) -> ValuationAnalysisRead: ...

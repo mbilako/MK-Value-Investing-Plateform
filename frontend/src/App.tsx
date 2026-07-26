@@ -7,6 +7,8 @@ import {
   type CompanyClient,
   type FinancialAnalysis,
   type FinancialHistory,
+  type ValuationAnalysis,
+  type ValuationPayload,
 } from "./api/client";
 import { AnalysisDrawer } from "./components/AnalysisDrawer";
 import { AnalysisPipeline } from "./components/AnalysisPipeline";
@@ -30,6 +32,7 @@ export function App({ client = apiClient }: AppProps) {
   const [analysisCompany, setAnalysisCompany] = useState<Company | null>(null);
   const [financialHistory, setFinancialHistory] =
     useState<FinancialHistory | null>(null);
+  const [valuations, setValuations] = useState<ValuationAnalysis[]>([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
@@ -60,10 +63,16 @@ export function App({ client = apiClient }: AppProps) {
   const openAnalysis = async (company: Company) => {
     setAnalysisCompany(company);
     setFinancialHistory(null);
+    setValuations([]);
     setAnalysisError(null);
     setAnalysisLoading(true);
     try {
-      setFinancialHistory(await client.getFinancialHistory(company.id));
+      const [history, valuationHistory] = await Promise.all([
+        client.getFinancialHistory(company.id),
+        client.listValuations(company.id),
+      ]);
+      setFinancialHistory(history);
+      setValuations(valuationHistory);
     } catch (caughtError) {
       setAnalysisError(
         caughtError instanceof Error
@@ -164,11 +173,21 @@ export function App({ client = apiClient }: AppProps) {
         <AnalysisDrawer
           company={analysisCompany}
           history={financialHistory}
+          valuations={valuations}
           loading={analysisLoading}
           error={analysisError}
+          onCreateValuation={async (payload: ValuationPayload) => {
+            const valuation = await client.createValuation(
+              analysisCompany.id,
+              payload,
+            );
+            setValuations((current) => [valuation, ...current]);
+            return valuation;
+          }}
           onClose={() => {
             setAnalysisCompany(null);
             setFinancialHistory(null);
+            setValuations([]);
           }}
         />
       )}

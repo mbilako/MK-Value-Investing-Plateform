@@ -4,13 +4,20 @@ import type {
   Company,
   FinancialHistory,
   FinancialIndicator,
+  ValuationAnalysis,
+  ValuationPayload,
 } from "../api/client";
+import { ValuationPanel } from "./ValuationPanel";
 
 interface AnalysisDrawerProps {
   company: Company;
   history: FinancialHistory | null;
+  valuations: ValuationAnalysis[];
   loading: boolean;
   error: string | null;
+  onCreateValuation: (
+    payload: ValuationPayload,
+  ) => Promise<ValuationAnalysis>;
   onClose: () => void;
 }
 
@@ -41,8 +48,10 @@ function formatGrowth(value: number | null): string {
 export function AnalysisDrawer({
   company,
   history,
+  valuations,
   loading,
   error,
+  onCreateValuation,
   onClose,
 }: AnalysisDrawerProps) {
   const latest = history?.snapshots[0];
@@ -157,6 +166,12 @@ export function AnalysisDrawer({
                   </div>
                 )}
               </section>
+
+              <ValuationPanel
+                snapshot={latest}
+                valuations={valuations}
+                onCreate={onCreateValuation}
+              />
 
               <p className="analysis-disclaimer">
                 Indicateurs de présélection explicables, sans recommandation

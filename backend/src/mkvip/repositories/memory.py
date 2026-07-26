@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from mkvip.analysis.financials import FinancialAnalysis
+from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
 from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyStatus
 from mkvip.schemas.financial import (
     FinancialAnalysisRead,
@@ -11,12 +12,18 @@ from mkvip.schemas.financial import (
     FinancialMetricRead,
     FinancialSnapshotCreate,
 )
+from mkvip.schemas.valuation import (
+    ValuationAnalysisRead,
+    ValuationAssumptionsCreate,
+    ValuationMethodRead,
+)
 
 
 class InMemoryCompanyRepository:
     def __init__(self) -> None:
         self._companies: dict[str, CompanyRead] = {}
         self._financials: dict[tuple[uuid.UUID, int], FinancialAnalysisRead] = {}
+        self._valuations: list[ValuationAnalysisRead] = []
 
     async def list(self) -> list[CompanyRead]:
         return list(self._companies.values())
@@ -41,6 +48,49 @@ class InMemoryCompanyRepository:
             **company.model_dump(),
         )
         self._companies[record.ticker] = record
+        return record
+
+    async def list_valuation_analyses(
+        self,
+        company_id: uuid.UUID,
+    ) -> list[ValuationAnalysisRead]:
+        return sorted(
+            (
+                valuation
+                for valuation in self._valuations
+                if valuation.company_id == company_id
+            ),
+            key=lambda valuation: valuation.created_at,
+            reverse=True,
+        )
+
+    async def create_valuation_analysis(
+        self,
+        company_id: uuid.UUID,
+        snapshot: FinancialAnalysisRead,
+        assumptions: ValuationAssumptions,
+        analysis: ValuationAnalysis,
+    ) -> ValuationAnalysisRead:
+        record = ValuationAnalysisRead(
+            id=uuid.uuid4(),
+            company_id=company_id,
+            financial_snapshot_id=snapshot.id,
+            fiscal_year=snapshot.fiscal_year,
+            currency=snapshot.currency,
+            market_cap=snapshot.market_cap,
+            assumptions=ValuationAssumptionsCreate(
+                **assumptions.__dict__,
+            ),
+            methods=[
+                ValuationMethodRead(**method.__dict__)
+                for method in analysis.methods
+            ],
+            central_estimate=analysis.central_estimate,
+            margin_of_safety_value=analysis.margin_of_safety_value,
+            market_gap=analysis.market_gap,
+            created_at=datetime.now(UTC),
+        )
+        self._valuations.append(record)
         return record
 
     async def get_financial_analysis(

@@ -6,13 +6,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mkvip.analysis.financials import FinancialAnalysis
+from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
 from mkvip.models.company import CompanyOrm
 from mkvip.models.financial import FinancialSnapshotOrm
+from mkvip.models.valuation import ValuationAnalysisOrm
 from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyStatus
 from mkvip.schemas.financial import (
     FinancialAnalysisRead,
     FinancialSnapshotCreate,
 )
+from mkvip.schemas.valuation import ValuationAnalysisRead
 
 
 class SqlAlchemyCompanyRepository:
@@ -112,3 +115,41 @@ class SqlAlchemyCompanyRepository:
         await self._session.commit()
         await self._session.refresh(record)
         return FinancialAnalysisRead.model_validate(record)
+
+    async def list_valuation_analyses(
+        self,
+        company_id: uuid.UUID,
+    ) -> list[ValuationAnalysisRead]:
+        records = await self._session.scalars(
+            select(ValuationAnalysisOrm)
+            .where(ValuationAnalysisOrm.company_id == company_id)
+            .order_by(ValuationAnalysisOrm.created_at.desc())
+        )
+        return [
+            ValuationAnalysisRead.model_validate(record)
+            for record in records
+        ]
+
+    async def create_valuation_analysis(
+        self,
+        company_id: uuid.UUID,
+        snapshot: FinancialAnalysisRead,
+        assumptions: ValuationAssumptions,
+        analysis: ValuationAnalysis,
+    ) -> ValuationAnalysisRead:
+        record = ValuationAnalysisOrm(
+            company_id=company_id,
+            financial_snapshot_id=snapshot.id,
+            fiscal_year=snapshot.fiscal_year,
+            currency=snapshot.currency,
+            market_cap=snapshot.market_cap,
+            assumptions=assumptions.__dict__,
+            methods=[method.__dict__ for method in analysis.methods],
+            central_estimate=analysis.central_estimate,
+            margin_of_safety_value=analysis.margin_of_safety_value,
+            market_gap=analysis.market_gap,
+        )
+        self._session.add(record)
+        await self._session.commit()
+        await self._session.refresh(record)
+        return ValuationAnalysisRead.model_validate(record)
