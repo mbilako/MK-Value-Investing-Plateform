@@ -21,6 +21,28 @@ export function App({ client = apiClient }: AppProps) {
   );
   const [scores, setScores] = useState<Record<string, number>>({});
 
+  const completeFinancialImport = (
+    companyId: string,
+    mkScore: number,
+  ) => {
+    setCompanies((current) =>
+      current.map((company) =>
+        company.id === companyId
+          ? {
+              ...company,
+              status: "ready",
+              latest_mk_score: mkScore,
+            }
+          : company,
+      ),
+    );
+    setScores((current) => ({
+      ...current,
+      [companyId]: mkScore,
+    }));
+    setFinancialCompany(null);
+  };
+
   useEffect(() => {
     let active = true;
     client
@@ -90,23 +112,24 @@ export function App({ client = apiClient }: AppProps) {
         <FinancialDrawer
           company={financialCompany}
           onClose={() => setFinancialCompany(null)}
+          onAutomaticSubmit={async () => {
+            const analysis = await client.importFinancialsAutomatically(
+              financialCompany.id,
+            );
+            completeFinancialImport(
+              financialCompany.id,
+              analysis.mk_score,
+            );
+          }}
           onSubmit={async (payload) => {
             const analysis = await client.importFinancials(
               financialCompany.id,
               payload,
             );
-            setCompanies((current) =>
-              current.map((company) =>
-                company.id === financialCompany.id
-                  ? { ...company, status: "ready" }
-                  : company,
-              ),
+            completeFinancialImport(
+              financialCompany.id,
+              analysis.mk_score,
             );
-            setScores((current) => ({
-              ...current,
-              [financialCompany.id]: analysis.mk_score,
-            }));
-            setFinancialCompany(null);
           }}
         />
       )}

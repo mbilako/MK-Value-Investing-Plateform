@@ -57,6 +57,7 @@ export interface CompanyClient {
     companyId: string,
     payload: FinancialPayload,
   ): Promise<FinancialAnalysis>;
+  importFinancialsAutomatically(companyId: string): Promise<FinancialAnalysis>;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "/api/v1";
@@ -70,7 +71,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
-    throw new Error(`API request failed with status ${response.status}`);
+    const errorBody = (await response.json().catch(() => null)) as {
+      detail?: string;
+    } | null;
+    throw new Error(
+      errorBody?.detail ?? `API request failed with status ${response.status}`,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -87,4 +93,9 @@ export const apiClient: CompanyClient = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  importFinancialsAutomatically: (companyId) =>
+    request<FinancialAnalysis>(
+      `/companies/${companyId}/financials/automatic`,
+      { method: "POST" },
+    ),
 };

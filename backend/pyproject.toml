@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mkvip-api"
-version = "0.2.0"
+version = "0.3.0"
 description = "API for MK Value Investing Platform"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
   "pydantic-settings>=2.7,<3",
   "sqlalchemy[asyncio]>=2.0,<3",
   "uvicorn[standard]>=0.34,<1",
+  "yfinance>=1.5,<2",
 ]
 
 [project.optional-dependencies]

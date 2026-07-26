@@ -69,5 +69,6 @@ The import interaction uses a right-side drawer with a simple company form.
 - The import-drawer concept is used only for the drawer anatomy. The dashboard
   concept remains authoritative for the content visible behind the drawer.
 - `Ajouter les données`, `Importer les données financières`,
-  `Calculer le MK Score` and the ready-state score are the intentional v0.2
+  `Importer automatiquement avec Yahoo Finance`, `Calculer le MK Score` and
+  the ready-state score are the intentional v0.3
   additions that complete the financial-analysis workflow.

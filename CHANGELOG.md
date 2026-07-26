@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 - 2026-07-26
+
+### Added
+
+- Interface commune `FinancialDataProvider` pour découpler les sources du
+  moteur d’analyse.
+- Premier connecteur Yahoo Finance sans clé API.
+- Recherche d’entreprises, profils, états annuels et historique de prix
+  normalisés par le fournisseur Yahoo.
+- Import automatique du dernier exercice annuel complet depuis le tableau de
+  bord.
+- Messages d’erreur lisibles lorsque la source est indisponible ou incomplète.
+
+### Changed
+
+- Le client API restitue désormais le détail des erreurs du backend.
+- L’import manuel reste disponible comme solution de contrôle et de repli.
+
 ## 0.2.0 - 2026-07-25
 
 ### Added

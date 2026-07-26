@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { X } from "lucide-react";
+import { CloudDownload, X } from "lucide-react";
 
 import type {
   Company,
@@ -10,6 +10,7 @@ interface FinancialDrawerProps {
   company: Company;
   onClose: () => void;
   onSubmit: (payload: FinancialPayload) => Promise<void>;
+  onAutomaticSubmit: () => Promise<void>;
 }
 
 type NumericFinancialField = Exclude<
@@ -44,6 +45,7 @@ export function FinancialDrawer({
   company,
   onClose,
   onSubmit,
+  onAutomaticSubmit,
 }: FinancialDrawerProps) {
   const [source, setSource] = useState("");
   const [fiscalYear, setFiscalYear] = useState("2025");
@@ -53,9 +55,12 @@ export function FinancialDrawer({
     ) as Record<NumericFinancialField, string>,
   );
   const [submitting, setSubmitting] = useState(false);
+  const [automaticSubmitting, setAutomaticSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError(null);
     setSubmitting(true);
     try {
       await onSubmit({
@@ -66,8 +71,30 @@ export function FinancialDrawer({
           numericFields.map(({ key }) => [key, Number(values[key])]),
         ),
       } as FinancialPayload);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "L’import manuel a échoué.",
+      );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const submitAutomatically = async () => {
+    setError(null);
+    setAutomaticSubmitting(true);
+    try {
+      await onAutomaticSubmit();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "L’import automatique a échoué.",
+      );
+    } finally {
+      setAutomaticSubmitting(false);
     }
   };
 
@@ -103,6 +130,32 @@ export function FinancialDrawer({
         </div>
         <form onSubmit={submit}>
           <div className="drawer__fields">
+            <section
+              className="automatic-import"
+              aria-labelledby="automatic-import-title"
+            >
+              <CloudDownload aria-hidden="true" size={24} />
+              <div>
+                <h3 id="automatic-import-title">Import public automatique</h3>
+                <p>
+                  Récupère le dernier exercice annuel disponible et le
+                  normalise avant de calculer le MK Score.
+                </p>
+              </div>
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={automaticSubmitting || submitting}
+                onClick={submitAutomatically}
+              >
+                {automaticSubmitting
+                  ? "Import Yahoo en cours…"
+                  : "Importer automatiquement avec Yahoo Finance"}
+              </button>
+            </section>
+            <div className="manual-import-separator">
+              <span>ou saisir les données manuellement</span>
+            </div>
             <div className="financial-context">
               <div className="field">
                 <label htmlFor="financial-year">Exercice</label>
@@ -151,6 +204,11 @@ export function FinancialDrawer({
                 </div>
               ))}
             </div>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
           </div>
           <div className="drawer__actions">
             <button

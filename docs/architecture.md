@@ -1,4 +1,4 @@
-# Architecture v0.2 Financials
+# Architecture v0.3 Data Engine
 
 MK-VIP est organisé en monorepo afin de garder le domaine financier, l’API,
 l’interface et l’exploitation versionnés ensemble.
@@ -10,11 +10,13 @@ Le backend suit une architecture en couches :
 - `api/` expose les routes FastAPI ;
 - `schemas/` définit les contrats d’entrée et de sortie ;
 - `analysis/` contient les règles financières indépendantes de toute source ;
+- `providers/` expose `FinancialDataProvider`, le connecteur Yahoo et la
+  normalisation des données publiques ;
 - `repositories/` isole la persistance derrière une interface ;
 - `models/` et `db/` implémentent PostgreSQL avec SQLAlchemy ;
 - `core/` centralise la configuration.
 
-Cette séparation permettra d’ajouter plusieurs fournisseurs de données sans
+Cette séparation permet d’ajouter plusieurs fournisseurs de données sans
 coupler le moteur d’analyse à Yahoo Finance, Euronext ou à une autre source.
 
 ## Frontend
@@ -34,8 +36,9 @@ Le frontend React est découpé par responsabilité :
 2. L’API normalise le ticker et refuse les doublons.
 3. PostgreSQL conserve l’entreprise avec le statut `pending`.
 4. L’interface ajoute immédiatement la société à l’univers.
-5. Les prochaines versions brancheront le fournisseur de données et feront
-   progresser l’entreprise dans le pipeline.
+5. L’utilisateur peut déclencher l’import public depuis le tiroir financier.
+6. Le fournisseur Yahoo récupère et normalise le dernier exercice complet.
+7. L’analyse est historisée et l’entreprise progresse dans le pipeline.
 
 ## Flux financier normalisé
 
@@ -49,5 +52,24 @@ Le frontend React est découpé par responsabilité :
 8. L’entreprise passe au statut `ready`.
 
 La contrainte `(company_id, fiscal_year)` garantit un seul snapshot par
-entreprise et par exercice. Une future interface `FinancialDataProvider`
-produira exactement le même contrat d’entrée que le formulaire actuel.
+entreprise et par exercice.
+
+## Frontière fournisseur
+
+`FinancialDataProvider` définit cinq capacités :
+
+- rechercher une entreprise ;
+- charger son profil ;
+- charger les comptes de résultat annuels ;
+- charger les bilans et flux de trésorerie annuels ;
+- charger l’historique des prix.
+
+`YahooFinanceProvider` traduit les libellés Yahoo vers les objets financiers
+canoniques. `load_latest_snapshot` sélectionne le dernier exercice commun,
+convertit les montants bruts en millions et produit un
+`FinancialSnapshotCreate`. À partir de ce point, l’import manuel et l’import
+automatique empruntent le même moteur de ratios et la même persistance.
+
+Les erreurs réseau, les champs manquants et l’absence d’exercice commun sont
+convertis en réponses API explicites. Aucun appel réseau n’est effectué dans
+le moteur d’analyse lui-même.

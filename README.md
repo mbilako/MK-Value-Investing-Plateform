@@ -9,6 +9,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - PostgreSQL et migrations Alembic ;
 - interface React/TypeScript ;
 - import des entreprises et de leurs données financières annuelles ;
+- import automatique du dernier exercice public via Yahoo Finance ;
 - calcul automatique de dix ratios et du MK Score ;
 - premiers critères Graham/Buffett issus du classeur métier ;
 - tests automatisés, Docker et CI GitHub.
@@ -30,12 +31,17 @@ Puis ouvrir :
 Le parcours applicatif se déroule en deux temps :
 
 1. importer une entreprise ;
-2. utiliser « Ajouter les données » pour saisir un exercice financier
-   normalisé et calculer son MK Score.
+2. utiliser « Ajouter les données », puis choisir l’import public automatique
+   ou la saisie manuelle d’un exercice financier normalisé.
 
 Les montants du formulaire sont exprimés en millions dans la devise de
 l’entreprise. La source doit identifier le rapport annuel ou le dépôt
 réglementaire utilisé.
+
+L’import automatique utilise le ticker Yahoo Finance de l’entreprise
+(`AI.PA` pour Air Liquide), sélectionne le dernier exercice commun aux trois
+états financiers, convertit les montants en millions puis applique exactement
+le même moteur d’analyse que le formulaire manuel.
 
 Pour arrêter :
 
@@ -83,14 +89,27 @@ docker-compose.yml
 
 ```text
 POST /api/v1/companies/{company_id}/financials
+POST /api/v1/companies/{company_id}/financials/automatic
 ```
 
-Cette route valide les données, refuse un second import pour le même exercice,
-historise le snapshot, calcule les dix ratios et passe l’entreprise à l’état
-`ready`.
+Les deux routes valident les données, refusent un second import pour le même
+exercice, historisent le snapshot, calculent les dix ratios et passent
+l’entreprise à l’état `ready`.
+
+## Source publique et limites
+
+Le connecteur s’appuie sur `yfinance`, un projet open source non affilié à
+Yahoo. Il utilise les API publiquement accessibles de Yahoo Finance sans clé.
+Ces données sont destinées à la recherche et à un usage personnel ; leurs
+conditions d’utilisation doivent être respectées.
+
+MK-VIP conserve la source de chaque snapshot. Avant toute décision
+d’investissement, les chiffres importés doivent être rapprochés du rapport
+annuel audité ou du dépôt réglementaire de l’émetteur. Le formulaire manuel
+reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
 ## Prochain incrément
 
-Le prochain incrément ajoutera l’interface commune `FinancialDataProvider` et
-un premier connecteur de données publiques. Le contrat normalisé actuel
-restera la frontière entre les fournisseurs et le moteur d’analyse.
+Le prochain incrément développera le Financial Engine : Free Cash Flow, ROE,
+ROIC, croissance pluriannuelle et premiers scores spécialisés, tout en
+conservant le contrat normalisé comme frontière avec les fournisseurs.

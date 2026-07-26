@@ -130,3 +130,92 @@ def test_import_financials_rejects_zero_denominator(
     )
 
     assert response.status_code == 422
+
+
+def test_automatic_import_creates_latest_available_analysis(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    from mkvip.api import dependencies
+    from mkvip.providers.base import (
+        ProviderBalanceSheet,
+        ProviderCashFlow,
+        ProviderCompanyProfile,
+        ProviderIncomeStatement,
+    )
+
+    provider_dependency = getattr(
+        dependencies,
+        "get_financial_data_provider",
+        None,
+    )
+    assert provider_dependency is not None
+
+    class PublicDataProvider:
+        name = "Public Test Data"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="Air Liquide",
+                exchange="Euronext Paris",
+                country="France",
+                currency="EUR",
+                market_cap=4_500_000_000,
+            )
+
+        async def get_income_statements(
+            self,
+            ticker: str,
+        ) -> list[ProviderIncomeStatement]:
+            return [
+                ProviderIncomeStatement(
+                    fiscal_year=2025,
+                    revenue=1_000_000_000,
+                    ebitda=450_000_000,
+                    depreciation_amortization=20_000_000,
+                    ebit=400_000_000,
+                    interest_expense=40_000_000,
+                    net_income=250_000_000,
+                )
+            ]
+
+        async def get_balance_sheet(
+            self,
+            ticker: str,
+        ) -> list[ProviderBalanceSheet]:
+            return [
+                ProviderBalanceSheet(
+                    fiscal_year=2025,
+                    total_assets=4_000_000_000,
+                    current_assets=600_000_000,
+                    current_liabilities=250_000_000,
+                    financial_debt=600_000_000,
+                    cash=100_000_000,
+                    total_equity=1_000_000_000,
+                )
+            ]
+
+        async def get_cash_flow(
+            self,
+            ticker: str,
+        ) -> list[ProviderCashFlow]:
+            return [
+                ProviderCashFlow(
+                    fiscal_year=2025,
+                    capex=-40_000_000,
+                )
+            ]
+
+    app.dependency_overrides[provider_dependency] = PublicDataProvider
+    try:
+        response = client.post(
+            f"/api/v1/companies/{company_id}/financials/automatic",
+        )
+    finally:
+        app.dependency_overrides.pop(provider_dependency, None)
+
+    assert response.status_code == 201
+    assert response.json()["company_id"] == company_id
+    assert response.json()["source"] == "Public Test Data · AI.PA · exercice 2025"
+    assert response.json()["mk_score"] == 100.0

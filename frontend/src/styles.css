@@ -619,6 +619,69 @@ a:focus-visible {
   font-size: 13px;
 }
 
+.automatic-import {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid rgba(8, 122, 87, 0.2);
+  border-radius: 10px;
+  color: var(--navy);
+  background: var(--emerald-tint);
+}
+
+.automatic-import > svg {
+  color: var(--emerald);
+}
+
+.automatic-import h3,
+.automatic-import p {
+  margin: 0;
+}
+
+.automatic-import h3 {
+  font-size: 15px;
+}
+
+.automatic-import p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.automatic-import .button {
+  min-width: 210px;
+}
+
+.manual-import-separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.manual-import-separator::before,
+.manual-import-separator::after {
+  height: 1px;
+  content: "";
+  flex: 1;
+  background: var(--border);
+}
+
+.form-error {
+  padding: 11px 13px;
+  margin: 0;
+  border-left: 3px solid #b42318;
+  color: #7a271a;
+  background: #fef3f2;
+  font-size: 13px;
+}
+
 .drawer__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -667,6 +730,17 @@ a:focus-visible {
 
   .content {
     width: min(100% - 40px, 1180px);
+  }
+}
+
+@media (max-width: 640px) {
+  .automatic-import {
+    grid-template-columns: auto 1fr;
+  }
+
+  .automatic-import .button {
+    grid-column: 1 / -1;
+    min-width: 0;
   }
 }
 

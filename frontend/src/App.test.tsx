@@ -10,6 +10,10 @@ import type {
 
 afterEach(cleanup);
 
+const unusedAutomaticImport = async () => {
+  throw new Error("Import automatique non utilisé dans ce scénario.");
+};
+
 describe("MK-VIP dashboard", () => {
   it("shows the empty investment universe", () => {
     render(<App />);
@@ -20,6 +24,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Aucune entreprise importée")).toBeInTheDocument();
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.3 Data Engine")).toBeInTheDocument();
   });
 
   it("opens the Air Liquide import form with normalized defaults", async () => {
@@ -53,6 +58,7 @@ describe("MK-VIP dashboard", () => {
       importFinancials: async () => {
         throw new Error("Non utilisé dans ce scénario.");
       },
+      importFinancialsAutomatically: unusedAutomaticImport,
     };
     render(<App client={client} />);
 
@@ -90,6 +96,7 @@ describe("MK-VIP dashboard", () => {
       importFinancials: async () => {
         throw new Error("Non utilisé dans ce scénario.");
       },
+      importFinancialsAutomatically: unusedAutomaticImport,
     };
     render(<App client={client} />);
 
@@ -128,6 +135,7 @@ describe("MK-VIP dashboard", () => {
       importFinancials: async () => {
         throw new Error("Non utilisé dans ce scénario.");
       },
+      importFinancialsAutomatically: unusedAutomaticImport,
     };
 
     render(<App client={client} />);
@@ -170,6 +178,7 @@ describe("MK-VIP dashboard", () => {
           created_at: "2026-07-25T00:00:00Z",
         };
       },
+      importFinancialsAutomatically: unusedAutomaticImport,
     };
     render(<App client={client} />);
 
@@ -207,5 +216,76 @@ describe("MK-VIP dashboard", () => {
     expect(await screen.findByText("MK Score 100")).toBeInTheDocument();
     expect(screen.getByText("Analyse prête")).toBeInTheDocument();
     expect(screen.getByLabelText("analyses : 1")).toBeInTheDocument();
+  });
+
+  it("imports the latest public financial data automatically", async () => {
+    const user = userEvent.setup();
+    const client = {
+      listCompanies: async () => [
+        {
+          id: "company-1",
+          name: "Air Liquide",
+          ticker: "AI.PA",
+          exchange: "Euronext Paris",
+          country: "France",
+          currency: "EUR",
+          status: "pending" as const,
+        },
+      ],
+      createCompany: async (
+        payload: Parameters<CompanyClient["createCompany"]>[0],
+      ) => ({
+        id: "company-2",
+        status: "pending" as const,
+        ...payload,
+      }),
+      importFinancials: async () => {
+        throw new Error("Le formulaire manuel ne doit pas être utilisé.");
+      },
+      importFinancialsAutomatically: async (companyId: string) => {
+        if (companyId !== "company-1") {
+          throw new Error("Mauvaise entreprise.");
+        }
+        return {
+          id: "analysis-1",
+          company_id: companyId,
+          fiscal_year: 2025,
+          source: "Yahoo Finance · AI.PA · exercice 2025",
+          currency: "EUR",
+          revenue: 1000,
+          ebitda: 450,
+          depreciation_amortization: 20,
+          ebit: 400,
+          interest_expense: 40,
+          capex: 40,
+          net_income: 250,
+          market_cap: 4500,
+          total_assets: 4000,
+          current_assets: 600,
+          current_liabilities: 250,
+          financial_debt: 600,
+          cash: 100,
+          total_equity: 1000,
+          mk_score: 80,
+          metrics: [],
+          created_at: "2026-07-26T00:00:00Z",
+        };
+      },
+    };
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Importer les données financières pour Air Liquide",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Importer automatiquement avec Yahoo Finance",
+      }),
+    );
+
+    expect(await screen.findByText("MK Score 80")).toBeInTheDocument();
+    expect(screen.getByText("Analyse prête")).toBeInTheDocument();
   });
 });
