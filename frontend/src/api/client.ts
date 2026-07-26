@@ -121,6 +121,41 @@ export interface ValuationAnalysis {
   created_at: string;
 }
 
+export interface ScoringPayload {
+  fiscal_year: number;
+  valuation_id: string;
+}
+
+export interface ScoringComponent {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+  contribution: number;
+  formula: string;
+  note: string;
+}
+
+export interface ScoringInsight {
+  key: string;
+  tone: "positive" | "neutral" | "caution";
+  label: string;
+}
+
+export interface ScoringAnalysis {
+  id: string;
+  company_id: string;
+  financial_snapshot_id: string;
+  valuation_analysis_id: string;
+  fiscal_year: number;
+  components: ScoringComponent[];
+  insights: ScoringInsight[];
+  global_score: number;
+  signal: "favorable" | "watch" | "caution";
+  signal_label: string;
+  created_at: string;
+}
+
 export interface CompanyClient {
   listCompanies(): Promise<Company[]>;
   createCompany(payload: CompanyPayload): Promise<Company>;
@@ -135,6 +170,11 @@ export interface CompanyClient {
     companyId: string,
     payload: ValuationPayload,
   ): Promise<ValuationAnalysis>;
+  listScores(companyId: string): Promise<ScoringAnalysis[]>;
+  createScore(
+    companyId: string,
+    payload: ScoringPayload,
+  ): Promise<ScoringAnalysis>;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "/api/v1";
@@ -181,6 +221,13 @@ export const apiClient: CompanyClient = {
     request<ValuationAnalysis[]>(`/companies/${companyId}/valuations`),
   createValuation: (companyId, payload) =>
     request<ValuationAnalysis>(`/companies/${companyId}/valuations`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  listScores: (companyId) =>
+    request<ScoringAnalysis[]>(`/companies/${companyId}/scores`),
+  createScore: (companyId, payload) =>
+    request<ScoringAnalysis>(`/companies/${companyId}/scores`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),

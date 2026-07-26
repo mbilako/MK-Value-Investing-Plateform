@@ -1,4 +1,4 @@
-# Architecture v0.5 Valuation Engine
+# Architecture v0.6 Scoring Engine
 
 MK-VIP est organisé en monorepo afin de garder le domaine financier, l’API,
 l’interface et l’exploitation versionnés ensemble.
@@ -32,8 +32,9 @@ Le frontend React est découpé par responsabilité :
 
 Le tiroir d’analyse charge l’historique d’une entreprise à la demande. Il
 présente séparément les scores, les indicateurs du dernier exercice et les
-tendances calculées. Il charge en parallèle l’historique des valorisations et
-permet de créer un scénario sans transformer ces résultats en recommandation.
+tendances calculées. Il charge en parallèle les valorisations et les scorings,
+permet de créer un scénario puis une synthèse multicritère sans transformer
+ces résultats en recommandation.
 
 ## Flux initial
 
@@ -91,6 +92,28 @@ Le flux est le suivant :
 5. Le dépôt persiste le scénario complet.
 6. L’interface présente l’estimation centrale puis les formules et limites de
    chaque méthode.
+
+## Scoring Engine
+
+Le domaine `analysis/scoring.py` reçoit le snapshot financier analysé et une
+valorisation calculable du même exercice. Il agrège quatre composantes à poids
+égaux : qualité, sécurité, valeur et moat quantitatif.
+
+La table `scoring_analyses` référence explicitement l’entreprise, le snapshot
+et le scénario de valorisation. Elle conserve les composantes, leurs formules,
+leurs contributions, les explications et le signal final. Un recalcul crée un
+nouvel enregistrement afin de préserver la traçabilité.
+
+Le flux est le suivant :
+
+1. Le tiroir charge les snapshots, valorisations et scorings en parallèle.
+2. L’utilisateur déclenche le calcul sur le dernier exercice.
+3. L’API vérifie qu’un snapshot et une valorisation calculable existent pour
+   cet exercice.
+4. Le domaine calcule les quatre composantes, le score pondéré et le signal.
+5. Le dépôt persiste le résultat complet avec ses références.
+6. L’interface affiche le score global, les contributions et quatre
+   explications lisibles.
 
 ## Frontière fournisseur
 

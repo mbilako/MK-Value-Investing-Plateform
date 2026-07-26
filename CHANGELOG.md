@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 - 2026-07-26
+
+### Added
+
+- Scoring global explicable composé à parts égales de la qualité, de la
+  sécurité, de la valeur et d’un proxy quantitatif de moat.
+- Signaux de présélection « Profil favorable », « À approfondir » et
+  « Prudence », avec garde-fou sur les composantes faibles.
+- Quatre explications persistées, détail des poids et contributions, et
+  historique des calculs par entreprise.
+- Routes API de création et de lecture des scorings.
+- Panneau responsive intégré au tiroir d’analyse après la valorisation.
+- Migration PostgreSQL dédiée au Scoring Engine.
+
 ## 0.5.0 - 2026-07-26
 
 ### Added

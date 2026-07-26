@@ -40,7 +40,7 @@ export function Sidebar() {
       </nav>
       <div className="sidebar__foot">
         <span className="status-dot" aria-hidden="true" />
-        Version 0.5 Valuation Engine
+        Version 0.6 Scoring Engine
       </div>
     </aside>
   );

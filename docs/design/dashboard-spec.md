@@ -94,3 +94,17 @@ The import interaction uses a right-side drawer with a simple company form.
 - The navy, emerald, border, radius and typography tokens remain unchanged.
 - Below 800px, summaries, methods and assumptions collapse to one column
   without horizontal scrolling.
+
+## v0.6 scoring workflow
+
+- The analysis drawer gains one `Scoring global` section after valuation.
+- The first level pairs the 0–100 score with one plain-language research
+  signal; neither is presented as a buy recommendation.
+- Four equal-weight component cards expose score, progress, contribution and
+  a concise methodological note.
+- Four icon-led insight rows explain quality, safety, valuation and the moat
+  proxy without decorative charts.
+- The calculation action uses the valuation from the same fiscal year and can
+  be rerun while preserving prior records.
+- Below 700px, summary and component grids collapse to one column without
+  horizontal scrolling.

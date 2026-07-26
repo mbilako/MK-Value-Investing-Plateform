@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mkvip.analysis.financials import FinancialAnalysis
+from mkvip.analysis.scoring import ScoringAnalysis
 from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
 from mkvip.models.company import CompanyOrm
 from mkvip.models.financial import FinancialSnapshotOrm
+from mkvip.models.scoring import ScoringAnalysisOrm
 from mkvip.models.valuation import ValuationAnalysisOrm
 from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyStatus
 from mkvip.schemas.financial import (
     FinancialAnalysisRead,
     FinancialSnapshotCreate,
 )
+from mkvip.schemas.scoring import ScoringAnalysisRead
 from mkvip.schemas.valuation import ValuationAnalysisRead
 
 
@@ -153,3 +157,46 @@ class SqlAlchemyCompanyRepository:
         await self._session.commit()
         await self._session.refresh(record)
         return ValuationAnalysisRead.model_validate(record)
+
+    async def list_scoring_analyses(
+        self,
+        company_id: uuid.UUID,
+    ) -> list[ScoringAnalysisRead]:
+        records = await self._session.scalars(
+            select(ScoringAnalysisOrm)
+            .where(ScoringAnalysisOrm.company_id == company_id)
+            .order_by(ScoringAnalysisOrm.created_at.desc())
+        )
+        return [
+            ScoringAnalysisRead.model_validate(record)
+            for record in records
+        ]
+
+    async def create_scoring_analysis(
+        self,
+        company_id: uuid.UUID,
+        snapshot: FinancialAnalysisRead,
+        valuation: ValuationAnalysisRead,
+        analysis: ScoringAnalysis,
+    ) -> ScoringAnalysisRead:
+        record = ScoringAnalysisOrm(
+            company_id=company_id,
+            financial_snapshot_id=snapshot.id,
+            valuation_analysis_id=valuation.id,
+            fiscal_year=snapshot.fiscal_year,
+            components=[
+                asdict(component)
+                for component in analysis.components
+            ],
+            insights=[
+                asdict(insight)
+                for insight in analysis.insights
+            ],
+            global_score=analysis.global_score,
+            signal=analysis.signal,
+            signal_label=analysis.signal_label,
+        )
+        self._session.add(record)
+        await self._session.commit()
+        await self._session.refresh(record)
+        return ScoringAnalysisRead.model_validate(record)

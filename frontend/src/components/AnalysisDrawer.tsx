@@ -4,20 +4,27 @@ import type {
   Company,
   FinancialHistory,
   FinancialIndicator,
+  ScoringAnalysis,
+  ScoringPayload,
   ValuationAnalysis,
   ValuationPayload,
 } from "../api/client";
+import { ScorePanel } from "./ScorePanel";
 import { ValuationPanel } from "./ValuationPanel";
 
 interface AnalysisDrawerProps {
   company: Company;
   history: FinancialHistory | null;
   valuations: ValuationAnalysis[];
+  scores: ScoringAnalysis[];
   loading: boolean;
   error: string | null;
   onCreateValuation: (
     payload: ValuationPayload,
   ) => Promise<ValuationAnalysis>;
+  onCreateScore: (
+    payload: ScoringPayload,
+  ) => Promise<ScoringAnalysis>;
   onClose: () => void;
 }
 
@@ -49,9 +56,11 @@ export function AnalysisDrawer({
   company,
   history,
   valuations,
+  scores,
   loading,
   error,
   onCreateValuation,
+  onCreateScore,
   onClose,
 }: AnalysisDrawerProps) {
   const latest = history?.snapshots[0];
@@ -171,6 +180,13 @@ export function AnalysisDrawer({
                 snapshot={latest}
                 valuations={valuations}
                 onCreate={onCreateValuation}
+              />
+
+              <ScorePanel
+                fiscalYear={latest.fiscal_year}
+                valuations={valuations}
+                scores={scores}
+                onCreate={onCreateScore}
               />
 
               <p className="analysis-disclaimer">

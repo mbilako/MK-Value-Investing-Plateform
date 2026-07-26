@@ -2,7 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from mkvip import __version__
-from mkvip.api.routes import companies, financials, health, rules, valuations
+from mkvip.api.routes import (
+    companies,
+    financials,
+    health,
+    rules,
+    scores,
+    valuations,
+)
 
 
 def create_app() -> FastAPI:
@@ -22,6 +29,7 @@ def create_app() -> FastAPI:
     application.include_router(companies.router, prefix="/api/v1")
     application.include_router(financials.router, prefix="/api/v1")
     application.include_router(valuations.router, prefix="/api/v1")
+    application.include_router(scores.router, prefix="/api/v1")
     application.include_router(rules.router, prefix="/api/v1")
     return application
 

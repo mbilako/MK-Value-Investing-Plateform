@@ -57,3 +57,30 @@ pourcentage de règles favorables dans son groupe.
 Le Free Cash Flow, sa marge, le ROE, le ROIC, la couverture des intérêts et la
 dette nette restent des indicateurs informatifs en v0.4. Aucun seuil nouveau
 n’est inventé pour ces indicateurs.
+
+## Scoring global v0.6
+
+Le MK Global Score est la moyenne pondérée de quatre composantes de même poids :
+
+| Composante | Poids | Origine |
+|---|---:|---|
+| MK Quality Score | 25 % | règles de rentabilité du Financial Engine |
+| MK Safety Score | 25 % | règles de solidité du Financial Engine |
+| MK Value Score | 25 % | écart entre estimation centrale et capitalisation |
+| MK Moat Score | 25 % | proxy fondé sur quatre signaux quantitatifs |
+
+```text
+MK Value Score = borne(50 + écart de marché × 200, 0, 100)
+MK Moat Score = signaux favorables / 4 × 100
+MK Global Score = somme(score de composante × 25 %)
+```
+
+Le score de valeur vaut 50 à la juste valeur, 100 à partir de 25 % de décote et
+0 à partir de 25 % de surcote. Le proxy de moat compte une marge EBITDA
+favorable, une marge nette favorable, un ROIC supérieur au WACC et un Free
+Cash Flow positif. Il ne remplace pas l’analyse qualitative de la marque, des
+coûts de changement, des effets de réseau ou de la gouvernance.
+
+Le signal est « Profil favorable » à partir de 75/100 si aucune composante
+n’est inférieure à 50, « À approfondir » à partir de 55/100, et « Prudence »
+en dessous. Il priorise la recherche et ne constitue pas une recommandation.

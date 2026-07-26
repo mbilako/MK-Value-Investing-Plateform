@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 from mkvip.analysis.financials import FinancialAnalysis
+from mkvip.analysis.scoring import ScoringAnalysis
 from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
 from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyStatus
 from mkvip.schemas.financial import (
@@ -11,6 +13,11 @@ from mkvip.schemas.financial import (
     FinancialIndicatorRead,
     FinancialMetricRead,
     FinancialSnapshotCreate,
+)
+from mkvip.schemas.scoring import (
+    ScoringAnalysisRead,
+    ScoringComponentRead,
+    ScoringInsightRead,
 )
 from mkvip.schemas.valuation import (
     ValuationAnalysisRead,
@@ -24,6 +31,7 @@ class InMemoryCompanyRepository:
         self._companies: dict[str, CompanyRead] = {}
         self._financials: dict[tuple[uuid.UUID, int], FinancialAnalysisRead] = {}
         self._valuations: list[ValuationAnalysisRead] = []
+        self._scores: list[ScoringAnalysisRead] = []
 
     async def list(self) -> list[CompanyRead]:
         return list(self._companies.values())
@@ -91,6 +99,49 @@ class InMemoryCompanyRepository:
             created_at=datetime.now(UTC),
         )
         self._valuations.append(record)
+        return record
+
+    async def list_scoring_analyses(
+        self,
+        company_id: uuid.UUID,
+    ) -> list[ScoringAnalysisRead]:
+        return sorted(
+            (
+                score
+                for score in self._scores
+                if score.company_id == company_id
+            ),
+            key=lambda score: score.created_at,
+            reverse=True,
+        )
+
+    async def create_scoring_analysis(
+        self,
+        company_id: uuid.UUID,
+        snapshot: FinancialAnalysisRead,
+        valuation: ValuationAnalysisRead,
+        analysis: ScoringAnalysis,
+    ) -> ScoringAnalysisRead:
+        record = ScoringAnalysisRead(
+            id=uuid.uuid4(),
+            company_id=company_id,
+            financial_snapshot_id=snapshot.id,
+            valuation_analysis_id=valuation.id,
+            fiscal_year=snapshot.fiscal_year,
+            components=[
+                ScoringComponentRead(**asdict(component))
+                for component in analysis.components
+            ],
+            insights=[
+                ScoringInsightRead(**asdict(insight))
+                for insight in analysis.insights
+            ],
+            global_score=analysis.global_score,
+            signal=analysis.signal,
+            signal_label=analysis.signal_label,
+            created_at=datetime.now(UTC),
+        )
+        self._scores.append(record)
         return record
 
     async def get_financial_analysis(

@@ -7,6 +7,8 @@ import {
   type CompanyClient,
   type FinancialAnalysis,
   type FinancialHistory,
+  type ScoringAnalysis,
+  type ScoringPayload,
   type ValuationAnalysis,
   type ValuationPayload,
 } from "./api/client";
@@ -33,6 +35,7 @@ export function App({ client = apiClient }: AppProps) {
   const [financialHistory, setFinancialHistory] =
     useState<FinancialHistory | null>(null);
   const [valuations, setValuations] = useState<ValuationAnalysis[]>([]);
+  const [scoringAnalyses, setScoringAnalyses] = useState<ScoringAnalysis[]>([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
@@ -64,15 +67,18 @@ export function App({ client = apiClient }: AppProps) {
     setAnalysisCompany(company);
     setFinancialHistory(null);
     setValuations([]);
+    setScoringAnalyses([]);
     setAnalysisError(null);
     setAnalysisLoading(true);
     try {
-      const [history, valuationHistory] = await Promise.all([
+      const [history, valuationHistory, scoreHistory] = await Promise.all([
         client.getFinancialHistory(company.id),
         client.listValuations(company.id),
+        client.listScores(company.id),
       ]);
       setFinancialHistory(history);
       setValuations(valuationHistory);
+      setScoringAnalyses(scoreHistory);
     } catch (caughtError) {
       setAnalysisError(
         caughtError instanceof Error
@@ -174,6 +180,7 @@ export function App({ client = apiClient }: AppProps) {
           company={analysisCompany}
           history={financialHistory}
           valuations={valuations}
+          scores={scoringAnalyses}
           loading={analysisLoading}
           error={analysisError}
           onCreateValuation={async (payload: ValuationPayload) => {
@@ -184,10 +191,19 @@ export function App({ client = apiClient }: AppProps) {
             setValuations((current) => [valuation, ...current]);
             return valuation;
           }}
+          onCreateScore={async (payload: ScoringPayload) => {
+            const score = await client.createScore(
+              analysisCompany.id,
+              payload,
+            );
+            setScoringAnalyses((current) => [score, ...current]);
+            return score;
+          }}
           onClose={() => {
             setAnalysisCompany(null);
             setFinancialHistory(null);
             setValuations([]);
+            setScoringAnalyses([]);
           }}
         />
       )}

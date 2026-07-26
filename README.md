@@ -12,6 +12,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - import automatique du dernier exercice public via Yahoo Finance ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
 - valorisation par DCF, Owner Earnings, EPV, Graham et multiple de résultat ;
+- scoring global qualité, sécurité, valeur et moat quantitatif ;
 - premiers critères Graham/Buffett issus du classeur métier ;
 - tests automatisés, Docker et CI GitHub.
 
@@ -37,7 +38,8 @@ Le parcours applicatif se déroule en deux temps :
 3. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
    indicateurs et tendances historiques ;
 4. préparer une valorisation, ajuster les hypothèses et comparer les cinq
-   méthodes à la capitalisation observée.
+   méthodes à la capitalisation observée ;
+5. calculer le scoring global et lire les quatre contributions et explications.
 
 Les montants du formulaire sont exprimés en millions dans la devise de
 l’entreprise. La source doit identifier le rapport annuel ou le dépôt
@@ -98,6 +100,8 @@ POST /api/v1/companies/{company_id}/financials/automatic
 GET  /api/v1/companies/{company_id}/financials
 POST /api/v1/companies/{company_id}/valuations
 GET  /api/v1/companies/{company_id}/valuations
+POST /api/v1/companies/{company_id}/scores
+GET  /api/v1/companies/{company_id}/scores
 ```
 
 Les routes d’import valident les données, refusent un second import pour le
@@ -126,6 +130,18 @@ Chaque résultat conserve ses hypothèses, sa formule, sa catégorie et une note
 d’interprétation. Les formules, approximations et sources méthodologiques sont
 détaillées dans [`docs/valuation-engine.md`](docs/valuation-engine.md).
 
+## Scoring Engine
+
+Le moteur v0.6 consolide, à poids égaux, le MK Quality Score, le MK Safety
+Score, l’écart entre valeur centrale et capitalisation, et quatre signaux
+quantitatifs servant de proxy de moat. Le résultat conserve la formule, le
+poids, la contribution et une explication pour chaque composante.
+
+Le signal final indique une priorité de recherche — « Profil favorable »,
+« À approfondir » ou « Prudence » — et ne constitue pas une recommandation
+d’achat. Les seuils, limites et références sont détaillés dans
+[`docs/scoring-engine.md`](docs/scoring-engine.md).
+
 ## Source publique et limites
 
 Le connecteur s’appuie sur `yfinance`, un projet open source non affilié à
@@ -140,6 +156,6 @@ reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
 ## Prochain incrément
 
-Le prochain incrément développera le Scoring Engine afin de consolider la
-qualité, la sécurité, la valorisation et les règles Graham/Buffett dans une
-lecture multicritère explicable.
+Le prochain incrément développera le tableau de bord décisionnel et la gestion
+de portefeuille afin de comparer les entreprises scorées sans masquer les
+hypothèses ni les limites de chaque analyse.

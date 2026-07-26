@@ -24,6 +24,12 @@ const unusedCreateValuation = async () => {
   throw new Error("Valorisation non utilisée dans ce scénario.");
 };
 
+const unusedScores = async () => [];
+
+const unusedCreateScore = async () => {
+  throw new Error("Scoring non utilisé dans ce scénario.");
+};
+
 describe("MK-VIP dashboard", () => {
   it("shows the empty investment universe", () => {
     render(<App />);
@@ -34,7 +40,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Aucune entreprise importée")).toBeInTheDocument();
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.5 Valuation Engine")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.6 Scoring Engine")).toBeInTheDocument();
   });
 
   it("opens the Air Liquide import form with normalized defaults", async () => {
@@ -72,6 +78,8 @@ describe("MK-VIP dashboard", () => {
       getFinancialHistory: unusedFinancialHistory,
       listValuations: unusedValuations,
       createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
     };
     render(<App client={client} />);
 
@@ -113,6 +121,8 @@ describe("MK-VIP dashboard", () => {
       getFinancialHistory: unusedFinancialHistory,
       listValuations: unusedValuations,
       createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
     };
     render(<App client={client} />);
 
@@ -155,6 +165,8 @@ describe("MK-VIP dashboard", () => {
       getFinancialHistory: unusedFinancialHistory,
       listValuations: unusedValuations,
       createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
     };
 
     render(<App client={client} />);
@@ -206,6 +218,8 @@ describe("MK-VIP dashboard", () => {
       getFinancialHistory: unusedFinancialHistory,
       listValuations: unusedValuations,
       createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
     };
     render(<App client={client} />);
 
@@ -307,6 +321,8 @@ describe("MK-VIP dashboard", () => {
       getFinancialHistory: unusedFinancialHistory,
       listValuations: unusedValuations,
       createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
     };
     render(<App client={client} />);
 
@@ -412,6 +428,8 @@ describe("MK-VIP dashboard", () => {
       }),
       listValuations: unusedValuations,
       createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
     };
     render(<App client={client} />);
 
@@ -578,6 +596,8 @@ describe("MK-VIP dashboard", () => {
           created_at: "2026-07-26T00:00:00Z",
         };
       },
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
     };
     render(<App client={client} />);
 
@@ -612,5 +632,206 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Earnings Power Value")).toBeInTheDocument();
     expect(screen.getByText("Formule de Graham")).toBeInTheDocument();
     expect(screen.getByText("Multiple de résultat")).toBeInTheDocument();
+  });
+
+  it("creates an explainable global score from the latest valuation", async () => {
+    const user = userEvent.setup();
+    let submittedValuationId: string | undefined;
+    const client = {
+      listCompanies: async () => [
+        {
+          id: "company-1",
+          name: "Air Liquide",
+          ticker: "AI.PA",
+          exchange: "Euronext Paris",
+          country: "France",
+          currency: "EUR",
+          status: "ready" as const,
+          latest_mk_score: 80,
+          latest_quality_score: 50,
+          latest_safety_score: 75,
+        },
+      ],
+      createCompany: async (
+        payload: Parameters<CompanyClient["createCompany"]>[0],
+      ) => ({
+        id: "company-2",
+        status: "pending" as const,
+        ...payload,
+      }),
+      importFinancials: async () => {
+        throw new Error("Import manuel non utilisé.");
+      },
+      importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: async (companyId: string) => ({
+        company_id: companyId,
+        snapshots: [
+          {
+            id: "analysis-1",
+            company_id: companyId,
+            fiscal_year: 2025,
+            source: "Rapport annuel 2025",
+            currency: "EUR",
+            revenue: 1_000,
+            ebitda: 300,
+            depreciation_amortization: 40,
+            ebit: 250,
+            interest_expense: 20,
+            operating_cash_flow: 180,
+            capex: 80,
+            net_income: 160,
+            market_cap: 2_200,
+            total_assets: 2_000,
+            current_assets: 500,
+            current_liabilities: 250,
+            financial_debt: 400,
+            cash: 100,
+            total_equity: 800,
+            metrics: [],
+            indicators: [],
+            mk_score: 80,
+            quality_score: 50,
+            safety_score: 75,
+            created_at: "2026-07-26T00:00:00Z",
+          },
+        ],
+        trend: {
+          periods: 1,
+          first_year: 2025,
+          last_year: 2025,
+          revenue_cagr: null,
+          net_income_cagr: null,
+          free_cash_flow_cagr: null,
+        },
+      }),
+      listValuations: async (companyId: string) => [
+        {
+          id: "valuation-1",
+          company_id: companyId,
+          financial_snapshot_id: "analysis-1",
+          fiscal_year: 2025,
+          currency: "EUR",
+          market_cap: 2_200,
+          assumptions: {
+            growth_rate: 0.05,
+            terminal_growth_rate: 0.02,
+            cost_of_equity: 0.1,
+            wacc: 0.08,
+            tax_rate: 0.25,
+            projection_years: 5,
+            target_pe: 15,
+            corporate_bond_yield: 0.044,
+            margin_of_safety: 0.25,
+          },
+          methods: [],
+          central_estimate: 2_505.47,
+          margin_of_safety_value: 1_879.1,
+          market_gap: 0.13885,
+          created_at: "2026-07-26T00:00:00Z",
+        },
+      ],
+      createValuation: unusedCreateValuation,
+      listScores: async () => [],
+      createScore: async (
+        companyId: string,
+        payload: Parameters<CompanyClient["createScore"]>[1],
+      ) => {
+        submittedValuationId = payload.valuation_id;
+        return {
+          id: "score-1",
+          company_id: companyId,
+          financial_snapshot_id: "analysis-1",
+          valuation_analysis_id: payload.valuation_id,
+          fiscal_year: payload.fiscal_year,
+          components: [
+            {
+              key: "quality",
+              label: "MK Quality Score",
+              score: 50,
+              weight: 0.25,
+              contribution: 12.5,
+              formula: "Score qualité × 25 %",
+              note: "Qualité opérationnelle.",
+            },
+            {
+              key: "safety",
+              label: "MK Safety Score",
+              score: 75,
+              weight: 0.25,
+              contribution: 18.75,
+              formula: "Score sécurité × 25 %",
+              note: "Solidité financière.",
+            },
+            {
+              key: "value",
+              label: "MK Value Score",
+              score: 77.77,
+              weight: 0.25,
+              contribution: 19.44,
+              formula: "Écart à la valeur centrale",
+              note: "Valorisation relative.",
+            },
+            {
+              key: "moat",
+              label: "MK Moat Score",
+              score: 50,
+              weight: 0.25,
+              contribution: 12.5,
+              formula: "Signaux favorables / 4",
+              note: "Proxy quantitatif.",
+            },
+          ],
+          insights: [
+            {
+              key: "quality",
+              tone: "neutral" as const,
+              label: "Qualité : 50/100.",
+            },
+            {
+              key: "safety",
+              tone: "positive" as const,
+              label: "Sécurité : 75/100.",
+            },
+            {
+              key: "value",
+              tone: "positive" as const,
+              label: "Valorisation : décote de 13,9 %.",
+            },
+            {
+              key: "moat",
+              tone: "neutral" as const,
+              label: "Moat proxy : 2/4 signaux favorables.",
+            },
+          ],
+          global_score: 63.19,
+          signal: "watch" as const,
+          signal_label: "À approfondir",
+          created_at: "2026-07-26T00:00:00Z",
+        };
+      },
+    };
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Voir l’analyse financière de Air Liquide",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Calculer le scoring global",
+      }),
+    );
+
+    expect(submittedValuationId).toBe("valuation-1");
+    expect(await screen.findByText("63,19")).toBeInTheDocument();
+    expect(screen.getByText("À approfondir")).toBeInTheDocument();
+    expect(screen.getAllByText("MK Quality Score").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("MK Safety Score").length).toBeGreaterThan(0);
+    expect(screen.getByText("MK Value Score")).toBeInTheDocument();
+    expect(screen.getByText("MK Moat Score")).toBeInTheDocument();
+    expect(
+      screen.getByText("Moat proxy : 2/4 signaux favorables."),
+    ).toBeInTheDocument();
   });
 });
