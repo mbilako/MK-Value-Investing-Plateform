@@ -108,3 +108,17 @@ The import interaction uses a right-side drawer with a simple company form.
   be rerun while preserving prior records.
 - Below 700px, summary and component grids collapse to one column without
   horizontal scrolling.
+
+## v0.7 decision dashboard
+
+- A `Tableau de décision` section precedes the complete investment universe.
+- Signal distribution uses one compact stacked bar and an explicit legend;
+  colour never carries meaning alone.
+- The research portfolio remains table-driven and shows company, global score,
+  signal, valuation gap, weakest component and one analysis action.
+- `Portefeuille de recherche` means a comparison universe, not actual
+  holdings. No quantity, allocation, cost basis, gain or loss is inferred.
+- The signal filter updates the research table locally. The universe search
+  matches both company name and ticker.
+- At narrower widths, distribution and research table stack; wide tabular
+  content scrolls horizontally without clipping actions.

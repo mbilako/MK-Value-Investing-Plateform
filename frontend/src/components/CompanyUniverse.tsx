@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { FileUp, Inbox, Plus, Search } from "lucide-react";
 
 import type { Company } from "../api/client";
@@ -17,8 +18,18 @@ export function CompanyUniverse({
   onFinancialImport,
   onAnalysis,
 }: CompanyUniverseProps) {
+  const [query, setQuery] = useState("");
   const scoreFor = (company: Company) =>
     scores[company.id] ?? company.latest_mk_score;
+  const filteredCompanies = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase("fr");
+    if (!normalizedQuery) return companies;
+    return companies.filter((company) =>
+      `${company.name} ${company.ticker}`
+        .toLocaleLowerCase("fr")
+        .includes(normalizedQuery),
+    );
+  }, [companies, query]);
 
   return (
     <section className="section" aria-labelledby="universe-title">
@@ -26,7 +37,11 @@ export function CompanyUniverse({
       <label className="search-field">
         <Search aria-hidden="true" size={21} strokeWidth={1.75} />
         <span className="sr-only">Rechercher une entreprise ou un ticker</span>
-        <input placeholder="Rechercher une entreprise ou un ticker" />
+        <input
+          placeholder="Rechercher une entreprise ou un ticker"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </label>
       <div className="company-table">
         <div className="company-table__head" role="row">
@@ -38,7 +53,7 @@ export function CompanyUniverse({
         </div>
         {companies.length ? (
           <div className="company-table__body">
-            {companies.map((company) => (
+            {filteredCompanies.map((company) => (
               <div className="company-table__row" role="row" key={company.id}>
                 <strong>{company.name}</strong>
                 <span className="ticker">{company.ticker}</span>
@@ -68,6 +83,11 @@ export function CompanyUniverse({
                 )}
               </div>
             ))}
+            {!filteredCompanies.length && (
+              <p className="company-filter-empty">
+                Aucune entreprise ne correspond à cette recherche.
+              </p>
+            )}
           </div>
         ) : (
           <div className="empty-state">

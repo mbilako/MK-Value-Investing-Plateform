@@ -13,6 +13,8 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
 - valorisation par DCF, Owner Earnings, EPV, Graham et multiple de résultat ;
 - scoring global qualité, sécurité, valeur et moat quantitatif ;
+- tableau de décision, distribution des signaux et portefeuille de recherche ;
+- recherche des entreprises par nom ou ticker ;
 - premiers critères Graham/Buffett issus du classeur métier ;
 - tests automatisés, Docker et CI GitHub.
 
@@ -40,6 +42,8 @@ Le parcours applicatif se déroule en deux temps :
 4. préparer une valorisation, ajuster les hypothèses et comparer les cinq
    méthodes à la capitalisation observée ;
 5. calculer le scoring global et lire les quatre contributions et explications.
+6. revenir au tableau de décision pour comparer les derniers scorings, filtrer
+   les signaux et rouvrir un dossier prioritaire.
 
 Les montants du formulaire sont exprimés en millions dans la devise de
 l’entreprise. La source doit identifier le rapport annuel ou le dépôt
@@ -102,6 +106,7 @@ POST /api/v1/companies/{company_id}/valuations
 GET  /api/v1/companies/{company_id}/valuations
 POST /api/v1/companies/{company_id}/scores
 GET  /api/v1/companies/{company_id}/scores
+GET  /api/v1/dashboard
 ```
 
 Les routes d’import valident les données, refusent un second import pour le
@@ -142,6 +147,19 @@ Le signal final indique une priorité de recherche — « Profil favorable »,
 d’achat. Les seuils, limites et références sont détaillés dans
 [`docs/scoring-engine.md`](docs/scoring-engine.md).
 
+## Dashboard
+
+Le dashboard v0.7 agrège le dernier scoring disponible de chaque entreprise.
+Il présente la distribution des signaux, classe les entreprises scorées par
+score global décroissant et expose pour chacune l’écart de valeur ainsi que la
+composante à approfondir.
+
+Le « portefeuille de recherche » désigne l’univers comparatif de MK-VIP. Il ne
+représente ni des positions détenues ni une recommandation : aucune quantité,
+allocation, performance ou prix de revient n’est inventé. Le contrat API et
+les règles de présentation sont détaillés dans
+[`docs/dashboard.md`](docs/dashboard.md).
+
 ## Source publique et limites
 
 Le connecteur s’appuie sur `yfinance`, un projet open source non affilié à
@@ -156,6 +174,6 @@ reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
 ## Prochain incrément
 
-Le prochain incrément développera le tableau de bord décisionnel et la gestion
-de portefeuille afin de comparer les entreprises scorées sans masquer les
-hypothèses ni les limites de chaque analyse.
+Le prochain incrément explorera l’assistance IA pour synthétiser les analyses
+et guider la recherche sans remplacer les données sources, les calculs
+traçables ni le jugement de l’investisseur.

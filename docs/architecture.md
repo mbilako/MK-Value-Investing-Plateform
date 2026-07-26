@@ -1,4 +1,4 @@
-# Architecture v0.6 Scoring Engine
+# Architecture v0.7 Dashboard
 
 MK-VIP est organisé en monorepo afin de garder le domaine financier, l’API,
 l’interface et l’exploitation versionnés ensemble.
@@ -24,7 +24,8 @@ coupler le moteur d’analyse à Yahoo Finance, Euronext ou à une autre source.
 Le frontend React est découpé par responsabilité :
 
 - coque et navigation ;
-- résumé du portefeuille d’entreprises ;
+- résumé de l’univers de recherche ;
+- tableau de décision et distribution des signaux ;
 - univers d’investissement sous forme de tableau ;
 - pipeline d’analyse ;
 - tiroir d’import d’entreprise ;
@@ -35,6 +36,11 @@ présente séparément les scores, les indicateurs du dernier exercice et les
 tendances calculées. Il charge en parallèle les valorisations et les scorings,
 permet de créer un scénario puis une synthèse multicritère sans transformer
 ces résultats en recommandation.
+
+Le dashboard charge en parallèle l’univers des entreprises et une projection
+agrégée dédiée. Cette projection conserve le dernier scoring de chaque
+entreprise, évite de recalculer le domaine dans React et permet d’ouvrir
+directement le tiroir d’analyse à partir du portefeuille de recherche.
 
 ## Flux initial
 
@@ -114,6 +120,28 @@ Le flux est le suivant :
 5. Le dépôt persiste le résultat complet avec ses références.
 6. L’interface affiche le score global, les contributions et quatre
    explications lisibles.
+
+## Dashboard
+
+La route `GET /api/v1/dashboard` construit une projection en lecture seule à
+partir des entreprises, de leur dernier scoring et de la valorisation liée à
+ce scoring. Elle ne crée aucune nouvelle donnée et ne nécessite donc pas de
+migration.
+
+Pour chaque entreprise, l’API restitue le score global, le signal, l’exercice,
+l’écart de marché et la composante la plus faible. Les dossiers scorés sont
+triés par score décroissant ; les dossiers sans scoring restent visibles après
+eux, par ordre alphabétique.
+
+Le flux est le suivant :
+
+1. React charge l’univers et la projection du dashboard en parallèle.
+2. L’API sélectionne le dernier scoring historisé de chaque entreprise.
+3. Elle retrouve la valorisation explicitement référencée par ce scoring.
+4. Elle agrège les compteurs et identifie la composante la plus faible.
+5. L’interface affiche la distribution et le portefeuille de recherche.
+6. Un filtre local réduit la vue sans modifier ni masquer les données sources.
+7. Après un nouveau scoring, la projection est rechargée automatiquement.
 
 ## Frontière fournisseur
 

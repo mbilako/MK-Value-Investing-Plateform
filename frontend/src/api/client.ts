@@ -156,8 +156,59 @@ export interface ScoringAnalysis {
   created_at: string;
 }
 
+export type DashboardSignal =
+  | "favorable"
+  | "watch"
+  | "caution"
+  | "unscored";
+
+export interface DashboardSummary {
+  companies: number;
+  ready: number;
+  scored: number;
+  favorable: number;
+  watch: number;
+  caution: number;
+  unscored: number;
+}
+
+export interface DashboardDistribution {
+  signal: DashboardSignal;
+  label: string;
+  count: number;
+}
+
+export interface DashboardWeakestComponent {
+  key: string;
+  label: string;
+  score: number;
+}
+
+export interface DashboardCompany {
+  company_id: string;
+  name: string;
+  ticker: string;
+  exchange: string;
+  country: string;
+  status: CompanyStatus;
+  fiscal_year: number | null;
+  global_score: number | null;
+  signal: DashboardSignal;
+  signal_label: string;
+  market_gap: number | null;
+  weakest_component: DashboardWeakestComponent | null;
+  updated_at: string | null;
+}
+
+export interface Dashboard {
+  summary: DashboardSummary;
+  distribution: DashboardDistribution[];
+  companies: DashboardCompany[];
+}
+
 export interface CompanyClient {
   listCompanies(): Promise<Company[]>;
+  getDashboard?(): Promise<Dashboard>;
   createCompany(payload: CompanyPayload): Promise<Company>;
   importFinancials(
     companyId: string,
@@ -200,6 +251,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const apiClient: CompanyClient = {
   listCompanies: () => request<Company[]>("/companies"),
+  getDashboard: () => request<Dashboard>("/dashboard"),
   createCompany: (payload) =>
     request<Company>("/companies", {
       method: "POST",

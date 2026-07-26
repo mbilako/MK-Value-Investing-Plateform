@@ -5,6 +5,7 @@ import {
   apiClient,
   type Company,
   type CompanyClient,
+  type Dashboard,
   type FinancialAnalysis,
   type FinancialHistory,
   type ScoringAnalysis,
@@ -15,6 +16,7 @@ import {
 import { AnalysisDrawer } from "./components/AnalysisDrawer";
 import { AnalysisPipeline } from "./components/AnalysisPipeline";
 import { CompanyUniverse } from "./components/CompanyUniverse";
+import { DecisionDashboard } from "./components/DecisionDashboard";
 import { FinancialDrawer } from "./components/FinancialDrawer";
 import { ImportDrawer } from "./components/ImportDrawer";
 import { Sidebar } from "./components/Sidebar";
@@ -26,6 +28,7 @@ interface AppProps {
 
 export function App({ client = apiClient }: AppProps) {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [isImportOpen, setImportOpen] = useState(false);
   const [financialCompany, setFinancialCompany] = useState<Company | null>(
     null,
@@ -38,6 +41,15 @@ export function App({ client = apiClient }: AppProps) {
   const [scoringAnalyses, setScoringAnalyses] = useState<ScoringAnalysis[]>([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  const refreshDashboard = async () => {
+    if (!client.getDashboard) return;
+    try {
+      setDashboard(await client.getDashboard());
+    } catch {
+      // The rest of the workspace remains usable while the API starts.
+    }
+  };
 
   const completeFinancialImport = (
     companyId: string,
@@ -61,6 +73,7 @@ export function App({ client = apiClient }: AppProps) {
       [companyId]: analysis.mk_score,
     }));
     setFinancialCompany(null);
+    void refreshDashboard();
   };
 
   const openAnalysis = async (company: Company) => {
@@ -100,6 +113,16 @@ export function App({ client = apiClient }: AppProps) {
       .catch(() => {
         // The empty state remains useful while the API starts.
       });
+    if (client.getDashboard) {
+      client
+        .getDashboard()
+        .then((result) => {
+          if (active) setDashboard(result);
+        })
+        .catch(() => {
+          // The dashboard appears as soon as the API is available.
+        });
+    }
     return () => {
       active = false;
     };
@@ -130,8 +153,16 @@ export function App({ client = apiClient }: AppProps) {
           analyses={
             companies.filter((company) => company.status === "ready").length
           }
+          favorable={dashboard?.summary.favorable ?? 0}
         />
         <div className="content">
+          {dashboard && (
+            <DecisionDashboard
+              dashboard={dashboard}
+              companies={companies}
+              onAnalysis={openAnalysis}
+            />
+          )}
           <CompanyUniverse
             companies={companies}
             scores={scores}
@@ -153,6 +184,7 @@ export function App({ client = apiClient }: AppProps) {
             const company = await client.createCompany(payload);
             setCompanies((current) => [...current, company]);
             setImportOpen(false);
+            void refreshDashboard();
           }}
         />
       )}
@@ -197,6 +229,7 @@ export function App({ client = apiClient }: AppProps) {
               payload,
             );
             setScoringAnalyses((current) => [score, ...current]);
+            await refreshDashboard();
             return score;
           }}
           onClose={() => {

@@ -40,7 +40,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Aucune entreprise importée")).toBeInTheDocument();
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.6 Scoring Engine")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.7 Dashboard")).toBeInTheDocument();
   });
 
   it("opens the Air Liquide import form with normalized defaults", async () => {
@@ -833,5 +833,281 @@ describe("MK-VIP dashboard", () => {
     expect(
       screen.getByText("Moat proxy : 2/4 signaux favorables."),
     ).toBeInTheDocument();
+  });
+
+  it("shows and filters the decision dashboard before opening an analysis", async () => {
+    const user = userEvent.setup();
+    const companies = [
+      {
+        id: "company-1",
+        name: "Air Liquide",
+        ticker: "AI.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "ready" as const,
+        latest_mk_score: 80,
+        latest_quality_score: 50,
+        latest_safety_score: 75,
+      },
+      {
+        id: "company-2",
+        name: "L'Oréal",
+        ticker: "OR.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "ready" as const,
+        latest_mk_score: 90,
+        latest_quality_score: 100,
+        latest_safety_score: 100,
+      },
+      {
+        id: "company-3",
+        name: "Danone",
+        ticker: "BN.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "pending" as const,
+      },
+    ];
+    const client = {
+      listCompanies: async () => companies,
+      getDashboard: async () => ({
+        summary: {
+          companies: 3,
+          ready: 2,
+          scored: 2,
+          favorable: 1,
+          watch: 0,
+          caution: 1,
+          unscored: 1,
+        },
+        distribution: [
+          {
+            signal: "favorable" as const,
+            label: "Profils favorables",
+            count: 1,
+          },
+          {
+            signal: "watch" as const,
+            label: "À approfondir",
+            count: 0,
+          },
+          {
+            signal: "caution" as const,
+            label: "Prudence",
+            count: 1,
+          },
+          {
+            signal: "unscored" as const,
+            label: "Non scorées",
+            count: 1,
+          },
+        ],
+        companies: [
+          {
+            company_id: "company-2",
+            name: "L'Oréal",
+            ticker: "OR.PA",
+            exchange: "Euronext Paris",
+            country: "France",
+            status: "ready" as const,
+            fiscal_year: 2025,
+            global_score: 88,
+            signal: "favorable" as const,
+            signal_label: "Profil favorable",
+            market_gap: 0.19,
+            weakest_component: {
+              key: "moat",
+              label: "MK Moat Score",
+              score: 75,
+            },
+            updated_at: "2026-07-26T00:00:00Z",
+          },
+          {
+            company_id: "company-1",
+            name: "Air Liquide",
+            ticker: "AI.PA",
+            exchange: "Euronext Paris",
+            country: "France",
+            status: "ready" as const,
+            fiscal_year: 2025,
+            global_score: 48,
+            signal: "caution" as const,
+            signal_label: "Prudence",
+            market_gap: -0.11,
+            weakest_component: {
+              key: "value",
+              label: "MK Value Score",
+              score: 28,
+            },
+            updated_at: "2026-07-26T00:00:00Z",
+          },
+          {
+            company_id: "company-3",
+            name: "Danone",
+            ticker: "BN.PA",
+            exchange: "Euronext Paris",
+            country: "France",
+            status: "pending" as const,
+            fiscal_year: null,
+            global_score: null,
+            signal: "unscored" as const,
+            signal_label: "À scorer",
+            market_gap: null,
+            weakest_component: null,
+            updated_at: null,
+          },
+        ],
+      }),
+      createCompany: async (
+        payload: Parameters<CompanyClient["createCompany"]>[0],
+      ) => ({
+        id: "company-4",
+        status: "pending" as const,
+        ...payload,
+      }),
+      importFinancials: async () => {
+        throw new Error("Import manuel non utilisé.");
+      },
+      importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: async (companyId: string) => ({
+        company_id: companyId,
+        snapshots: [
+          {
+            id: "analysis-1",
+            company_id: companyId,
+            fiscal_year: 2025,
+            source: "Rapport annuel 2025",
+            currency: "EUR",
+            revenue: 1_000,
+            ebitda: 300,
+            depreciation_amortization: 40,
+            ebit: 250,
+            interest_expense: 20,
+            operating_cash_flow: 180,
+            capex: 80,
+            net_income: 160,
+            market_cap: 2_200,
+            total_assets: 2_000,
+            current_assets: 500,
+            current_liabilities: 250,
+            financial_debt: 400,
+            cash: 100,
+            total_equity: 800,
+            metrics: [],
+            indicators: [],
+            mk_score: 80,
+            quality_score: 50,
+            safety_score: 75,
+            created_at: "2026-07-26T00:00:00Z",
+          },
+        ],
+        trend: {
+          periods: 1,
+          first_year: 2025,
+          last_year: 2025,
+          revenue_cagr: null,
+          net_income_cagr: null,
+          free_cash_flow_cagr: null,
+        },
+      }),
+      listValuations: unusedValuations,
+      createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
+    };
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Tableau de décision" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("profils favorables : 1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Distribution des signaux" }),
+    ).toBeInTheDocument();
+
+    const portfolio = screen.getByRole("region", {
+      name: "Portefeuille de recherche",
+    });
+    expect(within(portfolio).getByText("88")).toBeInTheDocument();
+    expect(within(portfolio).getByText("48")).toBeInTheDocument();
+    expect(within(portfolio).getByText("MK Value Score")).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", {
+        name: "Filtrer le portefeuille de recherche",
+      }),
+      "caution",
+    );
+    expect(within(portfolio).queryByText("L'Oréal")).not.toBeInTheDocument();
+    expect(within(portfolio).getByText("Air Liquide")).toBeInTheDocument();
+
+    await user.click(
+      within(portfolio).getByRole("button", {
+        name: "Ouvrir l’analyse de Air Liquide",
+      }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Analyse financière" }),
+    ).toBeInTheDocument();
+  });
+
+  it("filters the investment universe by company name or ticker", async () => {
+    const user = userEvent.setup();
+    const client: CompanyClient = {
+      listCompanies: async () => [
+        {
+          id: "company-1",
+          name: "Air Liquide",
+          ticker: "AI.PA",
+          exchange: "Euronext Paris",
+          country: "France",
+          currency: "EUR",
+          status: "ready",
+        },
+        {
+          id: "company-2",
+          name: "Danone",
+          ticker: "BN.PA",
+          exchange: "Euronext Paris",
+          country: "France",
+          currency: "EUR",
+          status: "pending",
+        },
+      ],
+      createCompany: async (payload) => ({
+        id: "company-3",
+        status: "pending",
+        ...payload,
+      }),
+      importFinancials: async () => {
+        throw new Error("Import manuel non utilisé.");
+      },
+      importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: unusedFinancialHistory,
+      listValuations: unusedValuations,
+      createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
+    };
+    render(<App client={client} />);
+    const universe = await screen.findByRole("region", {
+      name: "Univers d’investissement",
+    });
+
+    await user.type(
+      within(universe).getByPlaceholderText(
+        "Rechercher une entreprise ou un ticker",
+      ),
+      "AI.PA",
+    );
+
+    expect(within(universe).getByText("Air Liquide")).toBeInTheDocument();
+    expect(within(universe).queryByText("Danone")).not.toBeInTheDocument();
   });
 });

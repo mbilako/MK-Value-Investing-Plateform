@@ -1,16 +1,18 @@
 interface SummaryStripProps {
   companies: number;
   analyses: number;
+  favorable: number;
 }
 
 export function SummaryStrip({
   companies,
   analyses,
+  favorable,
 }: SummaryStripProps) {
   const metrics = [
     { value: companies, label: "entreprises" },
     { value: analyses, label: "analyses" },
-    { value: 0, label: "alertes" },
+    { value: favorable, label: "profils favorables" },
   ];
 
   return (

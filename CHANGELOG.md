@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0 - 2026-07-26
+
+### Added
+
+- Tableau de décision agrégeant le dernier scoring de chaque entreprise.
+- Distribution des signaux « Profil favorable », « À approfondir »,
+  « Prudence » et « À scorer ».
+- Portefeuille de recherche trié par score global, avec écart de valeur et
+  composante la plus faible.
+- Filtre par signal et ouverture directe de l’analyse détaillée.
+- Recherche de l’univers d’investissement par nom ou ticker.
+- Route API `GET /api/v1/dashboard` et contrat typé associé.
+
+### Changed
+
+- Le résumé affiche les profils favorables à la place d’une alerte fictive.
+- Le tableau est explicitement présenté comme un univers de recherche, sans
+  inventer de positions, quantités, prix de revient ou performances.
+
 ## 0.6.0 - 2026-07-26
 
 ### Added
