@@ -15,6 +15,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - scoring global qualité, sécurité, valeur et moat quantitatif ;
 - tableau de décision, distribution des signaux et portefeuille de recherche ;
 - recherche des entreprises par nom ou ticker ;
+- Analyste IA sourcé pour synthétiser, comparer et interroger les dossiers ;
 - premiers critères Graham/Buffett issus du classeur métier ;
 - tests automatisés, Docker et CI GitHub.
 
@@ -44,6 +45,8 @@ Le parcours applicatif se déroule en deux temps :
 5. calculer le scoring global et lire les quatre contributions et explications.
 6. revenir au tableau de décision pour comparer les derniers scorings, filtrer
    les signaux et rouvrir un dossier prioritaire.
+7. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
+   entreprises ou poser une question sur les analyses MK-VIP disponibles.
 
 Les montants du formulaire sont exprimés en millions dans la devise de
 l’entreprise. La source doit identifier le rapport annuel ou le dépôt
@@ -107,6 +110,7 @@ GET  /api/v1/companies/{company_id}/valuations
 POST /api/v1/companies/{company_id}/scores
 GET  /api/v1/companies/{company_id}/scores
 GET  /api/v1/dashboard
+POST /api/v1/ai/analyses
 ```
 
 Les routes d’import valident les données, refusent un second import pour le
@@ -160,6 +164,24 @@ allocation, performance ou prix de revient n’est inventé. Le contrat API et
 les règles de présentation sont détaillés dans
 [`docs/dashboard.md`](docs/dashboard.md).
 
+## Analyste IA
+
+La v0.8 ajoute un assistant de recherche en trois modes : synthèse d’un
+dossier, comparaison de deux entreprises et question en langage naturel.
+L’API envoie au modèle uniquement les derniers snapshots, valorisations et
+scorings déjà calculés par MK-VIP. Chaque constat doit citer un identifiant de
+source interne valide.
+
+Le fournisseur utilise l’API Responses d’OpenAI avec une sortie JSON stricte.
+La clé reste dans `.env.local`, fichier ignoré par Git ; Docker Compose le
+charge automatiquement lorsqu’il existe. Le modèle est configurable avec
+`MKVIP_OPENAI_MODEL`.
+
+L’assistant ne consulte pas le Web, ne remplace pas les calculs traçables et
+ne formule aucune recommandation d’achat, de vente ou d’allocation. Le contrat
+et ses garde-fous sont détaillés dans
+[`docs/ai-analyst.md`](docs/ai-analyst.md).
+
 ## Source publique et limites
 
 Le connecteur s’appuie sur `yfinance`, un projet open source non affilié à
@@ -172,8 +194,8 @@ d’investissement, les chiffres importés doivent être rapprochés du rapport
 annuel audité ou du dépôt réglementaire de l’émetteur. Le formulaire manuel
 reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
-## Prochain incrément
+## Limites actuelles
 
-Le prochain incrément explorera l’assistance IA pour synthétiser les analyses
-et guider la recherche sans remplacer les données sources, les calculs
-traçables ni le jugement de l’investisseur.
+Les analyses IA sont produites à la demande et ne sont pas encore historisées.
+L’authentification, les quotas par utilisateur et la mise en cache restent à
+ajouter avant une exploitation multi-utilisateur.

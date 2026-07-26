@@ -206,9 +206,47 @@ export interface Dashboard {
   companies: DashboardCompany[];
 }
 
+export type AIAnalysisMode = "summary" | "comparison" | "question";
+
+export interface AIAnalysisPayload {
+  mode: AIAnalysisMode;
+  company_id: string;
+  comparison_company_id?: string;
+  question?: string;
+}
+
+export interface AIAnalysisSource {
+  id: string;
+  company_id: string;
+  kind: "financial" | "valuation" | "scoring";
+  label: string;
+  fiscal_year: number;
+  created_at: string;
+}
+
+export interface AIAnalysisEvidence {
+  title: string;
+  finding: string;
+  source_ids: string[];
+}
+
+export interface AIAnalysis {
+  mode: AIAnalysisMode;
+  headline: string;
+  conclusion: string;
+  evidence: AIAnalysisEvidence[];
+  risks: string[];
+  missing_information: string[];
+  sources: AIAnalysisSource[];
+  model: string;
+  generated_at: string;
+  disclaimer: string;
+}
+
 export interface CompanyClient {
   listCompanies(): Promise<Company[]>;
   getDashboard?(): Promise<Dashboard>;
+  analyzeWithAI?(payload: AIAnalysisPayload): Promise<AIAnalysis>;
   createCompany(payload: CompanyPayload): Promise<Company>;
   importFinancials(
     companyId: string,
@@ -252,6 +290,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const apiClient: CompanyClient = {
   listCompanies: () => request<Company[]>("/companies"),
   getDashboard: () => request<Dashboard>("/dashboard"),
+  analyzeWithAI: (payload) =>
+    request<AIAnalysis>("/ai/analyses", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   createCompany: (payload) =>
     request<Company>("/companies", {
       method: "POST",

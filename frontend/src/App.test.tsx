@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { App } from "./App";
 import type {
+  AIAnalysisPayload,
   CompanyClient,
   FinancialPayload,
 } from "./api/client";
@@ -40,7 +41,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Aucune entreprise importée")).toBeInTheDocument();
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.7 Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.8 Analyste IA")).toBeInTheDocument();
   });
 
   it("opens the Air Liquide import form with normalized defaults", async () => {
@@ -1055,6 +1056,137 @@ describe("MK-VIP dashboard", () => {
     expect(
       await screen.findByRole("dialog", { name: "Analyse financière" }),
     ).toBeInTheDocument();
+  });
+
+  it("summarizes, compares and answers from the AI analyst drawer", async () => {
+    const user = userEvent.setup();
+    const requests: AIAnalysisPayload[] = [];
+    const companies = [
+      {
+        id: "company-1",
+        name: "Air Liquide",
+        ticker: "AI.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "ready" as const,
+      },
+      {
+        id: "company-2",
+        name: "L'Oréal",
+        ticker: "OR.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "ready" as const,
+      },
+    ];
+    const client = {
+      listCompanies: async () => companies,
+      createCompany: async (
+        payload: Parameters<CompanyClient["createCompany"]>[0],
+      ) => ({
+        id: "company-3",
+        status: "pending" as const,
+        ...payload,
+      }),
+      importFinancials: async () => {
+        throw new Error("Import manuel non utilisé.");
+      },
+      importFinancialsAutomatically: unusedAutomaticImport,
+      getFinancialHistory: unusedFinancialHistory,
+      listValuations: unusedValuations,
+      createValuation: unusedCreateValuation,
+      listScores: unusedScores,
+      createScore: unusedCreateScore,
+      analyzeWithAI: async (payload: AIAnalysisPayload) => {
+        requests.push(payload);
+        return {
+          mode: payload.mode,
+          headline: "Lecture fondamentale synthétique",
+          conclusion:
+            "La qualité opérationnelle ressort mieux que la valorisation.",
+          evidence: [
+            {
+              title: "Qualité des fondamentaux",
+              finding:
+                "Les données MK-VIP montrent une exploitation rentable.",
+              source_ids: ["financial:analysis-1"],
+            },
+          ],
+          risks: ["La marge de sécurité reste à confirmer."],
+          missing_information: [
+            "La trajectoire pluriannuelle n’est pas encore disponible.",
+          ],
+          sources: [
+            {
+              id: "financial:analysis-1",
+              company_id: payload.company_id,
+              kind: "financial" as const,
+              label: "Air Liquide — analyse financière 2025",
+              fiscal_year: 2025,
+              created_at: "2026-07-26T00:00:00Z",
+            },
+          ],
+          model: "test-analyst",
+          generated_at: "2026-07-26T00:00:00Z",
+          disclaimer:
+            "Analyse informative fondée uniquement sur les données MK-VIP ; elle ne constitue pas un conseil en investissement.",
+        };
+      },
+    };
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Interroger l’IA" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Analyste IA" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Analyser avec l’IA" }),
+    );
+    expect(
+      await screen.findByText(
+        "La qualité opérationnelle ressort mieux que la valorisation.",
+      ),
+    ).toBeInTheDocument();
+    expect(requests[0]).toEqual({
+      mode: "summary",
+      company_id: "company-1",
+    });
+    expect(
+      screen.getByText("Air Liquide — analyse financière 2025"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Comparaison" }));
+    await user.selectOptions(
+      screen.getByLabelText("Entreprise de comparaison"),
+      "company-2",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Analyser avec l’IA" }),
+    );
+    expect(requests[1]).toEqual({
+      mode: "comparison",
+      company_id: "company-1",
+      comparison_company_id: "company-2",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Question" }));
+    await user.type(
+      screen.getByLabelText("Question à analyser"),
+      "Quels sont les principaux risques ?",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Analyser avec l’IA" }),
+    );
+    expect(requests[2]).toEqual({
+      mode: "question",
+      company_id: "company-1",
+      question: "Quels sont les principaux risques ?",
+    });
   });
 
   it("filters the investment universe by company name or ticker", async () => {

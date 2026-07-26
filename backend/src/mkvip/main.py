@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from mkvip import __version__
 from mkvip.api.routes import (
+    ai,
     companies,
     dashboard,
     financials,
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     application.include_router(health.router, prefix="/api/v1")
+    application.include_router(ai.router, prefix="/api/v1")
     application.include_router(companies.router, prefix="/api/v1")
     application.include_router(dashboard.router, prefix="/api/v1")
     application.include_router(financials.router, prefix="/api/v1")

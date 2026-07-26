@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 
 import {
   apiClient,
   type Company,
   type CompanyClient,
   type Dashboard,
+  type AIAnalysisPayload,
   type FinancialAnalysis,
   type FinancialHistory,
   type ScoringAnalysis,
@@ -14,6 +15,7 @@ import {
   type ValuationPayload,
 } from "./api/client";
 import { AnalysisDrawer } from "./components/AnalysisDrawer";
+import { AIAnalystDrawer } from "./components/AIAnalystDrawer";
 import { AnalysisPipeline } from "./components/AnalysisPipeline";
 import { CompanyUniverse } from "./components/CompanyUniverse";
 import { DecisionDashboard } from "./components/DecisionDashboard";
@@ -30,6 +32,7 @@ export function App({ client = apiClient }: AppProps) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [isImportOpen, setImportOpen] = useState(false);
+  const [isAIAnalystOpen, setAIAnalystOpen] = useState(false);
   const [financialCompany, setFinancialCompany] = useState<Company | null>(
     null,
   );
@@ -41,6 +44,9 @@ export function App({ client = apiClient }: AppProps) {
   const [scoringAnalyses, setScoringAnalyses] = useState<ScoringAnalysis[]>([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const aiCompanies = companies.filter(
+    (company) => company.status === "ready",
+  );
 
   const refreshDashboard = async () => {
     if (!client.getDashboard) return;
@@ -139,6 +145,15 @@ export function App({ client = apiClient }: AppProps) {
               <span className="status-dot" aria-hidden="true" />
               Données prêtes
             </span>
+            {client.analyzeWithAI && aiCompanies.length > 0 && (
+              <button
+                className="button button--secondary"
+                onClick={() => setAIAnalystOpen(true)}
+              >
+                <Sparkles aria-hidden="true" size={18} />
+                Interroger l’IA
+              </button>
+            )}
             <button
               className="button button--primary"
               onClick={() => setImportOpen(true)}
@@ -186,6 +201,15 @@ export function App({ client = apiClient }: AppProps) {
             setImportOpen(false);
             void refreshDashboard();
           }}
+        />
+      )}
+      {isAIAnalystOpen && client.analyzeWithAI && (
+        <AIAnalystDrawer
+          companies={aiCompanies}
+          onAnalyze={(payload: AIAnalysisPayload) =>
+            client.analyzeWithAI!(payload)
+          }
+          onClose={() => setAIAnalystOpen(false)}
         />
       )}
       {financialCompany && (

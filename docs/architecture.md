@@ -1,4 +1,4 @@
-# Architecture v0.7 Dashboard
+# Architecture v0.8 Analyste IA
 
 MK-VIP est organisé en monorepo afin de garder le domaine financier, l’API,
 l’interface et l’exploitation versionnés ensemble.
@@ -11,7 +11,7 @@ Le backend suit une architecture en couches :
 - `schemas/` définit les contrats d’entrée et de sortie ;
 - `analysis/` contient les règles financières indépendantes de toute source ;
 - `providers/` expose `FinancialDataProvider`, le connecteur Yahoo et la
-  normalisation des données publiques ;
+  normalisation des données publiques, ainsi que le fournisseur d’analyse IA ;
 - `repositories/` isole la persistance derrière une interface ;
 - `models/` et `db/` implémentent PostgreSQL avec SQLAlchemy ;
 - `core/` centralise la configuration.
@@ -41,6 +41,11 @@ Le dashboard charge en parallèle l’univers des entreprises et une projection
 agrégée dédiée. Cette projection conserve le dernier scoring de chaque
 entreprise, évite de recalculer le domaine dans React et permet d’ouvrir
 directement le tiroir d’analyse à partir du portefeuille de recherche.
+
+Le tiroir « Analyste IA » est une surface distincte de l’analyse financière.
+Il prépare une requête typée en trois modes, puis affiche une réponse
+structurée sans adopter les conventions d’une messagerie ou d’un outil de
+trading.
 
 ## Flux initial
 
@@ -162,3 +167,24 @@ automatique empruntent le même moteur de ratios et la même persistance.
 Les erreurs réseau, les champs manquants et l’absence d’exercice commun sont
 convertis en réponses API explicites. Aucun appel réseau n’est effectué dans
 le moteur d’analyse lui-même.
+
+## Analyste IA
+
+La route `POST /api/v1/ai/analyses` orchestre quatre étapes sans persistance :
+
+1. charger l’entreprise et sa dernière analyse financière ;
+2. joindre, lorsqu’ils existent, la dernière valorisation et le dernier
+   scoring ;
+3. construire des identifiants de sources déterministes et transmettre ce
+   contexte fermé à `AIAnalystProvider` ;
+4. valider la structure de la réponse et rejeter toute citation qui ne figure
+   pas dans le contexte.
+
+`OpenAIAnalystProvider` implémente cette interface avec l’API Responses, un
+effort de raisonnement faible pour ce parcours interactif et un schéma JSON
+strict. Le fournisseur ne reçoit aucun outil de navigation ou d’accès aux
+données. Les tests remplacent cette dépendance par un faux fournisseur et ne
+déclenchent donc jamais d’appel OpenAI.
+
+La clé est lue depuis `OPENAI_API_KEY` et reste dans `.env.local`, ignoré par
+Git. Le modèle par défaut est configurable avec `MKVIP_OPENAI_MODEL`.

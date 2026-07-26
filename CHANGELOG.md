@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.0 - 2026-07-26
+
+### Added
+
+- Analyste IA en trois modes : synthèse, comparaison et question naturelle.
+- Route `POST /api/v1/ai/analyses` avec contrat de sortie structuré.
+- Fournisseur OpenAI interchangeable fondé sur l’API Responses.
+- Citations obligatoires vers les analyses financières, valorisations et
+  scorings MK-VIP transmis au modèle.
+- Tiroir responsive présentant conclusion, constats, risques, informations
+  manquantes, sources et avertissement.
+
+### Security
+
+- Clé OpenAI chargée depuis l’environnement et exclue du dépôt Git.
+- Aucun accès Web ou outil externe accordé au modèle.
+- Rejet des citations absentes du contexte et interdiction explicite des
+  recommandations d’achat, de vente ou d’allocation.
+- Les valeurs du contexte JSON sont traitées comme des données, jamais comme
+  des instructions.
+
 ## 0.7.0 - 2026-07-26
 
 ### Added
