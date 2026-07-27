@@ -35,6 +35,30 @@ incomplets sont ignorés. Les montants sont divisés par un million ; les charge
 d’intérêts, amortissements et investissements sont convertis en valeurs
 absolues avant le calcul des ratios.
 
+## Capacité et délais
+
+Les opérations synchrones de `yfinance` sont exécutées dans un pool dédié,
+limité à huit appels par défaut. Lorsque toutes les places sont occupées, une
+nouvelle opération échoue immédiatement au lieu de rejoindre une file
+d’attente non bornée. Une place n’est libérée qu’à la fin réelle du thread,
+même si la réponse HTTP a déjà dépassé son délai.
+
+Chaque appel Yahoo dispose d’un délai logique de 10 secondes et les quatre
+opérations d’un import partagent un délai global de 30 secondes. Un utilisateur
+ne peut lancer qu’un import automatique à la fois et une entreprise ne peut
+avoir deux imports concurrents. Ces valeurs sont configurables avec :
+
+```dotenv
+MKVIP_YAHOO_MAX_CONCURRENCY=8
+MKVIP_YAHOO_RESPONSE_TIMEOUT_SECONDS=10
+MKVIP_YAHOO_IMPORT_TIMEOUT_SECONDS=30
+MKVIP_YAHOO_IMPORTS_PER_USER=1
+```
+
+L’admission par utilisateur et par entreprise est maintenue en mémoire dans
+chaque instance de l’API. Un déploiement horizontal doit donc compléter cette
+protection avec une limite distribuée partagée entre les instances.
+
 ## Traçabilité et limites
 
 La source persistée prend la forme

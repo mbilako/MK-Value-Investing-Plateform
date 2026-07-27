@@ -1,3 +1,6 @@
+import hashlib
+import json
+import uuid
 from collections.abc import Iterator
 from typing import Any
 
@@ -5,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mkvip.main import app
+from mkvip.services.ai_usage import AIQuotaExceededError
 
 
 class FakeAIAnalystProvider:
@@ -35,6 +39,53 @@ class FakeAIAnalystProvider:
                 "La trajectoire pluriannuelle n’est pas encore disponible."
             ],
         }
+
+
+class FakeAIUsageService:
+    def __init__(self, daily_limit: int = 20) -> None:
+        self.daily_limit = daily_limit
+        self.calls: dict[str, int] = {}
+        self.cache: dict[tuple[str, str], dict[str, object]] = {}
+
+    def cache_key(self, payload: dict[str, object]) -> str:
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            default=str,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    async def get_cached(
+        self,
+        user_id: uuid.UUID,
+        cache_key: str,
+    ) -> dict[str, object] | None:
+        return self.cache.get((str(user_id), cache_key))
+
+    async def consume_quota(self, user_id: uuid.UUID) -> None:
+        key = str(user_id)
+        count = self.calls.get(key, 0)
+        if count >= self.daily_limit:
+            raise AIQuotaExceededError
+        self.calls[key] = count + 1
+
+    async def put_cached(
+        self,
+        user_id: uuid.UUID,
+        cache_key: str,
+        response: dict[str, object],
+    ) -> None:
+        self.cache[(str(user_id), cache_key)] = response
+
+
+@pytest.fixture(autouse=True)
+def ai_usage_service() -> Iterator[FakeAIUsageService]:
+    service = FakeAIUsageService()
+    app.state.ai_usage_service = service
+    yield service
+    del app.state.ai_usage_service
 
 
 @pytest.fixture(autouse=True)
@@ -298,3 +349,84 @@ def test_rejects_a_malformed_provider_response(client: TestClient) -> None:
     assert response.json()["detail"] == (
         "Le fournisseur IA a renvoyé une analyse invalide."
     )
+
+
+def test_reuses_a_cached_analysis_without_calling_the_provider_again(
+    client: TestClient,
+    ai_usage_service: FakeAIUsageService,
+) -> None:
+    company_id = create_company(client, "Air Liquide", "AI.PA")
+    prepare_company(client, company_id, "Rapport annuel 2025")
+
+    first = client.post(
+        "/api/v1/ai/analyses",
+        json={"mode": "summary", "company_id": company_id},
+    )
+    second = client.post(
+        "/api/v1/ai/analyses",
+        json={"mode": "summary", "company_id": company_id},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json() == first.json()
+    assert sum(ai_usage_service.calls.values()) == 1
+    assert len(client.app.state.ai_analyst_provider.requests) == 1
+
+
+def test_rejects_ai_requests_after_the_daily_quota_is_exhausted(
+    client: TestClient,
+    ai_usage_service: FakeAIUsageService,
+) -> None:
+    ai_usage_service.daily_limit = 1
+    company_id = create_company(client, "Air Liquide", "AI.PA")
+    prepare_company(client, company_id, "Rapport annuel 2025")
+
+    first = client.post(
+        "/api/v1/ai/analyses",
+        json={"mode": "summary", "company_id": company_id},
+    )
+    second = client.post(
+        "/api/v1/ai/analyses",
+        json={
+            "mode": "question",
+            "company_id": company_id,
+            "question": "Quels sont les principaux risques ?",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.headers["retry-after"] == "86400"
+    assert second.json()["detail"] == (
+        "Le quota quotidien de l’Analyste IA est épuisé."
+    )
+    assert len(client.app.state.ai_analyst_provider.requests) == 1
+
+
+def test_does_not_reuse_cache_when_the_question_changes(
+    client: TestClient,
+) -> None:
+    company_id = create_company(client, "Air Liquide", "AI.PA")
+    prepare_company(client, company_id, "Rapport annuel 2025")
+
+    first = client.post(
+        "/api/v1/ai/analyses",
+        json={
+            "mode": "question",
+            "company_id": company_id,
+            "question": "Quels sont les principaux risques ?",
+        },
+    )
+    second = client.post(
+        "/api/v1/ai/analyses",
+        json={
+            "mode": "question",
+            "company_id": company_id,
+            "question": "Quels sont les risques financiers ?",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert len(client.app.state.ai_analyst_provider.requests) == 2

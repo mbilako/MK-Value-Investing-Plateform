@@ -53,5 +53,8 @@ dans l’intégration continue.
 
 La vérification d’adresse email, la réinitialisation du mot de passe,
 l’authentification multifacteur et la limitation de débit au niveau de
-l’infrastructure ne font pas partie de v0.9. Les quotas par utilisateur et la
-mise en cache restent également des travaux futurs.
+l’infrastructure ne font pas partie de v0.9. Depuis la version 0.9.1,
+l’Analyste IA dispose toutefois d’un quota quotidien et d’un cache persistant
+isolés par utilisateur. Les imports Yahoo disposent également d’une admission
+locale par utilisateur et par entreprise ; une limite partagée entre plusieurs
+instances reste à fournir par l’infrastructure.

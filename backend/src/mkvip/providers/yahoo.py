@@ -1,10 +1,14 @@
 import asyncio
+import functools
 import math
+import threading
 from collections.abc import Callable, Mapping
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from typing import Any
 
 from mkvip.providers.base import (
     ProviderBalanceSheet,
+    ProviderBusyError,
     ProviderCashFlow,
     ProviderCompanyProfile,
     ProviderCompanySearchResult,
@@ -12,10 +16,69 @@ from mkvip.providers.base import (
     ProviderDataIncompleteError,
     ProviderIncomeStatement,
     ProviderPricePoint,
+    ProviderTimeoutError,
 )
 
 TickerFactory = Callable[[str], Any]
 SearchFactory = Callable[[str], Any]
+
+
+class YahooExecutionGuard:
+    def __init__(
+        self,
+        *,
+        max_concurrency: int,
+        response_timeout_seconds: float,
+        executor: Executor | None = None,
+    ) -> None:
+        self._slots = threading.BoundedSemaphore(max_concurrency)
+        self._response_timeout_seconds = response_timeout_seconds
+        self._executor = executor or ThreadPoolExecutor(
+            max_workers=max_concurrency,
+            thread_name_prefix="mkvip-yahoo",
+        )
+
+    async def run(
+        self,
+        ticker: str,
+        operation: Callable[..., Any],
+        *args: object,
+        **kwargs: object,
+    ) -> Any:
+        if not self._slots.acquire(blocking=False):
+            raise ProviderBusyError(
+                "Yahoo Finance est occupé. Réessayez dans quelques instants."
+            )
+
+        try:
+            future = self._executor.submit(
+                functools.partial(operation, *args, **kwargs),
+            )
+        except BaseException:
+            self._slots.release()
+            raise
+
+        def release_slot(completed: Future[Any]) -> None:
+            self._slots.release()
+            if not completed.cancelled():
+                completed.exception()
+
+        future.add_done_callback(release_slot)
+        try:
+            return await asyncio.wait_for(
+                asyncio.shield(asyncio.wrap_future(future)),
+                timeout=self._response_timeout_seconds,
+            )
+        except TimeoutError as error:
+            raise ProviderTimeoutError(
+                f"Yahoo Finance a dépassé le délai pour {ticker.upper()}."
+            ) from error
+
+
+_YAHOO_EXECUTION_GUARD = YahooExecutionGuard(
+    max_concurrency=8,
+    response_timeout_seconds=10,
+)
 
 
 def _year(value: object) -> int:
@@ -73,13 +136,19 @@ def _fetch_price_history(ticker: Any) -> Mapping[object, Mapping[str, Any]]:
 
 
 async def _run_yahoo(
+    execution_guard: YahooExecutionGuard,
     ticker: str,
     operation: Callable[..., Any],
     *args: object,
     **kwargs: object,
 ) -> Any:
     try:
-        return await asyncio.to_thread(operation, *args, **kwargs)
+        return await execution_guard.run(
+            ticker,
+            operation,
+            *args,
+            **kwargs,
+        )
     except ProviderDataError:
         raise
     except Exception as error:
@@ -95,9 +164,11 @@ class YahooFinanceProvider:
         self,
         ticker_factory: TickerFactory | None = None,
         search_factory: SearchFactory | None = None,
+        execution_guard: YahooExecutionGuard | None = None,
     ) -> None:
         self._ticker_factory = ticker_factory
         self._search_factory = search_factory
+        self._execution_guard = execution_guard or _YAHOO_EXECUTION_GUARD
         self._tickers: dict[str, Any] = {}
 
     def _ticker(self, ticker: str) -> Any:
@@ -120,7 +191,12 @@ class YahooFinanceProvider:
             import yfinance
 
             self._search_factory = yfinance.Search
-        search = await _run_yahoo(query, self._search_factory, query)
+        search = await _run_yahoo(
+            self._execution_guard,
+            query,
+            self._search_factory,
+            query,
+        )
         results: list[ProviderCompanySearchResult] = []
         for quote in search.quotes:
             if quote.get("quoteType") != "EQUITY" or not quote.get("symbol"):
@@ -146,6 +222,7 @@ class YahooFinanceProvider:
     async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
         normalized_ticker = ticker.upper()
         info, fast_info = await _run_yahoo(
+            self._execution_guard,
             normalized_ticker,
             _fetch_profile,
             self._ticker(normalized_ticker),
@@ -187,6 +264,7 @@ class YahooFinanceProvider:
         ticker: str,
     ) -> list[ProviderIncomeStatement]:
         records = await _run_yahoo(
+            self._execution_guard,
             ticker,
             self._ticker(ticker).get_income_stmt,
             as_dict=True,
@@ -241,6 +319,7 @@ class YahooFinanceProvider:
         ticker: str,
     ) -> list[ProviderBalanceSheet]:
         records = await _run_yahoo(
+            self._execution_guard,
             ticker,
             self._ticker(ticker).get_balance_sheet,
             as_dict=True,
@@ -292,6 +371,7 @@ class YahooFinanceProvider:
         ticker: str,
     ) -> list[ProviderCashFlow]:
         records = await _run_yahoo(
+            self._execution_guard,
             ticker,
             self._ticker(ticker).get_cash_flow,
             as_dict=True,
@@ -321,6 +401,7 @@ class YahooFinanceProvider:
         ticker: str,
     ) -> list[ProviderPricePoint]:
         records = await _run_yahoo(
+            self._execution_guard,
             ticker,
             _fetch_price_history,
             self._ticker(ticker),

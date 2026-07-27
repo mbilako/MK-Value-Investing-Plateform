@@ -1,7 +1,36 @@
+import asyncio
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 
+from mkvip.api.dependencies import get_financial_data_provider
+from mkvip.core.config import Settings, get_settings
 from mkvip.main import app
+from mkvip.providers.base import ProviderBusyError, ProviderDataError
+from mkvip.services.yahoo_imports import YahooImportAdmission
+
+TEST_USER_ID = uuid.UUID("10000000-0000-0000-0000-000000000001")
+
+
+class UnavailableProvider:
+    name = "Unavailable Test Provider"
+
+    def __init__(self, error: ProviderDataError) -> None:
+        self.error = error
+        self.called = False
+
+    async def get_profile(self, _ticker: str) -> None:
+        self.called = True
+        raise self.error
+
+
+class SlowProvider:
+    name = "Slow Test Provider"
+
+    async def get_profile(self, _ticker: str) -> None:
+        await asyncio.sleep(0.2)
+        raise ProviderDataError("La source lente a échoué.")
 
 
 @pytest.fixture
@@ -220,6 +249,94 @@ def test_automatic_import_creates_latest_available_analysis(
     assert response.json()["company_id"] == company_id
     assert response.json()["source"] == "Public Test Data · AI.PA · exercice 2025"
     assert response.json()["mk_score"] == 100.0
+
+
+def test_automatic_import_rejects_a_company_already_in_flight(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    admission = YahooImportAdmission(per_user_limit=2)
+    provider = UnavailableProvider(ProviderDataError("must not run"))
+    app.state.yahoo_import_admission = admission
+    app.dependency_overrides[get_financial_data_provider] = lambda: provider
+    try:
+        with admission.admit(TEST_USER_ID, uuid.UUID(company_id)):
+            response = client.post(
+                f"/api/v1/companies/{company_id}/financials/automatic",
+            )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+        del app.state.yahoo_import_admission
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Un import automatique est déjà en cours pour cette entreprise."
+    )
+    assert provider.called is False
+
+
+def test_automatic_import_limits_concurrent_work_per_user(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    admission = YahooImportAdmission(per_user_limit=1)
+    provider = UnavailableProvider(ProviderDataError("must not run"))
+    app.state.yahoo_import_admission = admission
+    app.dependency_overrides[get_financial_data_provider] = lambda: provider
+    try:
+        with admission.admit(TEST_USER_ID, uuid.uuid4()):
+            response = client.post(
+                f"/api/v1/companies/{company_id}/financials/automatic",
+            )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+        del app.state.yahoo_import_admission
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "1"
+    assert provider.called is False
+
+
+def test_automatic_import_reports_exhausted_yahoo_capacity(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    provider = UnavailableProvider(
+        ProviderBusyError("Yahoo Finance est occupé.")
+    )
+    app.dependency_overrides[get_financial_data_provider] = lambda: provider
+    try:
+        response = client.post(
+            f"/api/v1/companies/{company_id}/financials/automatic",
+        )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "1"
+
+
+def test_automatic_import_has_one_end_to_end_deadline(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    app.dependency_overrides[get_financial_data_provider] = SlowProvider
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        yahoo_import_timeout_seconds=0.05,
+    )
+    try:
+        response = client.post(
+            f"/api/v1/companies/{company_id}/financials/automatic",
+        )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == (
+        "L’import Yahoo Finance a dépassé le délai autorisé."
+    )
 
 
 def test_financial_history_returns_snapshots_and_growth(

@@ -10,10 +10,16 @@ from mkvip.core.config import Settings
         "session_duration_days",
         "login_max_attempts",
         "login_lock_minutes",
+        "ai_daily_quota",
+        "ai_cache_ttl_seconds",
+        "yahoo_max_concurrency",
+        "yahoo_response_timeout_seconds",
+        "yahoo_import_timeout_seconds",
+        "yahoo_imports_per_user",
     ],
 )
 @pytest.mark.parametrize("invalid_value", [0, -1])
-def test_security_duration_and_attempt_settings_require_positive_integers(
+def test_security_limits_and_timeouts_require_positive_values(
     field: str,
     invalid_value: int,
 ) -> None:

@@ -8,7 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import ValidationError
 
 from mkvip.api.dependencies import (
+    CurrentUser,
     get_ai_analyst_provider,
+    get_ai_usage_service,
     get_company_repository,
 )
 from mkvip.providers.ai import AIAnalystProvider, AIProviderError
@@ -21,10 +23,12 @@ from mkvip.schemas.ai import (
     AICompanyContext,
     AISourceRead,
 )
+from mkvip.services.ai_usage import AIQuotaExceededError, AIUsageService
 
 router = APIRouter(prefix="/ai/analyses", tags=["ai"])
 Repository = Annotated[CompanyRepository, Depends(get_company_repository)]
 Provider = Annotated[AIAnalystProvider, Depends(get_ai_analyst_provider)]
+Usage = Annotated[AIUsageService, Depends(get_ai_usage_service)]
 
 DISCLAIMER = (
     "Analyse informative fondée uniquement sur les données MK-VIP ; "
@@ -105,6 +109,8 @@ async def create_ai_analysis(
     payload: AIAnalysisCreate,
     repository: Repository,
     provider: Provider,
+    current_user: CurrentUser,
+    usage: Usage,
 ) -> AIAnalysisRead:
     primary, sources = await build_company_context(
         repository,
@@ -125,6 +131,51 @@ async def create_ai_analysis(
         comparison=comparison,
         sources=sources,
     )
+    cache_key = usage.cache_key(
+        {
+            "mode": payload.mode,
+            "question": payload.question,
+            "primary": {
+                "company_id": str(primary.company.id),
+                "sources": [
+                    {
+                        "id": source.id,
+                        "created_at": source.created_at.isoformat(),
+                    }
+                    for source in sources
+                    if source.company_id == primary.company.id
+                ],
+            },
+            "comparison": (
+                {
+                    "company_id": str(comparison.company.id),
+                    "sources": [
+                        {
+                            "id": source.id,
+                            "created_at": source.created_at.isoformat(),
+                        }
+                        for source in sources
+                        if source.company_id == comparison.company.id
+                    ],
+                }
+                if comparison is not None
+                else None
+            ),
+        }
+    )
+    cached = await usage.get_cached(current_user.id, cache_key)
+    if cached is not None:
+        return AIAnalysisRead.model_validate(cached)
+
+    try:
+        await usage.consume_quota(current_user.id)
+    except AIQuotaExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Le quota quotidien de l’Analyste IA est épuisé.",
+            headers={"Retry-After": "86400"},
+        ) from exc
+
     try:
         draft = AIAnalysisDraft.model_validate(
             await provider.analyze(request)
@@ -155,7 +206,7 @@ async def create_ai_analysis(
             ),
         )
 
-    return AIAnalysisRead(
+    result = AIAnalysisRead(
         **draft.model_dump(),
         mode=payload.mode,
         sources=sources,
@@ -163,3 +214,9 @@ async def create_ai_analysis(
         generated_at=datetime.now(UTC),
         disclaimer=DISCLAIMER,
     )
+    await usage.put_cached(
+        current_user.id,
+        cache_key,
+        result.model_dump(mode="json"),
+    )
+    return result

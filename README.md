@@ -17,6 +17,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - tableau de décision, distribution des signaux et portefeuille de recherche ;
 - recherche des entreprises par nom ou ticker ;
 - Analyste IA sourcé pour synthétiser, comparer et interroger les dossiers ;
+- quota quotidien et cache persistant de l’Analyste IA par utilisateur ;
 - premiers critères Graham/Buffett issus du classeur métier ;
 - tests automatisés, Docker et CI GitHub.
 
@@ -215,7 +216,8 @@ reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
 ## Limites actuelles
 
-Les analyses IA sont produites à la demande et ne sont pas encore historisées.
-Les quotas par utilisateur, la mise en cache, la vérification d’adresse email
-et la réinitialisation du mot de passe restent à ajouter avant une exploitation
-multi-utilisateur à grande échelle.
+Les analyses IA sont produites à la demande et ne sont pas historisées comme
+des dossiers permanents. Les réponses identiques sont toutefois conservées
+temporairement dans un cache isolé par utilisateur. La vérification d’adresse
+email et la réinitialisation du mot de passe restent à ajouter avant une
+exploitation multi-utilisateur à grande échelle.

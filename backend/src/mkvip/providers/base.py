@@ -10,6 +10,14 @@ class ProviderDataIncompleteError(ProviderDataError):
     """Raised when no complete annual snapshot can be assembled."""
 
 
+class ProviderBusyError(ProviderDataError):
+    """Raised before public-data work when provider capacity is exhausted."""
+
+
+class ProviderTimeoutError(ProviderDataError):
+    """Raised when a public-data operation exceeds its response deadline."""
+
+
 @dataclass(frozen=True)
 class ProviderCompanySearchResult:
     ticker: str

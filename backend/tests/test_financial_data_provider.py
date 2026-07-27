@@ -1,3 +1,6 @@
+import asyncio
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import pytest
@@ -437,3 +440,81 @@ async def test_yahoo_provider_skips_incomplete_historical_periods() -> None:
     cash_flows = await provider.get_cash_flow("AI.PA")
 
     assert [cash_flow.fiscal_year for cash_flow in cash_flows] == [2025]
+
+
+@pytest.mark.asyncio
+async def test_yahoo_guard_rejects_excess_work_before_it_reaches_the_executor() -> None:
+    try:
+        from mkvip.providers.yahoo import YahooExecutionGuard
+    except ImportError:
+        pytest.fail("Yahoo execution admission is not implemented.")
+    from mkvip.providers.base import ProviderBusyError
+
+    started = threading.Event()
+    release = threading.Event()
+    calls = 0
+
+    def blocking_operation() -> str:
+        nonlocal calls
+        calls += 1
+        started.set()
+        release.wait(timeout=1)
+        return "completed"
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        guard = YahooExecutionGuard(
+            max_concurrency=1,
+            response_timeout_seconds=1,
+            executor=executor,
+        )
+        first = asyncio.create_task(guard.run("AI.PA", blocking_operation))
+        assert await asyncio.to_thread(started.wait, 1)
+
+        with pytest.raises(ProviderBusyError, match="occupé"):
+            await guard.run("OR.PA", lambda: "must not run")
+
+        release.set()
+        assert await first == "completed"
+
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_yahoo_guard_keeps_capacity_until_a_timed_out_thread_finishes() -> None:
+    try:
+        from mkvip.providers.yahoo import YahooExecutionGuard
+    except ImportError:
+        pytest.fail("Yahoo execution admission is not implemented.")
+    from mkvip.providers.base import ProviderBusyError, ProviderTimeoutError
+
+    started = threading.Event()
+    release = threading.Event()
+    second_called = False
+
+    def slow_operation() -> str:
+        started.set()
+        release.wait(timeout=1)
+        return "late result"
+
+    def second_operation() -> str:
+        nonlocal second_called
+        second_called = True
+        return "must not run"
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        guard = YahooExecutionGuard(
+            max_concurrency=1,
+            response_timeout_seconds=0.1,
+            executor=executor,
+        )
+        with pytest.raises(ProviderTimeoutError, match="délai"):
+            await guard.run("AI.PA", slow_operation)
+        assert started.is_set()
+
+        with pytest.raises(ProviderBusyError, match="occupé"):
+            await guard.run("OR.PA", second_operation)
+        assert second_called is False
+
+        release.set()
+        await asyncio.sleep(0.05)
+        assert await guard.run("OR.PA", lambda: "available") == "available"

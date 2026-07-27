@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, PositiveInt, SecretStr
+from pydantic import Field, PositiveFloat, PositiveInt, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     session_duration_days: PositiveInt = 30
     login_max_attempts: PositiveInt = 5
     login_lock_minutes: PositiveInt = 15
+    ai_daily_quota: PositiveInt = 20
+    ai_cache_ttl_seconds: PositiveInt = 3600
+    yahoo_max_concurrency: PositiveInt = 8
+    yahoo_response_timeout_seconds: PositiveFloat = 10
+    yahoo_import_timeout_seconds: PositiveFloat = 30
+    yahoo_imports_per_user: PositiveInt = 1
 
     model_config = SettingsConfigDict(
         env_file=("../.env.local", ".env.local", ".env"),

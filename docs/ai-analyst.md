@@ -1,4 +1,4 @@
-# Analyste IA v0.8
+# Analyste IA v0.9.1
 
 ## Objectif
 
@@ -64,6 +64,8 @@ La clé locale est stockée dans `.env.local`, exclu du dépôt :
 ```dotenv
 OPENAI_API_KEY=<secret local>
 MKVIP_OPENAI_MODEL=gpt-5.6-sol
+MKVIP_AI_DAILY_QUOTA=20
+MKVIP_AI_CACHE_TTL_SECONDS=3600
 ```
 
 Le fournisseur suit les recommandations officielles relatives à
@@ -73,10 +75,24 @@ et aux
 Le modèle par défaut peut être changé par configuration sans modifier le
 contrat MK-VIP.
 
+## Quota et cache
+
+Chaque utilisateur dispose par défaut de 20 nouvelles analyses IA par jour.
+La limite est enregistrée dans PostgreSQL et incrémentée atomiquement afin de
+rester fiable lorsque plusieurs requêtes arrivent en même temps. Une limite
+atteinte produit une réponse `429` accompagnée de `Retry-After: 86400`.
+
+Avant de consommer le quota, l’API recherche une réponse identique dans un
+cache personnel. La clé prend en compte le mode, la question, les entreprises,
+les identifiants des analyses MK-VIP et leurs horodatages. Une évolution du
+dossier ou de la question produit donc une nouvelle analyse. La durée de vie
+du cache est de 3 600 secondes par défaut.
+
 ## Limites
 
-La v0.8 produit les analyses à la demande sans les persister. Elle ne gère pas
-encore l’authentification, les quotas par utilisateur, la mise en cache ou la
-reprise d’une analyse précédente. Les sources présentées restent des objets
-MK-VIP ; l’utilisateur doit toujours rapprocher les données de la publication
-réglementaire originale.
+Les réponses mises en cache sont temporaires et ne constituent pas un
+historique consultable. La vérification d’adresse email, la réinitialisation du
+mot de passe et la reprise explicite d’une analyse précédente restent hors
+périmètre. Les sources présentées restent des objets MK-VIP ; l’utilisateur
+doit toujours rapprocher les données de la publication réglementaire
+originale.

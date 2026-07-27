@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.1 - 2026-07-27
+
+### Added
+
+- Quota quotidien configurable pour les analyses IA, isolé par utilisateur.
+- Cache persistant des réponses IA, isolé par utilisateur et invalidé lorsque
+  le contexte MK-VIP ou la question change.
+- Migration PostgreSQL dédiée aux compteurs de quota et au cache IA.
+
+### Security
+
+- Incrément atomique du quota afin que les requêtes concurrentes ne puissent
+  pas dépasser la limite quotidienne.
+- Réponse `429` avec en-tête `Retry-After` lorsque le quota est épuisé.
+- Les réponses servies depuis le cache ne consomment pas de quota
+  supplémentaire.
+- Les appels Yahoo synchrones utilisent une capacité dédiée et bornée ; les
+  requêtes excédentaires sont refusées avant d’atteindre l’exécuteur.
+- Un délai de réponse par appel et un délai global par import empêchent une
+  transaction distante de monopoliser indéfiniment une requête.
+- Un utilisateur ne peut lancer qu’un import automatique à la fois et une
+  entreprise ne peut avoir deux imports concurrents.
+
 ## 0.9.0 - 2026-07-26
 
 ### Added
