@@ -19,11 +19,12 @@ interface AppProps {
 type AuthStatus = "checking" | "unauthenticated" | "authenticated";
 
 export function App({ client = apiClient }: AppProps) {
-  const [authLink] = useState(() =>
+  const [authLink, setAuthLink] = useState(() =>
     readAndClearAuthLink(window.location, window.history),
   );
+  const [shouldRestoreSession] = useState(() => authLink === null);
   const [status, setStatus] = useState<AuthStatus>(
-    authLink ? "unauthenticated" : "checking",
+    shouldRestoreSession ? "checking" : "unauthenticated",
   );
   const [user, setUser] = useState<User | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -43,7 +44,7 @@ export function App({ client = apiClient }: AppProps) {
       setStatus("unauthenticated");
     });
 
-    if (authLink) {
+    if (!shouldRestoreSession) {
       setStatus("unauthenticated");
       return unsubscribe;
     }
@@ -68,7 +69,7 @@ export function App({ client = apiClient }: AppProps) {
       active = false;
       unsubscribe();
     };
-  }, [authLink, client]);
+  }, [client, shouldRestoreSession]);
 
   const authenticate = async (
     action: (credentials: AuthCredentials) => Promise<User>,
@@ -104,6 +105,7 @@ export function App({ client = apiClient }: AppProps) {
     <AuthScreen
       notice={notice}
       authLink={authLink}
+      onAuthLinkHandled={() => setAuthLink(null)}
       onLogin={(credentials) =>
         authenticate(client.login.bind(client), credentials)
       }

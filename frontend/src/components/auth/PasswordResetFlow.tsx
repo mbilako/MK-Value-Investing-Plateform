@@ -13,9 +13,14 @@ type PasswordResetFlowProps =
   | {
       kind: "confirm";
       token: string;
-      status: "form" | "success";
+      status: "form";
       onConfirm(token: string, password: string): Promise<void>;
       onSuccess(): void;
+      onBackToLogin(): void;
+    }
+  | {
+      kind: "confirm";
+      status: "success";
       onBackToLogin(): void;
     };
 
@@ -68,7 +73,7 @@ export function PasswordResetFlow(props: PasswordResetFlowProps) {
 
   const confirmReset = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (props.kind !== "confirm") return;
+    if (props.kind !== "confirm" || props.status !== "form") return;
 
     setError(null);
     if (password !== confirmation) {

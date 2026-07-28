@@ -12,13 +12,16 @@ import { VerificationFlow } from "./auth/VerificationFlow";
 type AuthView =
   | { kind: "credentials"; mode: "login" | "register" }
   | { kind: "verification-pending"; email: string; message: string }
-  | { kind: "verification-result"; status: "busy" | "success" | "error" }
+  | { kind: "verification-result"; status: "busy"; token: string }
+  | { kind: "verification-result"; status: "success" | "error" }
   | { kind: "reset-request"; message: string | null }
-  | { kind: "reset-confirm"; token: string; status: "form" | "success" };
+  | { kind: "reset-confirm"; token: string; status: "form" }
+  | { kind: "reset-confirm"; status: "success" };
 
 export interface AuthScreenProps {
   authLink: AuthLink | null;
   notice?: string | null;
+  onAuthLinkHandled(): void;
   onLogin(credentials: AuthCredentials): Promise<void>;
   onRegister(credentials: AuthCredentials): Promise<AuthMessage>;
   onVerifyEmail(token: string): Promise<void>;
@@ -29,7 +32,11 @@ export interface AuthScreenProps {
 
 function initialAuthView(authLink: AuthLink | null): AuthView {
   if (authLink?.kind === "verify") {
-    return { kind: "verification-result", status: "busy" };
+    return {
+      kind: "verification-result",
+      status: "busy",
+      token: authLink.token,
+    };
   }
   if (authLink?.kind === "reset") {
     return {
@@ -44,6 +51,7 @@ function initialAuthView(authLink: AuthLink | null): AuthView {
 export function AuthScreen({
   authLink,
   notice = null,
+  onAuthLinkHandled,
   onLogin,
   onRegister,
   onVerifyEmail,
@@ -98,22 +106,25 @@ export function AuthScreen({
     );
   } else if (view.kind === "verification-result") {
     content =
-      authLink?.kind === "verify" ? (
+      view.status === "busy" ? (
         <VerificationFlow
           kind="result"
-          token={authLink.token}
-          status={view.status}
+          token={view.token}
+          status="busy"
           onVerify={onVerifyEmail}
-          onStatus={(status) =>
-            setView((current) =>
-              current.kind === "verification-result"
-                ? { ...current, status }
-                : current,
-            )
-          }
+          onStatus={(status) => {
+            setView({ kind: "verification-result", status });
+            onAuthLinkHandled();
+          }}
           onBackToLogin={showLogin}
         />
-      ) : null;
+      ) : (
+        <VerificationFlow
+          kind="result"
+          status={view.status}
+          onBackToLogin={showLogin}
+        />
+      );
   } else if (view.kind === "reset-request") {
     content = (
       <PasswordResetFlow
@@ -132,20 +143,25 @@ export function AuthScreen({
     );
   } else {
     content = (
-      <PasswordResetFlow
-        kind="confirm"
-        token={view.token}
-        status={view.status}
-        onConfirm={onConfirmPasswordReset}
-        onSuccess={() =>
-          setView((current) =>
-            current.kind === "reset-confirm"
-              ? { ...current, status: "success" }
-              : current,
-          )
-        }
-        onBackToLogin={showLogin}
-      />
+      view.status === "form" ? (
+        <PasswordResetFlow
+          kind="confirm"
+          token={view.token}
+          status="form"
+          onConfirm={onConfirmPasswordReset}
+          onSuccess={() => {
+            setView({ kind: "reset-confirm", status: "success" });
+            onAuthLinkHandled();
+          }}
+          onBackToLogin={showLogin}
+        />
+      ) : (
+        <PasswordResetFlow
+          kind="confirm"
+          status="success"
+          onBackToLogin={showLogin}
+        />
+      )
     );
   }
 

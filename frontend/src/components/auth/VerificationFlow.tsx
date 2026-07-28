@@ -14,9 +14,14 @@ type VerificationFlowProps =
   | {
       kind: "result";
       token: string;
-      status: "busy" | "success" | "error";
+      status: "busy";
       onVerify(token: string): Promise<void>;
       onStatus(status: "success" | "error"): void;
+      onBackToLogin(): void;
+    }
+  | {
+      kind: "result";
+      status: "success" | "error";
       onBackToLogin(): void;
     };
 
@@ -27,10 +32,12 @@ export function VerificationFlow(props: VerificationFlowProps) {
   const alertRef = useRef<HTMLParagraphElement>(null);
   const verificationRequestRef = useRef<Promise<void> | null>(null);
   const resultStatus = props.kind === "result" ? props.status : null;
-  const verificationToken = props.kind === "result" ? props.token : null;
-  const verify = props.kind === "result" ? props.onVerify : null;
+  const busyVerification =
+    props.kind === "result" && props.status === "busy" ? props : null;
+  const verificationToken = busyVerification?.token ?? null;
+  const verify = busyVerification?.onVerify ?? null;
   const setVerificationStatus =
-    props.kind === "result" ? props.onStatus : null;
+    busyVerification?.onStatus ?? null;
   const pendingMessage = props.kind === "pending" ? props.message : null;
 
   useEffect(() => {
@@ -84,6 +91,7 @@ export function VerificationFlow(props: VerificationFlowProps) {
       try {
         const result = await props.onResend(props.email);
         props.onMessage(result.message);
+        headingRef.current?.focus();
       } catch (caughtError) {
         setError(
           caughtError instanceof Error

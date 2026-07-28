@@ -145,6 +145,36 @@ describe("MK-VIP authentication", () => {
     expect(screen.queryByText("Vue d’ensemble")).not.toBeInTheDocument();
   });
 
+  it("does not replay a consumed verification link after login and logout", async () => {
+    window.location.hash = "#verify-email=verification-token";
+    const verifyEmail = vi.fn().mockResolvedValue(undefined);
+    const logout = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(
+      <App client={createTestClient({ verifyEmail, logout })} />,
+    );
+
+    await screen.findByRole("heading", { name: "Adresse vérifiée" });
+    await user.click(
+      screen.getByRole("button", { name: "Retour à la connexion" }),
+    );
+    await user.type(
+      screen.getByLabelText("Adresse email"),
+      "investor@example.com",
+    );
+    await user.type(screen.getByLabelText("Mot de passe"), "secret");
+    await user.click(screen.getByRole("button", { name: "Se connecter" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Se déconnecter" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Se connecter" }),
+    ).toBeInTheDocument();
+    expect(verifyEmail).toHaveBeenCalledOnce();
+  });
+
   it("confirms a password reset link with two matching passwords", async () => {
     window.location.hash = "#reset-password=reset-token";
     const confirmPasswordReset = vi.fn().mockResolvedValue(undefined);
@@ -182,6 +212,47 @@ describe("MK-VIP authentication", () => {
       name: "Mot de passe mis à jour",
     });
     expect(resultHeading).toHaveFocus();
+  });
+
+  it("does not restore a consumed reset link after login and logout", async () => {
+    window.location.hash = "#reset-password=reset-token";
+    const confirmPasswordReset = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(
+      <App client={createTestClient({ confirmPasswordReset })} />,
+    );
+
+    await user.type(
+      screen.getByLabelText("Nouveau mot de passe"),
+      "correct horse battery",
+    );
+    await user.type(
+      screen.getByLabelText("Confirmer le mot de passe"),
+      "correct horse battery",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Mettre à jour le mot de passe" }),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Retour à la connexion",
+      }),
+    );
+    await user.type(
+      screen.getByLabelText("Adresse email"),
+      "investor@example.com",
+    );
+    await user.type(screen.getByLabelText("Mot de passe"), "secret");
+    await user.click(screen.getByRole("button", { name: "Se connecter" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Se déconnecter" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Se connecter" }),
+    ).toBeInTheDocument();
+    expect(confirmPasswordReset).toHaveBeenCalledOnce();
   });
 
   it("rejects two different passwords without consuming the reset link", async () => {
@@ -256,6 +327,77 @@ describe("MK-VIP authentication", () => {
         name: "Vérifie ta boîte email",
       }),
     ).toHaveFocus();
+  });
+
+  it("returns focus after a verification resend with an unchanged message", async () => {
+    const user = userEvent.setup();
+    const message = "Consulte ta boîte email pour vérifier ton adresse.";
+    const register = vi.fn().mockResolvedValue({ message });
+    const resendVerification = vi.fn().mockResolvedValue({ message });
+    const client = createTestClient({
+      getCurrentUser: async () => {
+        throw new ApiError(401, "Session absente ou expirée.");
+      },
+      register,
+      resendVerification,
+    });
+
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Créer un compte" }),
+    );
+    await user.type(
+      screen.getByLabelText("Adresse email"),
+      "investor@example.com",
+    );
+    await user.type(
+      screen.getByLabelText("Mot de passe"),
+      "correct horse battery",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Créer mon compte" }),
+    );
+    const heading = await screen.findByRole("heading", {
+      name: "Vérifie ta boîte email",
+    });
+    const resend = screen.getByRole("button", {
+      name: "Renvoyer l’email",
+    });
+    await user.click(resend);
+
+    expect(resendVerification).toHaveBeenCalledOnce();
+    expect(heading).toHaveFocus();
+  });
+
+  it("disables every credential control while authentication is pending", async () => {
+    const user = userEvent.setup();
+    const client = createTestClient({
+      getCurrentUser: async () => {
+        throw new ApiError(401, "Session absente ou expirée.");
+      },
+      login: () => new Promise(() => undefined),
+    });
+
+    render(<App client={client} />);
+
+    const email = await screen.findByLabelText("Adresse email");
+    const password = screen.getByLabelText("Mot de passe");
+    await user.type(email, "investor@example.com");
+    await user.type(password, "secret");
+    await user.click(screen.getByRole("button", { name: "Se connecter" }));
+
+    expect(email).toBeDisabled();
+    expect(password).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Veuillez patienter…" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Mot de passe oublié ?" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Créer un compte" }),
+    ).toBeDisabled();
   });
 
   it("logs out and returns to the login screen", async () => {

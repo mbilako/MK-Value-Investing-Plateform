@@ -126,6 +126,7 @@ export function AuthCredentialsForm({
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            disabled={busy}
             required
           />
         </div>
@@ -142,6 +143,7 @@ export function AuthCredentialsForm({
             }
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            disabled={busy}
             required
           />
           {mode === "register" ? <small>12 caractères minimum</small> : null}
@@ -194,6 +196,7 @@ export function AuthCredentialsForm({
           onClick={() =>
             onSelectMode(mode === "register" ? "login" : "register")
           }
+          disabled={busy}
         >
           {mode === "register" ? "Se connecter" : "Créer un compte"}
         </button>
