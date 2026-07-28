@@ -1,4 +1,4 @@
-import type { CompanyClient, User } from "../api/client";
+import type { AuthMessage, CompanyClient, User } from "../api/client";
 
 export const testUser: User = {
   id: "user-1",
@@ -6,14 +6,22 @@ export const testUser: User = {
   created_at: "2026-07-26T10:00:00Z",
 };
 
+const testAuthMessage: AuthMessage = {
+  message: "Demande prise en compte.",
+};
+
 export function createTestClient(
   overrides: Partial<CompanyClient> = {},
 ): CompanyClient {
   return {
     getCurrentUser: async () => testUser,
-    register: async () => testUser,
+    register: async () => testAuthMessage,
     login: async () => testUser,
     logout: async () => undefined,
+    verifyEmail: async () => undefined,
+    resendVerification: async () => testAuthMessage,
+    requestPasswordReset: async () => testAuthMessage,
+    confirmPasswordReset: async () => undefined,
     onUnauthorized: () => () => undefined,
     listCompanies: async () => [],
     createCompany: async (payload) => ({

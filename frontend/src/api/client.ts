@@ -27,6 +27,10 @@ export interface AuthCredentials {
   password: string;
 }
 
+export interface AuthMessage {
+  message: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -266,9 +270,13 @@ export interface AIAnalysis {
 
 export interface CompanyClient {
   getCurrentUser(): Promise<User>;
-  register(credentials: AuthCredentials): Promise<User>;
+  register(credentials: AuthCredentials): Promise<AuthMessage>;
   login(credentials: AuthCredentials): Promise<User>;
   logout(): Promise<void>;
+  verifyEmail(token: string): Promise<void>;
+  resendVerification(email: string): Promise<AuthMessage>;
+  requestPasswordReset(email: string): Promise<AuthMessage>;
+  confirmPasswordReset(token: string, password: string): Promise<void>;
   onUnauthorized(handler: () => void): () => void;
   listCompanies(): Promise<Company[]>;
   getDashboard?(): Promise<Dashboard>;
@@ -361,7 +369,7 @@ export function createApiClient(): CompanyClient {
   return {
     getCurrentUser: () => request<User>("/auth/me", undefined, false),
     register: (credentials) =>
-      request<User>(
+      request<AuthMessage>(
         "/auth/register",
         { method: "POST", body: JSON.stringify(credentials) },
         false,
@@ -373,6 +381,30 @@ export function createApiClient(): CompanyClient {
         false,
       ),
     logout: () => request<void>("/auth/logout", { method: "POST" }, false),
+    verifyEmail: (token) =>
+      request<void>(
+        "/auth/verify-email",
+        { method: "POST", body: JSON.stringify({ token }) },
+        false,
+      ),
+    resendVerification: (email) =>
+      request<AuthMessage>(
+        "/auth/resend-verification",
+        { method: "POST", body: JSON.stringify({ email }) },
+        false,
+      ),
+    requestPasswordReset: (email) =>
+      request<AuthMessage>(
+        "/auth/password-reset/request",
+        { method: "POST", body: JSON.stringify({ email }) },
+        false,
+      ),
+    confirmPasswordReset: (token, password) =>
+      request<void>(
+        "/auth/password-reset/confirm",
+        { method: "POST", body: JSON.stringify({ token, password }) },
+        false,
+      ),
     onUnauthorized: (handler) => {
       unauthorizedListeners.add(handler);
       return () => unauthorizedListeners.delete(handler);

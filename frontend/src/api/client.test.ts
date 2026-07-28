@@ -30,20 +30,22 @@ describe("API client authentication", () => {
     );
   });
 
-  it("registers with the submitted credentials and returns the created user", async () => {
+  it("registers without treating the account as authenticated", async () => {
     const credentials = { email: "alice@example.com", password: "new-password" };
-    const expectedUser = {
-      id: "user-1",
-      email: "alice@example.com",
-      created_at: "2026-07-26T10:00:00Z",
+    const expectedMessage = {
+      message:
+        "Si cette adresse peut être inscrite, un email de vérification a été envoyé.",
     };
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(expectedUser), { status: 200 }),
+      new Response(JSON.stringify(expectedMessage), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(createApiClient().register(credentials)).resolves.toEqual(
-      expectedUser,
+      expectedMessage,
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -51,6 +53,91 @@ describe("API client authentication", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(credentials),
+        credentials: "include",
+      }),
+    );
+  });
+
+  it("submits verification and reset tokens only in JSON bodies", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createApiClient();
+
+    await expect(client.verifyEmail("verification-token-value")).resolves.toBeUndefined();
+    await expect(
+      client.confirmPasswordReset(
+        "reset-token-value",
+        "new correct horse battery",
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/auth/verify-email");
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "/api/v1/auth/password-reset/confirm",
+    );
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({ token: "verification-token-value" }),
+    );
+    expect(fetchMock.mock.calls[1][1]?.body).toBe(
+      JSON.stringify({
+        token: "reset-token-value",
+        password: "new correct horse battery",
+      }),
+    );
+  });
+
+  it("resends a verification email and returns the generic accepted message", async () => {
+    const expectedMessage = {
+      message:
+        "Si un compte non vérifié utilise cette adresse, un email de vérification a été envoyé.",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(expectedMessage), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      createApiClient().resendVerification("investor@example.com"),
+    ).resolves.toEqual(expectedMessage);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/resend-verification",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "investor@example.com" }),
+        credentials: "include",
+      }),
+    );
+  });
+
+  it("requests a password reset and returns the generic accepted message", async () => {
+    const expectedMessage = {
+      message:
+        "Si un compte utilise cette adresse, un email de réinitialisation a été envoyé.",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(expectedMessage), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      createApiClient().requestPasswordReset("investor@example.com"),
+    ).resolves.toEqual(expectedMessage);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/password-reset/request",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "investor@example.com" }),
         credentials: "include",
       }),
     );
