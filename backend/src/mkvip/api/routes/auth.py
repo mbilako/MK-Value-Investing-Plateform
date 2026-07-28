@@ -1,4 +1,7 @@
+import logging
+from collections.abc import Callable
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
@@ -16,6 +19,26 @@ from mkvip.core.config import Settings, get_settings
 from mkvip.schemas.auth import LoginRequest, RegisterRequest, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
+
+
+def deliver_email_safely(
+    send: Callable[[], None],
+    *,
+    purpose: str,
+    user_id: UUID,
+) -> None:
+    try:
+        send()
+    except Exception as error:
+        logger.error(
+            "auth_email_delivery_failed",
+            extra={
+                "purpose": purpose,
+                "user_id": str(user_id),
+                "error_type": type(error).__name__,
+            },
+        )
 
 
 def _set_session_cookie(

@@ -9,6 +9,7 @@ from mkvip.core.config import Settings, get_settings
 from mkvip.db.session import get_session
 from mkvip.providers.ai import AIAnalystProvider, AIProviderError, OpenAIAnalystProvider
 from mkvip.providers.base import FinancialDataProvider
+from mkvip.providers.email import EmailSender, SmtpEmailSender
 from mkvip.providers.yahoo import YahooExecutionGuard, YahooFinanceProvider
 from mkvip.repositories.company import CompanyRepository
 from mkvip.repositories.sqlalchemy import SqlAlchemyCompanyRepository
@@ -22,6 +23,29 @@ def get_auth_service(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AuthService:
     return AuthService(session, settings)
+
+
+def get_email_sender(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> EmailSender:
+    override = getattr(request.app.state, "email_sender", None)
+    if override is not None:
+        return override
+    return SmtpEmailSender(
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        sender=settings.smtp_from,
+        public_app_url=settings.public_app_url,
+        timeout_seconds=settings.smtp_timeout_seconds,
+        starttls=settings.smtp_starttls,
+        username=settings.smtp_username,
+        password=(
+            settings.smtp_password.get_secret_value()
+            if settings.smtp_password is not None
+            else None
+        ),
+    )
 
 
 async def get_current_user(
