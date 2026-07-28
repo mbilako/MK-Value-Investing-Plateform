@@ -1,8 +1,16 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from mkvip.db.base import Base
+from mkvip.models.auth_action import (
+    AuthActionPurpose,
+    AuthActionTokenOrm,
+    AuthEmailRateLimitOrm,
+)
 from mkvip.models.company import CompanyOrm
 from mkvip.models.user import UserOrm
 
@@ -52,4 +60,46 @@ async def test_ticker_is_unique_per_owner_only() -> None:
         )
         with pytest.raises(IntegrityError):
             await session.commit()
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_account_recovery_models_persist_token_and_rate_window() -> None:
+    engine = create_async_engine("sqlite+aiosqlite://")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    now = datetime(2026, 7, 28, 10, 0, tzinfo=UTC)
+    async with factory() as session:
+        user = UserOrm(
+            email="investor@example.com",
+            password_hash="not-used",
+        )
+        session.add(user)
+        await session.flush()
+        session.add_all(
+            [
+                AuthActionTokenOrm(
+                    user_id=user.id,
+                    purpose=AuthActionPurpose.EMAIL_VERIFICATION,
+                    token_hash="a" * 64,
+                    created_at=now,
+                    expires_at=now + timedelta(hours=24),
+                ),
+                AuthEmailRateLimitOrm(
+                    recipient_hash="b" * 64,
+                    purpose=AuthActionPurpose.EMAIL_VERIFICATION,
+                    window_start=now,
+                    request_count=1,
+                    last_requested_at=now,
+                ),
+            ]
+        )
+        await session.commit()
+
+        assert user.email_verified_at is None
+        assert await session.scalar(select(func.count(AuthActionTokenOrm.id))) == 1
+        assert await session.scalar(select(func.count(AuthEmailRateLimitOrm.id))) == 1
+
     await engine.dispose()

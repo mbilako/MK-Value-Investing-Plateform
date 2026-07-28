@@ -15,6 +15,21 @@ class Settings(BaseSettings):
     )
     openai_model: str = "gpt-5.6-sol"
     allowed_origins: list[str] = ["http://localhost:5173"]
+    public_app_url: str = "http://localhost:5173"
+    smtp_host: str = "mailpit"
+    smtp_port: PositiveInt = 1025
+    smtp_from: str = "MK-VIP <no-reply@mkvip.local>"
+    smtp_timeout_seconds: PositiveFloat = 10
+    smtp_starttls: bool = False
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    auth_email_hash_secret: SecretStr = SecretStr(
+        "change-me-outside-local-development"
+    )
+    email_verification_ttl_hours: PositiveInt = 24
+    password_reset_ttl_minutes: PositiveInt = 30
+    auth_email_cooldown_seconds: PositiveInt = 60
+    auth_email_max_per_hour: PositiveInt = 5
     session_cookie_name: str = "mkvip_session"
     session_cookie_secure: bool = False
     session_duration_days: PositiveInt = 30

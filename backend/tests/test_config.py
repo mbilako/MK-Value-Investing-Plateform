@@ -16,6 +16,12 @@ from mkvip.core.config import Settings
         "yahoo_response_timeout_seconds",
         "yahoo_import_timeout_seconds",
         "yahoo_imports_per_user",
+        "smtp_port",
+        "smtp_timeout_seconds",
+        "email_verification_ttl_hours",
+        "password_reset_ttl_minutes",
+        "auth_email_cooldown_seconds",
+        "auth_email_max_per_hour",
     ],
 )
 @pytest.mark.parametrize("invalid_value", [0, -1])
