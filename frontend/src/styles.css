@@ -166,6 +166,47 @@ button {
   line-height: 1.45;
 }
 
+.auth-success {
+  padding: 12px 14px;
+  margin: 22px 0 0;
+  border-left: 3px solid var(--emerald);
+  border-radius: 0 7px 7px 0;
+  color: var(--emerald-dark);
+  background: var(--emerald-tint);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.auth-actions,
+.auth-result__actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.auth-actions {
+  justify-items: center;
+}
+
+.auth-actions .button,
+.auth-result__actions .button,
+.auth-back {
+  min-height: 44px;
+}
+
+.auth-result .auth-card__intro {
+  margin-top: 30px;
+}
+
+.auth-result__actions .button {
+  width: 100%;
+}
+
+.auth-back {
+  display: flex;
+  margin: 18px auto 0;
+}
+
 .auth-mode {
   display: flex;
   align-items: center;
@@ -2032,8 +2073,20 @@ a:focus-visible {
 }
 
 @media (max-width: 700px) {
+  .auth-shell {
+    padding: 18px 12px;
+  }
+
   .auth-card {
     padding: 26px 22px;
+  }
+
+  .auth-card__intro h1 {
+    font-size: 30px;
+  }
+
+  .auth-mode {
+    flex-direction: column;
   }
 
   .user-menu__email {

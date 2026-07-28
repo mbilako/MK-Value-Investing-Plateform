@@ -7,6 +7,7 @@ import {
   type CompanyClient,
   type User,
 } from "./api/client";
+import { readAndClearAuthLink } from "./auth/link";
 import { AuthScreen } from "./components/AuthScreen";
 import { SessionLoading } from "./components/SessionLoading";
 import { Workspace } from "./components/Workspace";
@@ -18,7 +19,12 @@ interface AppProps {
 type AuthStatus = "checking" | "unauthenticated" | "authenticated";
 
 export function App({ client = apiClient }: AppProps) {
-  const [status, setStatus] = useState<AuthStatus>("checking");
+  const [authLink] = useState(() =>
+    readAndClearAuthLink(window.location, window.history),
+  );
+  const [status, setStatus] = useState<AuthStatus>(
+    authLink ? "unauthenticated" : "checking",
+  );
   const [user, setUser] = useState<User | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -36,6 +42,11 @@ export function App({ client = apiClient }: AppProps) {
       setNotice("Votre session a expiré. Connectez-vous de nouveau.");
       setStatus("unauthenticated");
     });
+
+    if (authLink) {
+      setStatus("unauthenticated");
+      return unsubscribe;
+    }
 
     client
       .getCurrentUser()
@@ -57,7 +68,7 @@ export function App({ client = apiClient }: AppProps) {
       active = false;
       unsubscribe();
     };
-  }, [client]);
+  }, [authLink, client]);
 
   const authenticate = async (
     action: (credentials: AuthCredentials) => Promise<User>,
@@ -92,11 +103,16 @@ export function App({ client = apiClient }: AppProps) {
   return (
     <AuthScreen
       notice={notice}
+      authLink={authLink}
       onLogin={(credentials) =>
         authenticate(client.login.bind(client), credentials)
       }
-      onRegister={(credentials) =>
-        authenticate(client.register.bind(client), credentials)
+      onRegister={(credentials) => client.register(credentials)}
+      onVerifyEmail={(token) => client.verifyEmail(token)}
+      onResendVerification={(email) => client.resendVerification(email)}
+      onRequestPasswordReset={(email) => client.requestPasswordReset(email)}
+      onConfirmPasswordReset={(token, password) =>
+        client.confirmPasswordReset(token, password)
       }
     />
   );

@@ -1,65 +1,153 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState } from "react";
 
-import type { AuthCredentials } from "../api/client";
+import type {
+  AuthCredentials,
+  AuthMessage,
+} from "../api/client";
+import type { AuthLink } from "../auth/link";
+import { AuthCredentialsForm } from "./auth/AuthCredentialsForm";
+import { PasswordResetFlow } from "./auth/PasswordResetFlow";
+import { VerificationFlow } from "./auth/VerificationFlow";
 
-type AuthMode = "login" | "register";
+type AuthView =
+  | { kind: "credentials"; mode: "login" | "register" }
+  | { kind: "verification-pending"; email: string; message: string }
+  | { kind: "verification-result"; status: "busy" | "success" | "error" }
+  | { kind: "reset-request"; message: string | null }
+  | { kind: "reset-confirm"; token: string; status: "form" | "success" };
 
 export interface AuthScreenProps {
+  authLink: AuthLink | null;
   notice?: string | null;
   onLogin(credentials: AuthCredentials): Promise<void>;
-  onRegister(credentials: AuthCredentials): Promise<void>;
+  onRegister(credentials: AuthCredentials): Promise<AuthMessage>;
+  onVerifyEmail(token: string): Promise<void>;
+  onResendVerification(email: string): Promise<AuthMessage>;
+  onRequestPasswordReset(email: string): Promise<AuthMessage>;
+  onConfirmPasswordReset(token: string, password: string): Promise<void>;
+}
+
+function initialAuthView(authLink: AuthLink | null): AuthView {
+  if (authLink?.kind === "verify") {
+    return { kind: "verification-result", status: "busy" };
+  }
+  if (authLink?.kind === "reset") {
+    return {
+      kind: "reset-confirm",
+      token: authLink.token,
+      status: "form",
+    };
+  }
+  return { kind: "credentials", mode: "login" };
 }
 
 export function AuthScreen({
+  authLink,
   notice = null,
   onLogin,
   onRegister,
+  onVerifyEmail,
+  onResendVerification,
+  onRequestPasswordReset,
+  onConfirmPasswordReset,
 }: AuthScreenProps) {
-  const [mode, setMode] = useState<AuthMode>("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const alertRef = useRef<HTMLParagraphElement>(null);
-  const visibleError = error ?? notice;
+  const [view, setView] = useState<AuthView>(() => initialAuthView(authLink));
 
-  useEffect(() => {
-    if (error) {
-      alertRef.current?.focus();
-    }
-  }, [error]);
-
-  const selectMode = (nextMode: AuthMode) => {
-    setMode(nextMode);
-    setPassword("");
-    setError(null);
+  const showLogin = () => {
+    setView({ kind: "credentials", mode: "login" });
   };
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    const credentials = { email, password };
-
-    try {
-      if (mode === "register") {
-        await onRegister(credentials);
-      } else {
-        await onLogin(credentials);
-      }
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "La demande n’a pas pu aboutir.",
-      );
-    } finally {
-      setBusy(false);
-    }
+  const showVerificationPending = (email: string, message: string) => {
+    setView({ kind: "verification-pending", email, message });
   };
 
-  const heading =
-    mode === "register" ? "Créer votre compte" : "Se connecter";
+  let content;
+
+  if (view.kind === "credentials") {
+    content = (
+      <AuthCredentialsForm
+        key={view.mode}
+        mode={view.mode}
+        notice={notice}
+        onLogin={onLogin}
+        onRegister={onRegister}
+        onVerificationPending={showVerificationPending}
+        onSelectMode={(mode) => setView({ kind: "credentials", mode })}
+        onForgotPassword={() =>
+          setView({ kind: "reset-request", message: null })
+        }
+        onResendVerification={onResendVerification}
+      />
+    );
+  } else if (view.kind === "verification-pending") {
+    content = (
+      <VerificationFlow
+        kind="pending"
+        email={view.email}
+        message={view.message}
+        onResend={onResendVerification}
+        onMessage={(message) =>
+          setView((current) =>
+            current.kind === "verification-pending"
+              ? { ...current, message }
+              : current,
+          )
+        }
+        onBackToLogin={showLogin}
+      />
+    );
+  } else if (view.kind === "verification-result") {
+    content =
+      authLink?.kind === "verify" ? (
+        <VerificationFlow
+          kind="result"
+          token={authLink.token}
+          status={view.status}
+          onVerify={onVerifyEmail}
+          onStatus={(status) =>
+            setView((current) =>
+              current.kind === "verification-result"
+                ? { ...current, status }
+                : current,
+            )
+          }
+          onBackToLogin={showLogin}
+        />
+      ) : null;
+  } else if (view.kind === "reset-request") {
+    content = (
+      <PasswordResetFlow
+        kind="request"
+        message={view.message}
+        onRequest={onRequestPasswordReset}
+        onMessage={(message) =>
+          setView((current) =>
+            current.kind === "reset-request"
+              ? { ...current, message }
+              : current,
+          )
+        }
+        onBackToLogin={showLogin}
+      />
+    );
+  } else {
+    content = (
+      <PasswordResetFlow
+        kind="confirm"
+        token={view.token}
+        status={view.status}
+        onConfirm={onConfirmPasswordReset}
+        onSuccess={() =>
+          setView((current) =>
+            current.kind === "reset-confirm"
+              ? { ...current, status: "success" }
+              : current,
+          )
+        }
+        onBackToLogin={showLogin}
+      />
+    );
+  }
 
   return (
     <main className="auth-shell">
@@ -70,87 +158,7 @@ export function AuthScreen({
             MK Value Investing Platform
           </span>
         </div>
-        <div className="auth-card__intro">
-          <p className="section-eyebrow">Espace investisseur personnel</p>
-          <h1 id="auth-heading">{heading}</h1>
-          <p>
-            Retrouvez vos entreprises, analyses et décisions dans un espace
-            privé.
-          </p>
-        </div>
-
-        {visibleError ? (
-          <p
-            ref={alertRef}
-            className="auth-error"
-            role="alert"
-            tabIndex={-1}
-          >
-            {visibleError}
-          </p>
-        ) : null}
-
-        <form className="auth-form" onSubmit={submit}>
-          <div className="field">
-            <label htmlFor="auth-email">Adresse email</label>
-            <input
-              id="auth-email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="auth-password">Mot de passe</label>
-            <input
-              id="auth-password"
-              name="password"
-              type="password"
-              minLength={mode === "register" ? 12 : 1}
-              maxLength={128}
-              autoComplete={
-                mode === "register" ? "new-password" : "current-password"
-              }
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-            {mode === "register" ? (
-              <small>12 caractères minimum</small>
-            ) : null}
-          </div>
-          <button
-            className="button button--primary auth-submit"
-            type="submit"
-            disabled={busy}
-          >
-            {busy
-              ? "Veuillez patienter…"
-              : mode === "register"
-                ? "Créer mon compte"
-                : "Se connecter"}
-          </button>
-        </form>
-
-        <div className="auth-mode">
-          <span>
-            {mode === "register"
-              ? "Vous avez déjà un compte ?"
-              : "Nouveau sur MK-VIP ?"}
-          </span>
-          <button
-            className="button button--text"
-            type="button"
-            onClick={() =>
-              selectMode(mode === "register" ? "login" : "register")
-            }
-          >
-            {mode === "register" ? "Se connecter" : "Créer un compte"}
-          </button>
-        </div>
+        {content}
       </section>
     </main>
   );

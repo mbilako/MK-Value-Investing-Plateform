@@ -11,7 +11,10 @@ import type {
 } from "./api/client";
 import { createTestClient, testUser } from "./test/client";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/");
+});
 
 const unusedAutomaticImport = async () => {
   throw new Error("Import automatique non utilisé dans ce scénario.");
@@ -47,14 +50,18 @@ describe("MK-VIP authentication", () => {
     expect(screen.queryByText("Vue d’ensemble")).not.toBeInTheDocument();
   });
 
-  it("registers and opens the personal workspace", async () => {
+  it("registers and waits for email verification without opening the workspace", async () => {
     const user = userEvent.setup();
-    const register = vi.fn().mockResolvedValue(testUser);
+    const register = vi.fn().mockResolvedValue({
+      message: "Consulte ta boîte email pour vérifier ton adresse.",
+    });
+    const listCompanies = vi.fn().mockResolvedValue([]);
     const client = createTestClient({
       getCurrentUser: async () => {
         throw new ApiError(401, "Session absente ou expirée.");
       },
       register,
+      listCompanies,
     });
 
     render(<App client={client} />);
@@ -64,7 +71,7 @@ describe("MK-VIP authentication", () => {
     );
     await user.type(
       screen.getByLabelText("Adresse email"),
-      "alice@example.com",
+      "investor@example.com",
     );
     await user.type(
       screen.getByLabelText("Mot de passe"),
@@ -75,10 +82,180 @@ describe("MK-VIP authentication", () => {
     );
 
     expect(register).toHaveBeenCalledWith({
-      email: "alice@example.com",
+      email: "investor@example.com",
       password: "correct horse battery",
     });
-    expect(await screen.findByText("investor@example.com")).toBeInTheDocument();
+    const resultHeading = await screen.findByRole("heading", {
+      name: "Vérifie ta boîte email",
+    });
+    expect(resultHeading).toHaveFocus();
+    expect(listCompanies).not.toHaveBeenCalled();
+  });
+
+  it("requests a password reset and announces the generic result", async () => {
+    const user = userEvent.setup();
+    const message =
+      "Si un compte correspond à cette adresse, un email a été envoyé.";
+    const requestPasswordReset = vi.fn().mockResolvedValue({ message });
+    const client = createTestClient({
+      getCurrentUser: async () => {
+        throw new ApiError(401, "Session absente ou expirée.");
+      },
+      requestPasswordReset,
+    });
+
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Mot de passe oublié ?" }),
+    );
+    await user.type(
+      screen.getByLabelText("Adresse email"),
+      "investor@example.com",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Envoyer le lien" }),
+    );
+
+    expect(requestPasswordReset).toHaveBeenCalledWith(
+      "investor@example.com",
+    );
+    const result = await screen.findByText(message);
+    expect(result).toHaveAttribute("aria-live", "polite");
+    expect(result).toHaveFocus();
+  });
+
+  it("verifies an email link before any session restoration", async () => {
+    window.location.hash = "#verify-email=verification-token";
+    const verifyEmail = vi.fn().mockResolvedValue(undefined);
+    const getCurrentUser = vi.fn().mockResolvedValue(testUser);
+
+    render(
+      <App client={createTestClient({ verifyEmail, getCurrentUser })} />,
+    );
+
+    expect(window.location.hash).toBe("");
+    expect(getCurrentUser).not.toHaveBeenCalled();
+    expect(verifyEmail).toHaveBeenCalledOnce();
+    expect(verifyEmail).toHaveBeenCalledWith("verification-token");
+    const resultHeading = await screen.findByRole("heading", {
+      name: "Adresse vérifiée",
+    });
+    expect(resultHeading).toHaveFocus();
+    expect(screen.queryByText("Vue d’ensemble")).not.toBeInTheDocument();
+  });
+
+  it("confirms a password reset link with two matching passwords", async () => {
+    window.location.hash = "#reset-password=reset-token";
+    const confirmPasswordReset = vi.fn().mockResolvedValue(undefined);
+    const getCurrentUser = vi.fn().mockResolvedValue(testUser);
+    const user = userEvent.setup();
+
+    render(
+      <App
+        client={createTestClient({
+          confirmPasswordReset,
+          getCurrentUser,
+        })}
+      />,
+    );
+
+    expect(window.location.hash).toBe("");
+    expect(getCurrentUser).not.toHaveBeenCalled();
+    await user.type(
+      screen.getByLabelText("Nouveau mot de passe"),
+      "correct horse battery",
+    );
+    await user.type(
+      screen.getByLabelText("Confirmer le mot de passe"),
+      "correct horse battery",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Mettre à jour le mot de passe" }),
+    );
+
+    expect(confirmPasswordReset).toHaveBeenCalledWith(
+      "reset-token",
+      "correct horse battery",
+    );
+    const resultHeading = await screen.findByRole("heading", {
+      name: "Mot de passe mis à jour",
+    });
+    expect(resultHeading).toHaveFocus();
+  });
+
+  it("rejects two different passwords without consuming the reset link", async () => {
+    window.location.hash = "#reset-password=reset-token";
+    const confirmPasswordReset = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(
+      <App client={createTestClient({ confirmPasswordReset })} />,
+    );
+
+    await user.type(
+      screen.getByLabelText("Nouveau mot de passe"),
+      "correct horse battery",
+    );
+    await user.type(
+      screen.getByLabelText("Confirmer le mot de passe"),
+      "different horse battery",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Mettre à jour le mot de passe" }),
+    );
+
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent(
+      "Les mots de passe doivent être identiques.",
+    );
+    expect(error).toHaveFocus();
+    expect(confirmPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it("offers verification email resend after an unverified login", async () => {
+    const user = userEvent.setup();
+    const login = vi.fn().mockRejectedValue(
+      new ApiError(
+        403,
+        "Vérifie ton adresse email avant de te connecter.",
+      ),
+    );
+    const resendVerification = vi.fn().mockResolvedValue({
+      message: "Un nouvel email de vérification a été envoyé.",
+    });
+    const client = createTestClient({
+      getCurrentUser: async () => {
+        throw new ApiError(401, "Session absente ou expirée.");
+      },
+      login,
+      resendVerification,
+    });
+
+    render(<App client={client} />);
+
+    await user.type(
+      await screen.findByLabelText("Adresse email"),
+      "investor@example.com",
+    );
+    await user.type(screen.getByLabelText("Mot de passe"), "secret");
+    await user.click(screen.getByRole("button", { name: "Se connecter" }));
+
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveFocus();
+    const resendButton = screen.getByRole("button", {
+      name: "Renvoyer l’email de vérification",
+    });
+    await user.click(resendButton);
+
+    expect(resendVerification).toHaveBeenCalledWith(
+      "investor@example.com",
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Vérifie ta boîte email",
+      }),
+    ).toHaveFocus();
   });
 
   it("logs out and returns to the login screen", async () => {
