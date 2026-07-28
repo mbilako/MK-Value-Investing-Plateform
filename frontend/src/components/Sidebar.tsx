@@ -40,7 +40,7 @@ export function Sidebar() {
       </nav>
       <div className="sidebar__foot">
         <span className="status-dot" aria-hidden="true" />
-        Version 0.9 Comptes personnels
+        Version 0.10 Comptes personnels
       </div>
     </aside>
   );

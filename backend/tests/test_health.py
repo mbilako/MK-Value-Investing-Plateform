@@ -10,5 +10,5 @@ def test_health_endpoint_reports_api_ready() -> None:
     assert response.json() == {
         "name": "MK-VIP API",
         "status": "ready",
-        "version": "0.9.1",
+        "version": "0.10.0",
     }

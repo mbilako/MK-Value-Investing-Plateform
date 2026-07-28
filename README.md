@@ -34,22 +34,58 @@ Puis ouvrir :
 - application : <http://localhost:5173>
 - documentation API : <http://localhost:8000/docs>
 - santé API : <http://localhost:8000/api/v1/health>
+- emails locaux Mailpit : <http://localhost:8025>
 
-Le parcours applicatif commence par un compte personnel :
+Le parcours applicatif commence par un compte personnel vérifié :
 
-1. créer un compte ou se connecter ;
-2. importer une entreprise ;
-3. utiliser « Ajouter les données », puis choisir l’import public automatique
+1. créer un compte, ouvrir l’email reçu dans Mailpit et suivre son lien de
+   vérification ;
+2. se connecter avec le compte vérifié ;
+3. importer une entreprise ;
+4. utiliser « Ajouter les données », puis choisir l’import public automatique
    ou la saisie manuelle d’un exercice financier normalisé ;
-4. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
+5. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
    indicateurs et tendances historiques ;
-5. préparer une valorisation, ajuster les hypothèses et comparer les cinq
+6. préparer une valorisation, ajuster les hypothèses et comparer les cinq
    méthodes à la capitalisation observée ;
-6. calculer le scoring global et lire les quatre contributions et explications ;
-7. revenir au tableau de décision pour comparer les derniers scorings, filtrer
+7. calculer le scoring global et lire les quatre contributions et explications ;
+8. revenir au tableau de décision pour comparer les derniers scorings, filtrer
    les signaux et rouvrir un dossier prioritaire.
-8. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
+9. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
    entreprises ou poser une question sur les analyses MK-VIP disponibles.
+
+### Tester la vérification et la réinitialisation
+
+Le parcours local complet utilise uniquement Mailpit : aucun email ne quitte la
+machine.
+
+1. Sur <http://localhost:5173>, créer `investor@example.com` avec un mot de
+   passe d’au moins 12 caractères. L’inscription répond de façon générique et
+   ne connecte pas le compte.
+2. Sur <http://localhost:8025>, ouvrir « Vérifie ton adresse MK-VIP », puis
+   suivre le lien `#verify-email=…`. L’application retire immédiatement ce
+   fragment de l’URL, vérifie le jeton, puis permet la connexion.
+3. Se connecter, puis se déconnecter. Depuis l’écran de connexion, choisir
+   « Mot de passe oublié », saisir la même adresse et valider la réponse
+   générique.
+4. Dans Mailpit, ouvrir « Réinitialise ton mot de passe MK-VIP », suivre le
+   lien `#reset-password=…` et choisir un nouveau mot de passe d’au moins
+   12 caractères.
+5. Vérifier que toute ancienne session est révoquée et que seul le nouveau mot
+   de passe permet une nouvelle connexion.
+
+Les liens de vérification expirent après 24 heures ; ceux de réinitialisation
+après 30 minutes. Chaque jeton est à usage unique. Les demandes d’email sont
+limitées, par adresse et par usage, à une toutes les 60 secondes et cinq par
+heure. Inscription, renvoi de vérification et demande de réinitialisation
+conservent une réponse générique, que le compte existe, soit déjà vérifié ou
+que la limite soit atteinte.
+
+La configuration locale est volontairement adaptée à HTTP et à Mailpit. En
+production, servir MK-VIP exclusivement en HTTPS, activer le cookie `Secure`,
+remplacer `MKVIP_AUTH_EMAIL_HASH_SECRET` par un secret HMAC fort et unique, et
+utiliser un relais SMTP authentifié avec chiffrement STARTTLS. Voir
+[`docs/authentication.md`](docs/authentication.md).
 
 Les montants du formulaire sont exprimés en millions dans la devise de
 l’entreprise. La source doit identifier le rapport annuel ou le dépôt
@@ -120,6 +156,10 @@ POST /api/v1/ai/analyses
 
 ```text
 POST /api/v1/auth/register
+POST /api/v1/auth/resend-verification
+POST /api/v1/auth/verify-email
+POST /api/v1/auth/password-reset/request
+POST /api/v1/auth/password-reset/confirm
 POST /api/v1/auth/login
 GET  /api/v1/auth/me
 POST /api/v1/auth/logout
@@ -218,6 +258,6 @@ reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
 Les analyses IA sont produites à la demande et ne sont pas historisées comme
 des dossiers permanents. Les réponses identiques sont toutefois conservées
-temporairement dans un cache isolé par utilisateur. La vérification d’adresse
-email et la réinitialisation du mot de passe restent à ajouter avant une
-exploitation multi-utilisateur à grande échelle.
+temporairement dans un cache isolé par utilisateur. L’authentification
+multifacteur et une limitation de débit globale au niveau de l’infrastructure
+restent à ajouter avant une exploitation multi-utilisateur à grande échelle.

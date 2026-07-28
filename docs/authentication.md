@@ -1,7 +1,8 @@
 # Authentification et isolation des données
 
-MK-VIP v0.9 utilise des comptes personnels. Toutes les routes métier exigent
-une session valide et chaque entreprise appartient à un seul utilisateur.
+MK-VIP v0.10 utilise des comptes personnels dont l’adresse email doit être
+vérifiée. Toutes les routes métier exigent une session valide et chaque
+entreprise appartient à un seul utilisateur.
 
 ## Sessions et cookie
 
@@ -16,13 +17,20 @@ La pile locale fonctionne en HTTP et utilise donc
 derrière HTTPS et `MKVIP_SESSION_COOKIE_SECURE=true` est obligatoire afin
 d’ajouter l’attribut `Secure` au cookie.
 
+L’inscription et la vérification ne créent jamais de session et ne déposent
+aucun cookie. Une session est créée uniquement après une connexion réussie
+d’un compte actif et vérifié. La confirmation d’un nouveau mot de passe
+supprime toutes les sessions du compte : les cookies déjà présents ne
+résolvent alors plus aucun utilisateur.
+
 ## Mots de passe et verrouillage
 
 Les mots de passe ne sont jamais stockés en clair. Ils sont hachés avec
 Argon2id par `pwdlib`. Après cinq échecs consécutifs
 (`MKVIP_LOGIN_MAX_ATTEMPTS=5`), le compte est verrouillé pendant 15 minutes
-(`MKVIP_LOGIN_LOCK_MINUTES=15`). Les réponses de connexion ne révèlent pas si
-un compte existe, est inactif ou est verrouillé.
+(`MKVIP_LOGIN_LOCK_MINUTES=15`). Les échecs liés aux identifiants, à un compte
+inactif ou à son verrouillage partagent la même réponse. Un mot de passe valide
+sur un compte non vérifié reçoit une invitation explicite à vérifier l’adresse.
 
 ## Origines, CORS et requêtes d’écriture
 
@@ -39,22 +47,102 @@ contexte IA) sont résolues dans le périmètre de l’utilisateur courant. Un U
 valide appartenant à un autre compte reçoit volontairement la même réponse
 `404` qu’un UUID inconnu afin de ne pas révéler son existence.
 
-## Migration du premier compte
+## Vérification et récupération de compte
+
+`POST /api/v1/auth/register` crée un compte non vérifié et envoie un email
+quand la demande est admissible. `POST /api/v1/auth/resend-verification`
+permet de demander un nouveau lien. Dans les deux cas, la réponse est toujours
+`202` avec le même corps :
+
+```json
+{
+  "message": "Si cette adresse peut être inscrite, un email de vérification a été envoyé."
+}
+```
+
+Cette réponse ne varie pas lorsque l’adresse existe déjà, lorsque son compte
+est déjà vérifié, lorsqu’il n’est pas admissible ou lorsque la limite est
+atteinte. Le lien contient le fragment `#verify-email=…`. Le frontend extrait
+et retire ce fragment de l’historique du navigateur avant tout appel à
+`POST /api/v1/auth/verify-email`. Un jeton valide répond `204`, un jeton
+invalide ou déjà consommé `400`, et un jeton expiré `410`.
+
+`POST /api/v1/auth/password-reset/request` répond toujours `202` avec :
+
+```json
+{
+  "message": "Si cette adresse est inscrite, un email de réinitialisation a été envoyé."
+}
+```
+
+Le statut et le corps restent identiques pour une adresse inconnue, inactive
+ou limitée. Le lien contient `#reset-password=…`, fragment lui aussi retiré
+avant tout appel API. `POST /api/v1/auth/password-reset/confirm` reçoit le
+jeton et un nouveau mot de passe d’au moins 12 caractères. La confirmation
+réussie répond `204`, consomme le jeton et révoque toutes les sessions du
+compte ; les erreurs de jeton utilisent les mêmes statuts `400` et `410`.
+
+Les jetons aléatoires ne sont envoyés qu’au destinataire et sont conservés en
+base uniquement sous forme d’empreinte SHA-256. Ils sont à usage unique : un
+nouveau renvoi invalide tout jeton encore actif du même compte et du même
+usage. La durée de vie est exactement :
+
+- vérification : 24 heures (`MKVIP_EMAIL_VERIFICATION_TTL_HOURS=24`) ;
+- réinitialisation : 30 minutes
+  (`MKVIP_PASSWORD_RESET_TTL_MINUTES=30`).
+
+Chaque tentative d’envoi, même pour une adresse inconnue, est admise
+atomiquement par destinataire et par usage. Le délai minimal est de
+60 secondes (`MKVIP_AUTH_EMAIL_COOLDOWN_SECONDS=60`) et le plafond de
+5 demandes dans une fenêtre horaire
+(`MKVIP_AUTH_EMAIL_MAX_PER_HOUR=5`). Le destinataire est indexé par un HMAC
+SHA-256, jamais par son adresse en clair, dans les compteurs de limitation.
+
+## Tester les emails avec Mailpit
+
+Après `docker compose up --build`, ouvrir l’application sur
+<http://localhost:5173> et Mailpit sur <http://localhost:8025>. Le relais SMTP
+local est `mailpit:1025` et n’expédie aucun message vers Internet.
+
+1. Inscrire `investor@example.com`, ouvrir le premier email dans Mailpit et
+   suivre son lien de vérification.
+2. Se connecter, se déconnecter puis demander une réinitialisation depuis
+   l’écran de connexion.
+3. Ouvrir le second email dans Mailpit, suivre son lien et choisir un nouveau
+   mot de passe.
+4. Confirmer qu’une ancienne session ne résout plus `GET /api/v1/auth/me` et
+   que le nouveau mot de passe permet la connexion.
+
+Les liens locaux ciblent `MKVIP_PUBLIC_APP_URL=http://localhost:5173`.
+
+## Migration du premier compte vérifié
 
 La migration v0.9 crée un propriétaire système inactif et lui rattache toutes
-les entreprises historiques. Lors de la toute première inscription, une
-transaction verrouille ce propriétaire, transfère toutes ses entreprises au
-premier compte humain puis supprime le compte système. Les inscriptions
-suivantes commencent avec un univers vide. Le scénario de migration et la
-concurrence entre deux premières inscriptions sont validés sur PostgreSQL 17
-dans l’intégration continue.
+les entreprises historiques. Lors de la toute première vérification d’adresse,
+une transaction verrouille ce propriétaire, transfère toutes ses entreprises
+au premier compte humain vérifié puis supprime le compte système. Une
+inscription abandonnée ou non vérifiée ne peut donc pas revendiquer ces
+données. Les comptes vérifiés suivants commencent avec un univers vide. Le
+scénario de migration et la concurrence entre deux premières vérifications
+sont validés sur PostgreSQL 17.
 
-## Fonctions différées
+## Configuration de production et limites
 
-La vérification d’adresse email, la réinitialisation du mot de passe,
-l’authentification multifacteur et la limitation de débit au niveau de
-l’infrastructure ne font pas partie de v0.9. Depuis la version 0.9.1,
-l’Analyste IA dispose toutefois d’un quota quotidien et d’un cache persistant
-isolés par utilisateur. Les imports Yahoo disposent également d’une admission
-locale par utilisateur et par entreprise ; une limite partagée entre plusieurs
-instances reste à fournir par l’infrastructure.
+Les valeurs Compose conviennent uniquement au développement local. En
+production :
+
+- servir frontend et API exclusivement en HTTPS et imposer
+  `MKVIP_SESSION_COOKIE_SECURE=true` ;
+- remplacer `MKVIP_AUTH_EMAIL_HASH_SECRET` par un secret HMAC fort, aléatoire,
+  unique à l’environnement et géré hors du dépôt ;
+- utiliser un relais SMTP authentifié, renseigner
+  `MKVIP_SMTP_USERNAME`/`MKVIP_SMTP_PASSWORD` et activer
+  `MKVIP_SMTP_STARTTLS=true` ;
+- configurer `MKVIP_PUBLIC_APP_URL` avec l’origine HTTPS publique exacte.
+
+L’authentification multifacteur et la limitation de débit globale au niveau de
+l’infrastructure restent différées. Depuis v0.9.1, l’Analyste IA dispose d’un
+quota quotidien et d’un cache persistant isolés par utilisateur. Les imports
+Yahoo disposent aussi d’une admission locale par utilisateur et par
+entreprise ; une limite partagée entre plusieurs instances reste à fournir par
+l’infrastructure.

@@ -468,7 +468,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
     expect(
-      screen.getByText("Version 0.9 Comptes personnels"),
+      screen.getByText("Version 0.10 Comptes personnels"),
     ).toBeInTheDocument();
   });
 

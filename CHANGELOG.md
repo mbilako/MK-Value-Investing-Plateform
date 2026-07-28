@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.10.0 - 2026-07-28
+
+### Added
+
+- Vérification de l’adresse email obligatoire avant la première connexion.
+- Réinitialisation du mot de passe avec révocation de toutes les sessions du
+  compte.
+- Prévisualisation locale des emails de vérification et de réinitialisation
+  dans Mailpit.
+
+### Changed
+
+- Le premier compte humain vérifié reprend atomiquement les entreprises
+  historiques ; une simple inscription non vérifiée ne revendique plus ces
+  données.
+
+### Security
+
+- Jetons de vérification et de réinitialisation aléatoires, à usage unique et
+  conservés en base uniquement sous forme d’empreinte.
+- Réponses génériques identiques pour les demandes d’inscription, de renvoi et
+  de réinitialisation afin de ne pas révéler l’existence ou l’état d’un compte.
+- Délai minimal et plafond horaire admis atomiquement pour chaque destinataire
+  et chaque type d’email, y compris sous requêtes concurrentes.
+
 ## 0.9.1 - 2026-07-27
 
 ### Added
