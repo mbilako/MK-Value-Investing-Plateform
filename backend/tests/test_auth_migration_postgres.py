@@ -86,14 +86,14 @@ def test_auth_migration_assigns_existing_companies_to_legacy_owner() -> None:
     assert companies == [(LEGACY_OWNER_ID, "AI.PA")]
 
 
-async def register_first_accounts_concurrently() -> None:
+async def register_concurrently_then_verify_bob_first() -> None:
     engine = create_async_engine(POSTGRES_URL)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     settings = Settings(database_url=POSTGRES_URL, _env_file=None)
     async with factory() as alice_session, factory() as bob_session:
         alice = AuthService(alice_session, settings)
         bob = AuthService(bob_session, settings)
-        await asyncio.gather(
+        alice_dispatch, bob_dispatch = await asyncio.gather(
             alice.register(
                 RegisterRequest(
                     email="alice@example.com",
@@ -107,6 +107,10 @@ async def register_first_accounts_concurrently() -> None:
                 )
             ),
         )
+        assert alice_dispatch is not None
+        assert bob_dispatch is not None
+        await bob.verify_email(bob_dispatch.token)
+        await alice.verify_email(alice_dispatch.token)
     await engine.dispose()
 
 
@@ -114,11 +118,11 @@ async def register_first_accounts_concurrently() -> None:
     POSTGRES_URL is None,
     reason="PostgreSQL migration database is not configured.",
 )
-def test_concurrent_first_registrations_claim_legacy_companies_once() -> None:
+def test_first_verified_account_claims_legacy_companies_once() -> None:
     reset_to_populated_v08()
     run_alembic("head")
 
-    asyncio.run(register_first_accounts_concurrently())
+    asyncio.run(register_concurrently_then_verify_bob_first())
 
     users = asyncio.run(
         execute(
@@ -148,8 +152,5 @@ def test_concurrent_first_registrations_claim_legacy_companies_once() -> None:
     ]
     assert system_users == []
     assert len(companies) == 1
-    assert companies[0][0] in {
-        "alice@example.com",
-        "bob@example.com",
-    }
+    assert companies[0][0] == "bob@example.com"
     assert companies[0][1] == "AI.PA"

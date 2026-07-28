@@ -1,24 +1,25 @@
+import asyncio
+from datetime import timedelta
+
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from sqlalchemy import select
 
-TRUSTED_ORIGIN_HEADERS = {"Origin": "http://localhost:5173"}
+from mkvip.models.user import UserOrm
+from tests.auth_helpers import (
+    TRUSTED_ORIGIN_HEADERS,
+    RecordingEmailSender,
+    register_and_verify_user,
+    register_pending_user,
+    register_verify_and_login_user,
+)
 
-
-def register_user(
-    client: TestClient,
-    email: str = "alice@example.com",
-) -> Response:
-    response = client.post(
-        "/api/v1/auth/register",
-        headers=TRUSTED_ORIGIN_HEADERS,
-        json={
-            "email": email,
-            "password": "correct horse battery",
-        },
+GENERIC_MESSAGE = {
+    "message": (
+        "Si cette adresse peut être inscrite, "
+        "un email de vérification a été envoyé."
     )
-    assert response.status_code == 201
-    return response
+}
 
 
 def set_session_token(client: TestClient, token: str) -> None:
@@ -37,31 +38,208 @@ def contains_input_key(value: object) -> bool:
     return False
 
 
-def test_register_sets_secure_server_session(
+def test_registration_returns_pending_message_without_cookie(
     database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+    email_sender: RecordingEmailSender,
 ) -> None:
     response = database_client.post(
         "/api/v1/auth/register",
+        json={
+            "email": "investor@example.com",
+            "password": "correct horse battery",
+        },
+        headers=trusted_origin_headers,
+    )
+
+    assert response.status_code == 202
+    assert "mkvip_session" not in response.cookies
+    assert response.json() == GENERIC_MESSAGE
+    assert email_sender.messages[0][:2] == (
+        "email_verification",
+        "investor@example.com",
+    )
+
+
+def test_duplicate_pending_and_verified_registration_share_generic_response(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    api_clock,
+) -> None:
+    token = register_pending_user(database_client, email_sender)
+    duplicate_pending = database_client.post(
+        "/api/v1/auth/register",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={
+            "email": " ALICE@EXAMPLE.COM ",
+            "password": "another correct password",
+        },
+    )
+    assert duplicate_pending.status_code == 202
+    assert duplicate_pending.json() == GENERIC_MESSAGE
+    assert len(email_sender.messages) == 1
+
+    assert database_client.post(
+        "/api/v1/auth/verify-email",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={"token": token},
+    ).status_code == 204
+    api_clock.advance(timedelta(seconds=61))
+    duplicate_verified = database_client.post(
+        "/api/v1/auth/register",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={
+            "email": "alice@example.com",
+            "password": "third correct password",
+        },
+    )
+    assert duplicate_verified.status_code == 202
+    assert duplicate_verified.json() == GENERIC_MESSAGE
+    assert len(email_sender.messages) == 1
+
+
+def test_verification_returns_204_then_consumed_token_returns_400(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+) -> None:
+    token = register_pending_user(database_client, email_sender)
+
+    first = database_client.post(
+        "/api/v1/auth/verify-email",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={"token": token},
+    )
+    consumed = database_client.post(
+        "/api/v1/auth/verify-email",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={"token": token},
+    )
+    invalid = database_client.post(
+        "/api/v1/auth/verify-email",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={"token": "x" * 32},
+    )
+
+    assert first.status_code == 204
+    assert consumed.status_code == 400
+    assert invalid.status_code == 400
+
+
+def test_expired_verification_returns_410(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    api_clock,
+) -> None:
+    token = register_pending_user(database_client, email_sender)
+    api_clock.advance(timedelta(hours=24, seconds=1))
+
+    response = database_client.post(
+        "/api/v1/auth/verify-email",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={"token": token},
+    )
+
+    assert response.status_code == 410
+
+
+def test_unverified_login_returns_403_only_for_correct_password(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+) -> None:
+    register_pending_user(database_client, email_sender)
+
+    correct = database_client.post(
+        "/api/v1/auth/login",
         headers=TRUSTED_ORIGIN_HEADERS,
         json={
             "email": "alice@example.com",
             "password": "correct horse battery",
         },
     )
-    assert response.status_code == 201
-    assert response.json()["email"] == "alice@example.com"
-    cookie = response.headers["set-cookie"]
-    assert "mkvip_session=" in cookie
-    assert "HttpOnly" in cookie
-    assert "SameSite=strict" in cookie
-    assert "Path=/api" in cookie
-    assert "Max-Age=2592000" in cookie
+    wrong = database_client.post(
+        "/api/v1/auth/login",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={"email": "alice@example.com", "password": "wrong-password"},
+    )
+
+    assert correct.status_code == 403
+    assert correct.json() == {
+        "detail": "Vérifie ton adresse email avant de te connecter."
+    }
+    assert wrong.status_code == 401
+
+
+def test_resend_issues_fresh_token_for_active_pending_account(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    api_clock,
+) -> None:
+    first = register_pending_user(database_client, email_sender)
+    api_clock.advance(timedelta(seconds=61))
+
+    response = database_client.post(
+        "/api/v1/auth/resend-verification",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={"email": " ALICE@EXAMPLE.COM "},
+    )
+
+    assert response.status_code == 202
+    assert response.json() == GENERIC_MESSAGE
+    assert len(email_sender.messages) == 2
+    assert email_sender.messages[-1][2] != first
+
+
+def test_resend_is_generic_without_delivery_for_ineligible_and_limited(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    api_clock,
+    database_session_factory,
+) -> None:
+    register_and_verify_user(database_client, email_sender, "verified@example.com")
+    register_pending_user(database_client, email_sender, "inactive@example.com")
+
+    async def deactivate_user() -> None:
+        async with database_session_factory() as session:
+            user = await session.scalar(
+                select(UserOrm).where(
+                    UserOrm.email == "inactive@example.com"
+                )
+            )
+            assert user is not None
+            user.is_active = False
+            await session.commit()
+
+    asyncio.run(deactivate_user())
+    baseline = len(email_sender.messages)
+    cases = [
+        "unknown@example.com",
+        "verified@example.com",
+        "inactive@example.com",
+    ]
+    for email in cases:
+        api_clock.advance(timedelta(seconds=61))
+        response = database_client.post(
+            "/api/v1/auth/resend-verification",
+            headers=TRUSTED_ORIGIN_HEADERS,
+            json={"email": email},
+        )
+        assert response.status_code == 202
+        assert response.json() == GENERIC_MESSAGE
+    limited = database_client.post(
+        "/api/v1/auth/resend-verification",
+        headers=TRUSTED_ORIGIN_HEADERS,
+        json={"email": "inactive@example.com"},
+    )
+    assert limited.status_code == 202
+    assert limited.json() == GENERIC_MESSAGE
+    assert len(email_sender.messages) == baseline
 
 
 def test_me_and_logout_follow_cookie_lifecycle(
     database_client: TestClient,
+    email_sender: RecordingEmailSender,
 ) -> None:
-    register_user(database_client)
+    register_verify_and_login_user(database_client, email_sender)
     assert database_client.get("/api/v1/auth/me").status_code == 200
     assert (
         database_client.post(
@@ -75,9 +253,9 @@ def test_me_and_logout_follow_cookie_lifecycle(
 
 def test_successful_login_returns_user_and_new_session(
     database_client: TestClient,
+    email_sender: RecordingEmailSender,
 ) -> None:
-    register_user(database_client)
-    database_client.cookies.clear()
+    register_and_verify_user(database_client, email_sender)
 
     response = database_client.post(
         "/api/v1/auth/login",
@@ -95,9 +273,9 @@ def test_successful_login_returns_user_and_new_session(
 
 def test_login_errors_never_reveal_account_state(
     database_client: TestClient,
+    email_sender: RecordingEmailSender,
 ) -> None:
-    register_user(database_client)
-    database_client.cookies.clear()
+    register_and_verify_user(database_client, email_sender)
     unknown = database_client.post(
         "/api/v1/auth/login",
         headers=TRUSTED_ORIGIN_HEADERS,
@@ -110,26 +288,6 @@ def test_login_errors_never_reveal_account_state(
     )
     assert unknown.status_code == wrong.status_code == 401
     assert unknown.json() == wrong.json() == {"detail": "Identifiants invalides."}
-
-
-def test_duplicate_registration_returns_conflict(
-    database_client: TestClient,
-) -> None:
-    register_user(database_client)
-
-    response = database_client.post(
-        "/api/v1/auth/register",
-        headers=TRUSTED_ORIGIN_HEADERS,
-        json={
-            "email": " ALICE@EXAMPLE.COM ",
-            "password": "another correct password",
-        },
-    )
-
-    assert response.status_code == 409
-    assert response.json() == {
-        "detail": "Cette adresse email est déjà inscrite."
-    }
 
 
 @pytest.mark.parametrize("path", ["register", "login"])
@@ -157,26 +315,12 @@ def test_invalid_auth_password_is_not_reflected_in_validation_error(
     )
 
 
-def test_auth_response_bodies_never_expose_raw_session_tokens(
+def test_auth_response_body_never_exposes_raw_session_token(
     database_client: TestClient,
+    email_sender: RecordingEmailSender,
 ) -> None:
-    registration = register_user(database_client)
-    registration_token = registration.cookies.get("mkvip_session")
-    assert registration_token is not None
-    assert "token" not in registration.json()
-    assert registration_token not in registration.text
-
-    database_client.cookies.clear()
-    login = database_client.post(
-        "/api/v1/auth/login",
-        headers=TRUSTED_ORIGIN_HEADERS,
-        json={
-            "email": "alice@example.com",
-            "password": "correct horse battery",
-        },
-    )
+    login = register_verify_and_login_user(database_client, email_sender)
     login_token = login.cookies.get("mkvip_session")
-    assert login.status_code == 200
     assert login_token is not None
     assert "token" not in login.json()
     assert login_token not in login.text
@@ -193,22 +337,10 @@ def test_auth_response_bodies_never_expose_raw_session_tokens(
 def test_session_cookie_secure_flag_follows_settings(
     database_client: TestClient,
     expected_secure: bool,
+    email_sender: RecordingEmailSender,
 ) -> None:
-    registration = register_user(database_client)
-    registration_attributes = registration.headers["set-cookie"].split("; ")
-    assert ("Secure" in registration_attributes) is expected_secure
-
-    database_client.cookies.clear()
-    login = database_client.post(
-        "/api/v1/auth/login",
-        headers=TRUSTED_ORIGIN_HEADERS,
-        json={
-            "email": "alice@example.com",
-            "password": "correct horse battery",
-        },
-    )
+    login = register_verify_and_login_user(database_client, email_sender)
     login_attributes = login.headers["set-cookie"].split("; ")
-    assert login.status_code == 200
     assert ("Secure" in login_attributes) is expected_secure
 
     logout = database_client.post(
@@ -225,22 +357,11 @@ def test_session_cookie_secure_flag_follows_settings(
     [{"session_duration_days": 7}],
     indirect=True,
 )
-def test_non_default_duration_aligns_registration_and_login_cookies(
+def test_non_default_duration_controls_login_cookie(
     database_client: TestClient,
+    email_sender: RecordingEmailSender,
 ) -> None:
-    registration = register_user(database_client)
-    assert "Max-Age=604800" in registration.headers["set-cookie"]
-
-    database_client.cookies.clear()
-    login = database_client.post(
-        "/api/v1/auth/login",
-        headers=TRUSTED_ORIGIN_HEADERS,
-        json={
-            "email": "alice@example.com",
-            "password": "correct horse battery",
-        },
-    )
-    assert login.status_code == 200
+    login = register_verify_and_login_user(database_client, email_sender)
     assert "Max-Age=604800" in login.headers["set-cookie"]
 
 
@@ -255,7 +376,7 @@ def test_allows_trusted_write_origin(
             "password": "correct horse battery",
         },
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
 
 
 def test_rejects_untrusted_write_origin(
@@ -303,13 +424,14 @@ def test_logout_clears_cookie_without_valid_session(
 
 def test_logout_revokes_only_the_presented_session(
     database_client: TestClient,
+    email_sender: RecordingEmailSender,
 ) -> None:
-    registration = register_user(database_client)
-    first_token = registration.cookies.get("mkvip_session")
+    first_login = register_verify_and_login_user(database_client, email_sender)
+    first_token = first_login.cookies.get("mkvip_session")
     assert first_token is not None
 
     database_client.cookies.clear()
-    login = database_client.post(
+    second_login = database_client.post(
         "/api/v1/auth/login",
         headers=TRUSTED_ORIGIN_HEADERS,
         json={
@@ -317,8 +439,8 @@ def test_logout_revokes_only_the_presented_session(
             "password": "correct horse battery",
         },
     )
-    second_token = login.cookies.get("mkvip_session")
-    assert login.status_code == 200
+    second_token = second_login.cookies.get("mkvip_session")
+    assert second_login.status_code == 200
     assert second_token is not None
 
     set_session_token(database_client, first_token)

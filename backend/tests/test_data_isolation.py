@@ -13,6 +13,10 @@ from mkvip.models.scoring import ScoringAnalysisOrm
 from mkvip.models.user import UserOrm
 from mkvip.models.valuation import ValuationAnalysisOrm
 from mkvip.repositories.sqlalchemy import SqlAlchemyCompanyRepository
+from tests.auth_helpers import (
+    RecordingEmailSender,
+    register_verify_and_login_user,
+)
 
 COMPANY_PAYLOAD = {
     "name": "Air Liquide",
@@ -55,14 +59,6 @@ VALUATION_PAYLOAD = {
         "margin_of_safety": 0.25,
     },
 }
-
-
-def register_user(client: TestClient, email: str) -> None:
-    response = client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "password": "correct horse battery"},
-    )
-    assert response.status_code == 201
 
 
 def create_company(client: TestClient, ticker: str) -> str:
@@ -118,6 +114,7 @@ def test_business_routes_require_a_session(
 
 def test_two_users_cannot_discover_or_use_each_others_company(
     database_client: TestClient,
+    email_sender: RecordingEmailSender,
 ) -> None:
     database_client.headers["Origin"] = "http://localhost:5173"
 
@@ -128,12 +125,20 @@ def test_two_users_cannot_discover_or_use_each_others_company(
             raise AssertionError("Foreign company must be rejected before AI call")
 
     app.dependency_overrides[get_ai_analyst_provider] = lambda: UnusedAIProvider()
-    register_user(database_client, "alice@example.com")
+    register_verify_and_login_user(
+        database_client,
+        email_sender,
+        "alice@example.com",
+    )
     alice_company = create_company(database_client, ticker="AI.PA")
     alice_cookie = database_client.cookies["mkvip_session"]
 
     database_client.cookies.clear()
-    register_user(database_client, "bob@example.com")
+    register_verify_and_login_user(
+        database_client,
+        email_sender,
+        "bob@example.com",
+    )
     assert database_client.get("/api/v1/companies").json() == []
     dashboard = database_client.get("/api/v1/dashboard").json()
     assert dashboard["summary"]["companies"] == 0
@@ -185,9 +190,14 @@ def test_two_users_cannot_discover_or_use_each_others_company(
 
 def test_explicit_foreign_valuation_is_hidden(
     database_client: TestClient,
+    email_sender: RecordingEmailSender,
 ) -> None:
     database_client.headers["Origin"] = "http://localhost:5173"
-    register_user(database_client, "alice@example.com")
+    register_verify_and_login_user(
+        database_client,
+        email_sender,
+        "alice@example.com",
+    )
     alice_company = create_company(database_client, ticker="AI.PA")
     assert database_client.post(
         f"/api/v1/companies/{alice_company}/financials",
@@ -200,7 +210,11 @@ def test_explicit_foreign_valuation_is_hidden(
     assert alice_valuation.status_code == 201
 
     database_client.cookies.clear()
-    register_user(database_client, "bob@example.com")
+    register_verify_and_login_user(
+        database_client,
+        email_sender,
+        "bob@example.com",
+    )
     bob_company = create_company(database_client, ticker="OR.PA")
     assert database_client.post(
         f"/api/v1/companies/{bob_company}/financials",

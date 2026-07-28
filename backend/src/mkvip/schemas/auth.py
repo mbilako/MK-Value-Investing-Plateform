@@ -26,6 +26,23 @@ class LoginRequest(BaseModel):
         return normalize_email(str(value))
 
 
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def normalized_email(cls, value: EmailStr) -> str:
+        return normalize_email(str(value))
+
+
+class TokenRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+
+
+class MessageRead(BaseModel):
+    message: str
+
+
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
