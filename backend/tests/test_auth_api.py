@@ -22,6 +22,14 @@ GENERIC_MESSAGE = {
 }
 
 
+GENERIC_PASSWORD_RESET_MESSAGE = {
+    "message": (
+        "Si cette adresse est inscrite, "
+        "un email de r\u00e9initialisation a \u00e9t\u00e9 envoy\u00e9."
+    )
+}
+
+
 def set_session_token(client: TestClient, token: str) -> None:
     client.cookies.clear()
     client.cookies.set("mkvip_session", token, path="/api")
@@ -233,6 +241,253 @@ def test_resend_is_generic_without_delivery_for_ineligible_and_limited(
     assert limited.status_code == 202
     assert limited.json() == GENERIC_MESSAGE
     assert len(email_sender.messages) == baseline
+
+
+def test_password_reset_request_is_generic_and_sends_known_account_email(
+    database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+    email_sender: RecordingEmailSender,
+) -> None:
+    register_and_verify_user(
+        database_client,
+        email_sender,
+        "investor@example.com",
+    )
+
+    response = database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "investor@example.com"},
+        headers=trusted_origin_headers,
+    )
+
+    assert response.status_code == 202
+    assert response.json() == GENERIC_PASSWORD_RESET_MESSAGE
+    assert email_sender.messages[-1][:2] == (
+        "password_reset",
+        "investor@example.com",
+    )
+
+
+def test_password_reset_request_is_generic_without_unknown_account_email(
+    database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+    email_sender: RecordingEmailSender,
+) -> None:
+    response = database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "unknown@example.com"},
+        headers=trusted_origin_headers,
+    )
+
+    assert response.status_code == 202
+    assert response.json() == GENERIC_PASSWORD_RESET_MESSAGE
+    assert email_sender.messages == []
+
+
+def test_password_reset_request_is_generic_for_inactive_and_limited_accounts(
+    database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+    email_sender: RecordingEmailSender,
+    database_session_factory,
+) -> None:
+    register_and_verify_user(
+        database_client,
+        email_sender,
+        "inactive@example.com",
+    )
+
+    async def deactivate_user() -> None:
+        async with database_session_factory() as session:
+            user = await session.scalar(
+                select(UserOrm).where(
+                    UserOrm.email == "inactive@example.com"
+                )
+            )
+            assert user is not None
+            user.is_active = False
+            await session.commit()
+
+    asyncio.run(deactivate_user())
+    baseline = len(email_sender.messages)
+    inactive = database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "inactive@example.com"},
+        headers=trusted_origin_headers,
+    )
+    limited = database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "inactive@example.com"},
+        headers=trusted_origin_headers,
+    )
+
+    assert inactive.status_code == limited.status_code == 202
+    assert inactive.json() == limited.json() == GENERIC_PASSWORD_RESET_MESSAGE
+    assert len(email_sender.messages) == baseline
+
+    register_and_verify_user(
+        database_client,
+        email_sender,
+        "limited@example.com",
+    )
+    first = database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "limited@example.com"},
+        headers=trusted_origin_headers,
+    )
+    after_first = len(email_sender.messages)
+    limited = database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "limited@example.com"},
+        headers=trusted_origin_headers,
+    )
+
+    assert first.status_code == limited.status_code == 202
+    assert first.json() == limited.json() == GENERIC_PASSWORD_RESET_MESSAGE
+    assert len(email_sender.messages) == after_first
+    assert email_sender.messages[-1][:2] == (
+        "password_reset",
+        "limited@example.com",
+    )
+
+
+def test_password_reset_confirmation_changes_password_and_revokes_session(
+    database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+    email_sender: RecordingEmailSender,
+) -> None:
+    login = register_verify_and_login_user(database_client, email_sender)
+    assert login.cookies.get("mkvip_session") is not None
+    request = database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "alice@example.com"},
+        headers=trusted_origin_headers,
+    )
+    assert request.status_code == 202
+    reset_token = email_sender.messages[-1][2]
+
+    confirmation = database_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": reset_token,
+            "password": "new correct horse battery",
+        },
+        headers=trusted_origin_headers,
+    )
+
+    assert confirmation.status_code == 204
+    assert "set-cookie" not in confirmation.headers
+    assert database_client.get("/api/v1/auth/me").status_code == 401
+    old_password = database_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "alice@example.com",
+            "password": "correct horse battery",
+        },
+        headers=trusted_origin_headers,
+    )
+    new_password = database_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "alice@example.com",
+            "password": "new correct horse battery",
+        },
+        headers=trusted_origin_headers,
+    )
+    assert old_password.status_code == 401
+    assert new_password.status_code == 200
+
+
+def test_password_reset_confirmation_rejects_invalid_and_consumed_tokens(
+    database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+    email_sender: RecordingEmailSender,
+) -> None:
+    register_and_verify_user(database_client, email_sender)
+    database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "alice@example.com"},
+        headers=trusted_origin_headers,
+    )
+    reset_token = email_sender.messages[-1][2]
+    first = database_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": reset_token, "password": "new secure password"},
+        headers=trusted_origin_headers,
+    )
+    consumed = database_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": reset_token, "password": "another secure password"},
+        headers=trusted_origin_headers,
+    )
+    invalid = database_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": "x" * 32, "password": "another secure password"},
+        headers=trusted_origin_headers,
+    )
+
+    assert first.status_code == 204
+    assert consumed.status_code == 400
+    assert invalid.status_code == 400
+
+
+def test_password_reset_confirmation_rejects_verification_token(
+    database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+    email_sender: RecordingEmailSender,
+) -> None:
+    verification_token = register_pending_user(database_client, email_sender)
+
+    response = database_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": verification_token,
+            "password": "new secure password",
+        },
+        headers=trusted_origin_headers,
+    )
+
+    assert response.status_code == 400
+
+
+def test_password_reset_confirmation_rejects_expired_token(
+    database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+    email_sender: RecordingEmailSender,
+    api_clock,
+) -> None:
+    register_and_verify_user(database_client, email_sender)
+    database_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "alice@example.com"},
+        headers=trusted_origin_headers,
+    )
+    reset_token = email_sender.messages[-1][2]
+    api_clock.advance(timedelta(minutes=30, seconds=1))
+
+    response = database_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": reset_token, "password": "new secure password"},
+        headers=trusted_origin_headers,
+    )
+
+    assert response.status_code == 410
+
+
+def test_password_reset_confirmation_rejects_noncompliant_password(
+    database_client: TestClient,
+    trusted_origin_headers: dict[str, str],
+) -> None:
+    submitted_secret = "too-short"
+
+    response = database_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": "x" * 32, "password": submitted_secret},
+        headers=trusted_origin_headers,
+    )
+
+    assert response.status_code == 422
+    assert submitted_secret not in response.text
+    assert not contains_input_key(response.json())
 
 
 def test_me_and_logout_follow_cookie_lifecycle(

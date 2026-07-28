@@ -170,6 +170,24 @@ class AuthService:
             AuthActionPurpose.PASSWORD_RESET,
         )
 
+    async def reset_password(self, raw_token: str, password: str) -> None:
+        now = _as_utc(self._now())
+        try:
+            token, user = await self._consume_action_token(
+                raw_token,
+                AuthActionPurpose.PASSWORD_RESET,
+                now,
+            )
+            user.password_hash = hash_password(password)
+            token.consumed_at = now
+            await self._session.execute(
+                delete(SessionOrm).where(SessionOrm.user_id == user.id)
+            )
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
+
     async def verify_email(self, raw_token: str) -> None:
         now = _as_utc(self._now())
         try:
@@ -348,20 +366,18 @@ class AuthService:
 
             user = await self._session.scalar(
                 select(UserOrm)
-                .where(UserOrm.email == email)
+                .where(
+                    UserOrm.email == email,
+                    UserOrm.is_active.is_(True),
+                    UserOrm.is_system.is_(False),
+                )
                 .with_for_update()
             )
             if (
                 user is None
-                or not user.is_active
-                or user.is_system
                 or (
                     purpose == AuthActionPurpose.EMAIL_VERIFICATION
                     and user.email_verified_at is not None
-                )
-                or (
-                    purpose == AuthActionPurpose.PASSWORD_RESET
-                    and user.email_verified_at is None
                 )
             ):
                 await self._session.commit()
@@ -388,6 +404,34 @@ class AuthService:
 
         self._log_email_request(purpose, "dispatched")
         return dispatch
+
+    async def _consume_action_token(
+        self,
+        raw_token: str,
+        purpose: AuthActionPurpose,
+        now: datetime,
+    ) -> tuple[AuthActionTokenOrm, UserOrm]:
+        token = await self._session.scalar(
+            select(AuthActionTokenOrm)
+            .where(
+                AuthActionTokenOrm.token_hash == digest_action_token(raw_token),
+                AuthActionTokenOrm.purpose == purpose.value,
+            )
+            .with_for_update()
+        )
+        if token is None or token.consumed_at is not None:
+            raise AuthTokenInvalidError
+        if _as_utc(token.expires_at) <= now:
+            raise AuthTokenExpiredError
+
+        user = await self._session.scalar(
+            select(UserOrm)
+            .where(UserOrm.id == token.user_id)
+            .with_for_update()
+        )
+        if user is None or user.is_system:
+            raise AuthTokenInvalidError
+        return token, user
 
     async def _admit_email_request(
         self,

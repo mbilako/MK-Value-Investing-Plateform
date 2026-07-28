@@ -34,6 +34,7 @@ from mkvip.schemas.auth import (
     EmailRequest,
     LoginRequest,
     MessageRead,
+    PasswordResetConfirmRequest,
     RegisterRequest,
     TokenRequest,
     UserRead,
@@ -50,6 +51,14 @@ GENERIC_VERIFICATION_MESSAGE = MessageRead(
     message=(
         "Si cette adresse peut être inscrite, "
         "un email de vérification a été envoyé."
+    )
+)
+
+
+GENERIC_PASSWORD_RESET_MESSAGE = MessageRead(
+    message=(
+        "Si cette adresse est inscrite, "
+        "un email de r\u00e9initialisation a \u00e9t\u00e9 envoy\u00e9."
     )
 )
 
@@ -84,6 +93,25 @@ def _schedule_verification_email(
         deliver_email_safely,
         partial(
             sender.send_verification_email,
+            dispatch.recipient,
+            dispatch.token,
+        ),
+        purpose=dispatch.purpose.value,
+        user_id=dispatch.user_id,
+    )
+
+
+def _schedule_password_reset_email(
+    background_tasks: BackgroundTasks,
+    sender: EmailSender,
+    dispatch: EmailDispatch | None,
+) -> None:
+    if dispatch is None:
+        return
+    background_tasks.add_task(
+        deliver_email_safely,
+        partial(
+            sender.send_password_reset_email,
             dispatch.recipient,
             dispatch.token,
         ),
@@ -160,6 +188,44 @@ async def verify_email(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Jeton de vérification invalide.",
+        ) from error
+
+
+@router.post(
+    "/password-reset/request",
+    response_model=MessageRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_password_reset(
+    payload: EmailRequest,
+    background_tasks: BackgroundTasks,
+    service: Service,
+    sender: Sender,
+) -> MessageRead:
+    dispatch = await service.request_password_reset(str(payload.email))
+    _schedule_password_reset_email(background_tasks, sender, dispatch)
+    return GENERIC_PASSWORD_RESET_MESSAGE
+
+
+@router.post(
+    "/password-reset/confirm",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def confirm_password_reset(
+    payload: PasswordResetConfirmRequest,
+    service: Service,
+) -> None:
+    try:
+        await service.reset_password(payload.token, payload.password)
+    except AuthTokenExpiredError as error:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Ce jeton de r\u00e9initialisation a expir\u00e9.",
+        ) from error
+    except AuthTokenInvalidError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Jeton de r\u00e9initialisation invalide.",
         ) from error
 
 

@@ -39,6 +39,11 @@ class TokenRequest(BaseModel):
     token: str = Field(min_length=32, max_length=256)
 
 
+class PasswordResetConfirmRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+    password: str = Field(min_length=12, max_length=128)
+
+
 class MessageRead(BaseModel):
     message: str
 

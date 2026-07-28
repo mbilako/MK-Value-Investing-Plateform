@@ -348,6 +348,164 @@ async def test_password_reset_admission_is_generic_and_uses_reset_purpose(
 
 
 @pytest.mark.asyncio
+async def test_password_reset_changes_password_and_revokes_all_sessions(
+    session: AsyncSession,
+    auth_service: AuthService,
+    clock: MutableClock,
+) -> None:
+    user = UserOrm(
+        email="investor@example.com",
+        password_hash=hash_password("old password value"),
+        email_verified_at=clock(),
+    )
+    session.add(user)
+    await session.flush()
+    session.add_all(
+        [
+            SessionOrm(
+                user_id=user.id,
+                token_hash="a" * 64,
+                created_at=clock(),
+                expires_at=clock() + timedelta(days=30),
+            ),
+            SessionOrm(
+                user_id=user.id,
+                token_hash="b" * 64,
+                created_at=clock(),
+                expires_at=clock() + timedelta(days=30),
+            ),
+        ]
+    )
+    await session.commit()
+
+    dispatch = await auth_service.request_password_reset(user.email)
+    assert dispatch is not None
+    await auth_service.reset_password(
+        dispatch.token,
+        "new correct horse battery",
+    )
+
+    await session.refresh(user)
+    assert verify_password(
+        "new correct horse battery",
+        user.password_hash,
+    )
+    assert not verify_password("old password value", user.password_hash)
+    assert await session.scalar(select(func.count(SessionOrm.id))) == 0
+
+
+@pytest.mark.asyncio
+async def test_password_reset_request_rejects_unknown_and_inactive_accounts(
+    auth_service: AuthService,
+    session: AsyncSession,
+) -> None:
+    inactive = UserOrm(
+        email="inactive@example.com",
+        password_hash=hash_password("correct horse battery"),
+        email_verified_at=FIXED_NOW,
+        is_active=False,
+    )
+    session.add(inactive)
+    await session.commit()
+
+    assert await auth_service.request_password_reset("unknown@example.com") is None
+    assert await auth_service.request_password_reset(inactive.email) is None
+
+
+@pytest.mark.asyncio
+async def test_password_reset_keeps_unverified_account_unverified(
+    auth_service: AuthService,
+    session: AsyncSession,
+) -> None:
+    user = UserOrm(
+        email="pending@example.com",
+        password_hash=hash_password("old password value"),
+    )
+    session.add(user)
+    await session.commit()
+
+    dispatch = await auth_service.request_password_reset(user.email)
+    assert dispatch is not None
+    await auth_service.reset_password(dispatch.token, "new secure password")
+
+    await session.refresh(user)
+    assert user.email_verified_at is None
+    assert verify_password("new secure password", user.password_hash)
+
+
+@pytest.mark.asyncio
+async def test_password_reset_rejects_expired_token(
+    auth_service: AuthService,
+    session: AsyncSession,
+    clock: MutableClock,
+) -> None:
+    user = await persist_verified_user(session)
+    dispatch = await auth_service.request_password_reset(user.email)
+    assert dispatch is not None
+    clock.advance(timedelta(minutes=30, seconds=1))
+
+    with pytest.raises(auth_service_module.AuthTokenExpiredError):
+        await auth_service.reset_password(dispatch.token, "new secure password")
+
+    await session.refresh(user)
+    assert verify_password("correct horse battery", user.password_hash)
+
+
+@pytest.mark.asyncio
+async def test_password_reset_rejects_consumed_token(
+    auth_service: AuthService,
+    session: AsyncSession,
+) -> None:
+    user = await persist_verified_user(session)
+    dispatch = await auth_service.request_password_reset(user.email)
+    assert dispatch is not None
+    await auth_service.reset_password(dispatch.token, "new secure password")
+
+    with pytest.raises(auth_service_module.AuthTokenInvalidError):
+        await auth_service.reset_password(dispatch.token, "another secure password")
+
+    await session.refresh(user)
+    assert verify_password("new secure password", user.password_hash)
+
+
+@pytest.mark.asyncio
+async def test_password_reset_rejects_verification_token(
+    auth_service: AuthService,
+) -> None:
+    dispatch = await auth_service.register(
+        RegisterRequest(
+            email="pending@example.com",
+            password="correct horse battery",
+        )
+    )
+    assert dispatch is not None
+
+    with pytest.raises(auth_service_module.AuthTokenInvalidError):
+        await auth_service.reset_password(dispatch.token, "new secure password")
+
+
+@pytest.mark.asyncio
+async def test_new_password_reset_invalidates_previous_token(
+    auth_service: AuthService,
+    session: AsyncSession,
+    clock: MutableClock,
+) -> None:
+    user = await persist_verified_user(session)
+    first = await auth_service.request_password_reset(user.email)
+    assert first is not None
+    clock.advance(timedelta(seconds=61))
+    second = await auth_service.request_password_reset(user.email)
+    assert second is not None
+
+    with pytest.raises(auth_service_module.AuthTokenInvalidError):
+        await auth_service.reset_password(first.token, "first secure password")
+    await auth_service.reset_password(second.token, "second secure password")
+
+    await session.refresh(user)
+    assert verify_password("second secure password", user.password_hash)
+
+
+@pytest.mark.asyncio
 async def test_email_request_logs_never_include_recipient_or_account_state(
     auth_service: AuthService,
     caplog: pytest.LogCaptureFixture,
