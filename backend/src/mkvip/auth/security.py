@@ -1,10 +1,10 @@
-from dataclasses import dataclass
 import hashlib
 import hmac
+from dataclasses import dataclass
 from secrets import token_urlsafe
 
-from pydantic import SecretStr
 from pwdlib import PasswordHash
+from pydantic import SecretStr
 
 _password_hash = PasswordHash.recommended()
 DUMMY_PASSWORD_HASH = _password_hash.hash("mkvip-dummy-password")
