@@ -256,6 +256,51 @@ async def test_duplicate_registration_keeps_password_and_replaces_token(
 
 
 @pytest.mark.asyncio
+async def test_registration_hashes_candidate_password_for_new_and_existing_accounts(
+    auth_service: AuthService,
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    password_hashes: list[str] = []
+
+    def record_password_hash(password: str) -> str:
+        password_hashes.append(password)
+        return f"candidate-hash-{len(password_hashes)}"
+
+    monkeypatch.setattr(auth_service_module, "hash_password", record_password_hash)
+    existing = UserOrm(
+        email="existing@example.com",
+        password_hash="existing-password-hash",
+    )
+    session.add(existing)
+    await session.commit()
+
+    new_dispatch = await auth_service.register(
+        RegisterRequest(
+            email="new@example.com",
+            password="new candidate password",
+        )
+    )
+    existing_dispatch = await auth_service.register(
+        RegisterRequest(
+            email=existing.email,
+            password="existing candidate password",
+        )
+    )
+
+    assert new_dispatch is not None
+    assert existing_dispatch is not None
+    new_user = await session.get(UserOrm, new_dispatch.user_id)
+    assert new_user is not None
+    assert new_user.password_hash == "candidate-hash-1"
+    assert existing.password_hash == "existing-password-hash"
+    assert password_hashes == [
+        "new candidate password",
+        "existing candidate password",
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("email", "is_active", "is_system"),
     [
@@ -319,6 +364,25 @@ async def test_resend_is_generic_for_unknown_verified_inactive_and_limited(
     fresh = await auth_service.resend_verification("pending@example.com")
     assert fresh is not None
     assert fresh.token != pending.token
+
+
+@pytest.mark.asyncio
+async def test_email_cooldown_spans_hour_window_boundary(
+    auth_service: AuthService,
+    clock: MutableClock,
+) -> None:
+    clock.value = datetime(2026, 7, 26, 10, 59, 50, tzinfo=UTC)
+    first = await auth_service.register(
+        RegisterRequest(
+            email="boundary@example.com",
+            password="correct horse battery",
+        )
+    )
+    assert first is not None
+
+    clock.advance(timedelta(seconds=11))
+
+    assert await auth_service.resend_verification("boundary@example.com") is None
 
 
 @pytest.mark.asyncio
@@ -431,6 +495,81 @@ async def test_password_reset_keeps_unverified_account_unverified(
     await session.refresh(user)
     assert user.email_verified_at is None
     assert verify_password("new secure password", user.password_hash)
+
+
+@pytest.mark.asyncio
+async def test_verification_refuses_user_deactivated_after_issuance(
+    auth_service: AuthService,
+    session: AsyncSession,
+) -> None:
+    company = await persist_legacy_company(session)
+    dispatch = await auth_service.register(
+        RegisterRequest(
+            email="inactive-after-issue@example.com",
+            password="correct horse battery",
+        )
+    )
+    assert dispatch is not None
+    user = await session.get(UserOrm, dispatch.user_id)
+    assert user is not None
+    user.is_active = False
+    await session.commit()
+
+    with pytest.raises(auth_service_module.AuthTokenInvalidError):
+        await auth_service.verify_email(dispatch.token)
+
+    await session.refresh(user)
+    await session.refresh(company)
+    token = await session.scalar(
+        select(AuthActionTokenOrm).where(
+            AuthActionTokenOrm.token_hash
+            == auth_service_module.digest_action_token(dispatch.token)
+        )
+    )
+    assert token is not None
+    assert token.consumed_at is None
+    assert user.email_verified_at is None
+    assert company.owner_id == LEGACY_OWNER_ID
+    assert await session.scalar(
+        select(UserOrm).where(UserOrm.is_system.is_(True))
+    ) is not None
+
+
+@pytest.mark.asyncio
+async def test_password_reset_refuses_user_deactivated_after_issuance(
+    auth_service: AuthService,
+    session: AsyncSession,
+    clock: MutableClock,
+) -> None:
+    user = await persist_verified_user(session)
+    session_row = SessionOrm(
+        user_id=user.id,
+        token_hash="d" * 64,
+        created_at=clock(),
+        expires_at=clock() + timedelta(days=1),
+    )
+    session.add(session_row)
+    await session.commit()
+    session_id = session_row.id
+    dispatch = await auth_service.request_password_reset(user.email)
+    assert dispatch is not None
+    user.is_active = False
+    await session.commit()
+
+    with pytest.raises(auth_service_module.AuthTokenInvalidError):
+        await auth_service.reset_password(dispatch.token, "new secure password")
+
+    await session.refresh(user)
+    token = await session.scalar(
+        select(AuthActionTokenOrm).where(
+            AuthActionTokenOrm.token_hash
+            == auth_service_module.digest_action_token(dispatch.token)
+        )
+    )
+    assert token is not None
+    assert token.consumed_at is None
+    assert verify_password("correct horse battery", user.password_hash)
+    assert await session.get(SessionOrm, session_id) is not None
 
 
 @pytest.mark.asyncio
@@ -616,6 +755,73 @@ async def test_successful_issuance_cleans_only_stale_auth_rows(
     assert old_expired.digest not in hashes
     assert old_consumed.digest not in hashes
     assert recent_expired.digest in hashes
+
+
+@pytest.mark.asyncio
+async def test_auth_cleanup_is_strictly_bounded_and_progressive(
+    auth_service: AuthService,
+    session: AsyncSession,
+) -> None:
+    batch_size = auth_service_module.AUTH_CLEANUP_BATCH_SIZE
+    owner = await persist_verified_user(session, email="cleanup-owner@example.com")
+    stale_rate_rows = [
+        AuthEmailRateLimitOrm(
+            recipient_hash=f"{index:064x}",
+            purpose=AuthActionPurpose.EMAIL_VERIFICATION.value,
+            window_start=FIXED_NOW - timedelta(hours=25),
+            request_count=1,
+            last_requested_at=FIXED_NOW - timedelta(hours=25),
+        )
+        for index in range(batch_size + 2)
+    ]
+    stale_token_rows = [
+        AuthActionTokenOrm(
+            user_id=owner.id,
+            purpose=AuthActionPurpose.PASSWORD_RESET.value,
+            token_hash=f"{index + 10_000:064x}",
+            created_at=FIXED_NOW - timedelta(days=9),
+            expires_at=FIXED_NOW - timedelta(days=8),
+        )
+        for index in range(batch_size + 2)
+    ]
+    session.add_all([*stale_rate_rows, *stale_token_rows])
+    await session.commit()
+
+    first = await auth_service.register(
+        RegisterRequest(
+            email="cleanup-first@example.com",
+            password="correct horse battery",
+        )
+    )
+    assert first is not None
+    assert await session.scalar(
+        select(func.count(AuthEmailRateLimitOrm.id)).where(
+            AuthEmailRateLimitOrm.window_start < FIXED_NOW - timedelta(hours=24)
+        )
+    ) == 2
+    assert await session.scalar(
+        select(func.count(AuthActionTokenOrm.id)).where(
+            AuthActionTokenOrm.expires_at < FIXED_NOW - timedelta(days=7)
+        )
+    ) == 2
+
+    second = await auth_service.register(
+        RegisterRequest(
+            email="cleanup-second@example.com",
+            password="correct horse battery",
+        )
+    )
+    assert second is not None
+    assert await session.scalar(
+        select(func.count(AuthEmailRateLimitOrm.id)).where(
+            AuthEmailRateLimitOrm.window_start < FIXED_NOW - timedelta(hours=24)
+        )
+    ) == 0
+    assert await session.scalar(
+        select(func.count(AuthActionTokenOrm.id)).where(
+            AuthActionTokenOrm.expires_at < FIXED_NOW - timedelta(days=7)
+        )
+    ) == 0
 
 
 @pytest.mark.asyncio

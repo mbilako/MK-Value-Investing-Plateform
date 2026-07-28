@@ -1,5 +1,6 @@
 import html
 import smtplib
+import ssl
 from collections.abc import Callable
 from email.message import EmailMessage
 from typing import Protocol
@@ -80,7 +81,7 @@ class SmtpEmailSender:
             timeout=self._timeout_seconds,
         ) as smtp:
             if self._starttls:
-                smtp.starttls()
+                smtp.starttls(context=ssl.create_default_context())
             if self._username and self._password:
                 smtp.login(self._username, self._password)
             smtp.send_message(message)

@@ -86,6 +86,25 @@ def test_account_recovery_migration_verifies_existing_humans_only() -> None:
         ("auth_action_tokens",),
         ("auth_email_rate_limits",),
     ]
+    assert asyncio.run(
+        execute(
+            """
+            SELECT indexname
+            FROM pg_indexes
+            WHERE schemaname = 'public'
+              AND indexname IN (
+                'ix_auth_action_tokens_consumed_at',
+                'ix_auth_action_tokens_expires_at',
+                'ix_auth_email_rate_limits_window_start'
+              )
+            ORDER BY indexname
+            """
+        )
+    ) == [
+        ("ix_auth_action_tokens_consumed_at",),
+        ("ix_auth_action_tokens_expires_at",),
+        ("ix_auth_email_rate_limits_window_start",),
+    ]
 
     run_alembic("downgrade", "20260727_0007")
     columns_after_downgrade = asyncio.run(

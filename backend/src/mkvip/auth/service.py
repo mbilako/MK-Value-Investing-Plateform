@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, or_, select, text, update
+from sqlalchemy import case, delete, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +33,7 @@ from mkvip.models.user import UserOrm
 from mkvip.schemas.auth import LoginRequest, RegisterRequest, UserRead
 
 INVALID_CREDENTIALS_MESSAGE = "Identifiants invalides."
+AUTH_CLEANUP_BATCH_SIZE = 100
 logger = logging.getLogger(__name__)
 
 
@@ -114,6 +115,7 @@ class AuthService:
                 )
                 return None
 
+            candidate_password_hash = hash_password(payload.password)
             user = await self._session.scalar(
                 select(UserOrm)
                 .where(UserOrm.email == email)
@@ -122,7 +124,7 @@ class AuthService:
             if user is None:
                 user = UserOrm(
                     email=email,
-                    password_hash=hash_password(payload.password),
+                    password_hash=candidate_password_hash,
                 )
                 self._session.add(user)
                 await self._session.flush()
@@ -192,28 +194,11 @@ class AuthService:
     async def verify_email(self, raw_token: str) -> None:
         now = _as_utc(self._now())
         try:
-            token_row = await self._session.scalar(
-                select(AuthActionTokenOrm)
-                .where(
-                    AuthActionTokenOrm.token_hash
-                    == digest_action_token(raw_token),
-                    AuthActionTokenOrm.purpose
-                    == AuthActionPurpose.EMAIL_VERIFICATION.value,
-                )
-                .with_for_update()
+            token_row, user = await self._consume_action_token(
+                raw_token,
+                AuthActionPurpose.EMAIL_VERIFICATION,
+                now,
             )
-            if token_row is None or token_row.consumed_at is not None:
-                raise AuthTokenInvalidError
-            if _as_utc(token_row.expires_at) <= now:
-                raise AuthTokenExpiredError
-
-            user = await self._session.scalar(
-                select(UserOrm)
-                .where(UserOrm.id == token_row.user_id)
-                .with_for_update()
-            )
-            if user is None or user.is_system:
-                raise AuthTokenInvalidError
 
             user.email_verified_at = now
             token_row.consumed_at = now
@@ -412,11 +397,31 @@ class AuthService:
         purpose: AuthActionPurpose,
         now: datetime,
     ) -> tuple[AuthActionTokenOrm, UserOrm]:
+        token_hash = digest_action_token(raw_token)
+        user_id = await self._session.scalar(
+            select(AuthActionTokenOrm.user_id)
+            .where(
+                AuthActionTokenOrm.token_hash == token_hash,
+                AuthActionTokenOrm.purpose == purpose.value,
+            )
+        )
+        if user_id is None:
+            raise AuthTokenInvalidError
+
+        user = await self._session.scalar(
+            select(UserOrm)
+            .where(UserOrm.id == user_id)
+            .with_for_update()
+        )
+        if user is None or user.is_system or not user.is_active:
+            raise AuthTokenInvalidError
+
         token = await self._session.scalar(
             select(AuthActionTokenOrm)
             .where(
-                AuthActionTokenOrm.token_hash == digest_action_token(raw_token),
+                AuthActionTokenOrm.token_hash == token_hash,
                 AuthActionTokenOrm.purpose == purpose.value,
+                AuthActionTokenOrm.user_id == user.id,
             )
             .with_for_update()
         )
@@ -424,14 +429,6 @@ class AuthService:
             raise AuthTokenInvalidError
         if _as_utc(token.expires_at) <= now:
             raise AuthTokenExpiredError
-
-        user = await self._session.scalar(
-            select(UserOrm)
-            .where(UserOrm.id == token.user_id)
-            .with_for_update()
-        )
-        if user is None or user.is_system:
-            raise AuthTokenInvalidError
         return token, user
 
     async def _admit_email_request(
@@ -470,17 +467,31 @@ class AuthService:
             .where(
                 AuthEmailRateLimitOrm.recipient_hash == recipient_hash,
                 AuthEmailRateLimitOrm.purpose == purpose.value,
-                AuthEmailRateLimitOrm.window_start == window_start,
-                AuthEmailRateLimitOrm.request_count
-                < self._settings.auth_email_max_per_hour,
                 AuthEmailRateLimitOrm.last_requested_at
                 <= now
                 - timedelta(
                     seconds=self._settings.auth_email_cooldown_seconds
                 ),
+                or_(
+                    AuthEmailRateLimitOrm.window_start < window_start,
+                    (
+                        AuthEmailRateLimitOrm.window_start == window_start
+                    )
+                    & (
+                        AuthEmailRateLimitOrm.request_count
+                        < self._settings.auth_email_max_per_hour
+                    ),
+                ),
             )
             .values(
-                request_count=AuthEmailRateLimitOrm.request_count + 1,
+                window_start=window_start,
+                request_count=case(
+                    (
+                        AuthEmailRateLimitOrm.window_start == window_start,
+                        AuthEmailRateLimitOrm.request_count + 1,
+                    ),
+                    else_=1,
+                ),
                 last_requested_at=now,
             )
             .returning(AuthEmailRateLimitOrm.id)
@@ -522,22 +533,50 @@ class AuthService:
         )
 
     async def _cleanup_old_auth_rows(self, now: datetime) -> None:
-        await self._session.execute(
-            delete(AuthEmailRateLimitOrm).where(
-                AuthEmailRateLimitOrm.window_start
-                < now - timedelta(hours=24)
+        stale_rate_ids = list(
+            await self._session.scalars(
+                select(AuthEmailRateLimitOrm.id)
+                .where(
+                    AuthEmailRateLimitOrm.window_start
+                    < now - timedelta(hours=24)
+                )
+                .order_by(
+                    AuthEmailRateLimitOrm.window_start,
+                    AuthEmailRateLimitOrm.id,
+                )
+                .limit(AUTH_CLEANUP_BATCH_SIZE)
+                .with_for_update(skip_locked=True)
             )
         )
-        await self._session.execute(
-            delete(AuthActionTokenOrm).where(
-                or_(
-                    AuthActionTokenOrm.expires_at
-                    < now - timedelta(days=7),
-                    AuthActionTokenOrm.consumed_at
-                    < now - timedelta(days=7),
+        if stale_rate_ids:
+            await self._session.execute(
+                delete(AuthEmailRateLimitOrm).where(
+                    AuthEmailRateLimitOrm.id.in_(stale_rate_ids)
                 )
             )
+
+        stale_token_ids = list(
+            await self._session.scalars(
+                select(AuthActionTokenOrm.id)
+                .where(
+                    or_(
+                        AuthActionTokenOrm.expires_at
+                        < now - timedelta(days=7),
+                        AuthActionTokenOrm.consumed_at
+                        < now - timedelta(days=7),
+                    )
+                )
+                .order_by(AuthActionTokenOrm.id)
+                .limit(AUTH_CLEANUP_BATCH_SIZE)
+                .with_for_update(skip_locked=True)
+            )
         )
+        if stale_token_ids:
+            await self._session.execute(
+                delete(AuthActionTokenOrm).where(
+                    AuthActionTokenOrm.id.in_(stale_token_ids)
+                )
+            )
 
     @staticmethod
     def _log_email_request(
@@ -565,12 +604,11 @@ def _is_email_rate_limit_window_collision(
     )
     return any(
         getattr(source, "constraint_name", None)
-        == "uq_auth_email_rate_limit_window"
+        == "uq_auth_email_rate_limit_recipient_purpose"
         for source in constraint_sources
         if source is not None
     ) or str(original).casefold() == (
         "unique constraint failed: "
         "auth_email_rate_limits.recipient_hash, "
-        "auth_email_rate_limits.purpose, "
-        "auth_email_rate_limits.window_start"
+        "auth_email_rate_limits.purpose"
     )

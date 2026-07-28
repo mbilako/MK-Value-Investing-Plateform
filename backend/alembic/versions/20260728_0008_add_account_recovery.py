@@ -53,6 +53,11 @@ def upgrade() -> None:
         ["expires_at"],
     )
     op.create_index(
+        "ix_auth_action_tokens_consumed_at",
+        "auth_action_tokens",
+        ["consumed_at"],
+    )
+    op.create_index(
         "ix_auth_action_tokens_user_purpose_consumed",
         "auth_action_tokens",
         ["user_id", "purpose", "consumed_at"],
@@ -74,19 +79,28 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "recipient_hash",
             "purpose",
-            "window_start",
-            name="uq_auth_email_rate_limit_window",
+            name="uq_auth_email_rate_limit_recipient_purpose",
         ),
+    )
+    op.create_index(
+        "ix_auth_email_rate_limits_window_start",
+        "auth_email_rate_limits",
+        ["window_start"],
     )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_auth_email_rate_limits_window_start",
+        table_name="auth_email_rate_limits",
+    )
     op.drop_table("auth_email_rate_limits")
     op.drop_index(
         "ix_auth_action_tokens_user_purpose_consumed",
         table_name="auth_action_tokens",
     )
     op.drop_index("ix_auth_action_tokens_expires_at", table_name="auth_action_tokens")
+    op.drop_index("ix_auth_action_tokens_consumed_at", table_name="auth_action_tokens")
     op.drop_index("ix_auth_action_tokens_token_hash", table_name="auth_action_tokens")
     op.drop_table("auth_action_tokens")
     op.drop_column("users", "email_verified_at")

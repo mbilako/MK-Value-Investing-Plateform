@@ -1,4 +1,5 @@
 import logging
+import ssl
 from email.message import EmailMessage
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ class RecordingSmtp:
         self.connection = (host, port, timeout)
         self.messages: list[EmailMessage] = []
         self.started_tls = False
+        self.tls_context: ssl.SSLContext | None = None
         self.login_credentials: tuple[str, str] | None = None
 
     def __enter__(self):
@@ -19,8 +21,9 @@ class RecordingSmtp:
     def __exit__(self, *_args: object) -> None:
         return None
 
-    def starttls(self) -> None:
+    def starttls(self, *, context: ssl.SSLContext) -> None:
         self.started_tls = True
+        self.tls_context = context
 
     def login(self, username: str, password: str) -> None:
         self.login_credentials = (username, password)
@@ -88,6 +91,9 @@ def test_smtp_sender_uses_tls_and_credentials_without_exposing_password() -> Non
 
     smtp = smtp_instances[0]
     assert smtp.started_tls is True
+    assert smtp.tls_context is not None
+    assert smtp.tls_context.check_hostname is True
+    assert smtp.tls_context.verify_mode == ssl.CERT_REQUIRED
     assert smtp.login_credentials == ("mailer", password)
     assert password not in repr(sender)
     assert password not in smtp.messages[0].as_string()

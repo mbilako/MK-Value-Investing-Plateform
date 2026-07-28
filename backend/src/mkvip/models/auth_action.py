@@ -50,7 +50,10 @@ class AuthActionTokenOrm(Base):
         nullable=False,
         index=True,
     )
-    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        index=True,
+    )
 
 
 class AuthEmailRateLimitOrm(Base):
@@ -63,8 +66,7 @@ class AuthEmailRateLimitOrm(Base):
         UniqueConstraint(
             "recipient_hash",
             "purpose",
-            "window_start",
-            name="uq_auth_email_rate_limit_window",
+            name="uq_auth_email_rate_limit_recipient_purpose",
         ),
     )
 
@@ -74,6 +76,7 @@ class AuthEmailRateLimitOrm(Base):
     window_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+        index=True,
     )
     request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_requested_at: Mapped[datetime] = mapped_column(
