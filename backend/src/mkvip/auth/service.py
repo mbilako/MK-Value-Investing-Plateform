@@ -4,7 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import delete, or_, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mkvip.auth.security import (
@@ -440,35 +441,51 @@ class AuthService:
         now: datetime,
     ) -> bool:
         window_start = now.replace(minute=0, second=0, microsecond=0)
-        rate_row = await self._session.scalar(
-            select(AuthEmailRateLimitOrm)
+        if (
+            self._session.get_bind().dialect.name == "sqlite"
+            and not self._session.in_transaction()
+        ):
+            await self._session.execute(text("BEGIN"))
+        try:
+            async with self._session.begin_nested():
+                self._session.add(
+                    AuthEmailRateLimitOrm(
+                        recipient_hash=recipient_hash,
+                        purpose=purpose.value,
+                        window_start=window_start,
+                        request_count=0,
+                        last_requested_at=now
+                        - timedelta(
+                            seconds=self._settings.auth_email_cooldown_seconds
+                        ),
+                    )
+                )
+                await self._session.flush()
+        except IntegrityError as error:
+            if not _is_email_rate_limit_window_collision(error):
+                raise
+
+        result = await self._session.execute(
+            update(AuthEmailRateLimitOrm)
             .where(
                 AuthEmailRateLimitOrm.recipient_hash == recipient_hash,
                 AuthEmailRateLimitOrm.purpose == purpose.value,
                 AuthEmailRateLimitOrm.window_start == window_start,
+                AuthEmailRateLimitOrm.request_count
+                < self._settings.auth_email_max_per_hour,
+                AuthEmailRateLimitOrm.last_requested_at
+                <= now
+                - timedelta(
+                    seconds=self._settings.auth_email_cooldown_seconds
+                ),
             )
-            .with_for_update()
-        )
-        if rate_row is None:
-            self._session.add(
-                AuthEmailRateLimitOrm(
-                    recipient_hash=recipient_hash,
-                    purpose=purpose.value,
-                    window_start=window_start,
-                    request_count=1,
-                    last_requested_at=now,
-                )
+            .values(
+                request_count=AuthEmailRateLimitOrm.request_count + 1,
+                last_requested_at=now,
             )
-            return True
-
-        admitted = (
-            rate_row.request_count < self._settings.auth_email_max_per_hour
-            and now - _as_utc(rate_row.last_requested_at)
-            >= timedelta(seconds=self._settings.auth_email_cooldown_seconds)
+            .returning(AuthEmailRateLimitOrm.id)
         )
-        rate_row.request_count += 1
-        rate_row.last_requested_at = now
-        return admitted
+        return result.scalar_one_or_none() is not None
 
     async def _issue_action_email(
         self,
@@ -534,3 +551,26 @@ class AuthService:
                 "outcome": outcome,
             },
         )
+
+
+def _is_email_rate_limit_window_collision(
+    error: IntegrityError,
+) -> bool:
+    original = error.orig
+    constraint_sources = (
+        getattr(original, "diag", None),
+        original,
+        getattr(original, "__cause__", None),
+        getattr(original, "__context__", None),
+    )
+    return any(
+        getattr(source, "constraint_name", None)
+        == "uq_auth_email_rate_limit_window"
+        for source in constraint_sources
+        if source is not None
+    ) or str(original).casefold() == (
+        "unique constraint failed: "
+        "auth_email_rate_limits.recipient_hash, "
+        "auth_email_rate_limits.purpose, "
+        "auth_email_rate_limits.window_start"
+    )
