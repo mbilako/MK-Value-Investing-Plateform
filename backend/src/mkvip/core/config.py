@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=("../.env.local", ".env.local", ".env"),
         env_prefix="MKVIP_",
+        populate_by_name=True,
         extra="ignore",
     )
 

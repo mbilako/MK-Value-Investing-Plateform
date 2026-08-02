@@ -49,7 +49,10 @@ def test_production_configuration_rejects_development_defaults() -> None:
         Settings(_env_file=None, _secrets_dir=None, environment="production")
 
 
-def test_production_configuration_accepts_explicit_secure_values() -> None:
+def test_production_configuration_accepts_explicit_secure_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     settings = Settings(
         _env_file=None,
         _secrets_dir=None,
@@ -69,6 +72,8 @@ def test_production_configuration_accepts_explicit_secure_values() -> None:
     )
 
     assert settings.environment == "production"
+    assert settings.openai_api_key is not None
+    assert settings.openai_api_key.get_secret_value() == "test-openai-key"
 
 
 def test_production_configuration_reads_docker_secret_files(
