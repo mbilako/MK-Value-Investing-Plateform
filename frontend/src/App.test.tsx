@@ -530,6 +530,119 @@ describe("MK-VIP authentication", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Vue d’ensemble")).not.toBeInTheDocument();
   });
+
+  it("updates a company from the investment universe", async () => {
+    const user = userEvent.setup();
+    const updateCompany = vi.fn().mockResolvedValue({
+      id: "company-1",
+      name: "Air Liquide SA",
+      ticker: "AI.PA",
+      exchange: "Euronext Paris",
+      country: "France",
+      currency: "EUR",
+      status: "pending",
+    });
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => [
+            {
+              id: "company-1",
+              name: "Air Liquide",
+              ticker: "AI.PA",
+              exchange: "Euronext Paris",
+              country: "France",
+              currency: "EUR",
+              status: "pending",
+            },
+          ],
+          updateCompany,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Modifier ou retirer Air Liquide" }),
+    );
+    const name = screen.getByLabelText("Nom de l’entreprise");
+    await user.clear(name);
+    await user.type(name, "Air Liquide SA");
+    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(updateCompany).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({ name: "Air Liquide SA" }),
+    );
+    expect(await screen.findByText("Air Liquide SA")).toBeInTheDocument();
+  });
+
+  it("adds selected CAC Next 20 constituents without entering a ticker", async () => {
+    const user = userEvent.setup();
+    const addIndexCompanies = vi.fn().mockResolvedValue({
+      created: [
+        {
+          id: "company-abivax",
+          name: "ABIVAX",
+          ticker: "ABVX.PA",
+          exchange: "Euronext Paris",
+          country: "France",
+          currency: "EUR",
+          status: "pending",
+          isin: "FR0012333284",
+          index_memberships: ["CACNEXT20"],
+        },
+      ],
+      existing: [],
+      errors: [],
+    });
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "CACNEXT20",
+              name: "CAC Next 20",
+              isin: "QS0010989109",
+              market: "XPAR",
+              provider: "Euronext",
+            },
+          ],
+          getIndex: async () => ({
+            code: "CACNEXT20",
+            name: "CAC Next 20",
+            isin: "QS0010989109",
+            market: "XPAR",
+            provider: "Euronext",
+            as_of: "31/07/2026",
+            source_url: "https://live.euronext.com/example",
+            constituents: [
+              {
+                name: "ABIVAX",
+                isin: "FR0012333284",
+                mic: "XPAR",
+                trading_location: "Euronext Paris",
+                country: "France",
+              },
+            ],
+          }),
+          addIndexCompanies,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    await user.click(await screen.findByRole("checkbox"));
+    await user.click(
+      screen.getByRole("button", { name: "Ajouter 1 à l’univers" }),
+    );
+
+    expect(addIndexCompanies).toHaveBeenCalledWith([
+      expect.objectContaining({ name: "ABIVAX", index_code: "CACNEXT20" }),
+    ]);
+    expect(await screen.findByText("ABVX.PA")).toBeInTheDocument();
+  });
 });
 
 describe("MK-VIP dashboard", () => {
@@ -919,7 +1032,7 @@ describe("MK-VIP dashboard", () => {
     );
     await user.click(
       screen.getByRole("button", {
-        name: "Importer automatiquement avec Yahoo Finance",
+        name: "Importer depuis les sources gratuites",
       }),
     );
 

@@ -335,7 +335,7 @@ def test_automatic_import_has_one_end_to_end_deadline(
 
     assert response.status_code == 504
     assert response.json()["detail"] == (
-        "L’import Yahoo Finance a dépassé le délai autorisé."
+        "L’import automatique a dépassé le délai autorisé."
     )
 
 

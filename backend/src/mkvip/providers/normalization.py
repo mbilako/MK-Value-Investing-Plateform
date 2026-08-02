@@ -4,6 +4,7 @@ from mkvip.providers.base import (
     FinancialDataProvider,
     ProviderBalanceSheet,
     ProviderCashFlow,
+    ProviderDataError,
     ProviderDataIncompleteError,
     ProviderIncomeStatement,
 )
@@ -17,6 +18,36 @@ def _to_millions(value: float) -> float:
 
 
 async def load_latest_snapshot(
+    provider: FinancialDataProvider,
+    ticker: str,
+    *,
+    isin: str | None = None,
+    lei: str | None = None,
+) -> FinancialSnapshotCreate:
+    candidates = getattr(provider, "providers", None)
+    if candidates is not None:
+        errors: list[str] = []
+        for candidate in candidates:
+            try:
+                candidate_ticker = ticker
+                resolver = getattr(candidate, "resolve_identifier", None)
+                if resolver is not None:
+                    candidate_ticker = await resolver(
+                        ticker,
+                        isin=isin,
+                        lei=lei,
+                    )
+                return await _load_latest_snapshot(candidate, candidate_ticker)
+            except ProviderDataError as error:
+                errors.append(f"{candidate.name}: {error}")
+        raise ProviderDataIncompleteError(
+            "Aucune source publique n'a fourni un exercice annuel complet. "
+            + " | ".join(errors)
+        )
+    return await _load_latest_snapshot(provider, ticker)
+
+
+async def _load_latest_snapshot(
     provider: FinancialDataProvider,
     ticker: str,
 ) -> FinancialSnapshotCreate:

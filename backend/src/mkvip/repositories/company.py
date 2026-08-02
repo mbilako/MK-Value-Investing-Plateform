@@ -6,7 +6,7 @@ from typing import Protocol
 from mkvip.analysis.financials import FinancialAnalysis
 from mkvip.analysis.scoring import ScoringAnalysis
 from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
-from mkvip.schemas.company import CompanyCreate, CompanyRead
+from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyUpdate
 from mkvip.schemas.financial import FinancialAnalysisRead, FinancialSnapshotCreate
 from mkvip.schemas.scoring import ScoringAnalysisRead
 from mkvip.schemas.valuation import ValuationAnalysisRead
@@ -17,13 +17,23 @@ class DuplicateTickerError(Exception):
 
 
 class CompanyRepository(Protocol):
-    async def list(self) -> list[CompanyRead]: ...
+    async def list(self, *, include_archived: bool = False) -> list[CompanyRead]: ...
 
     async def get_by_ticker(self, ticker: str) -> CompanyRead | None: ...
 
     async def get_by_id(self, company_id: uuid.UUID) -> CompanyRead | None: ...
 
     async def create(self, company: CompanyCreate) -> CompanyRead: ...
+
+    async def update(
+        self, company_id: uuid.UUID, company: CompanyUpdate
+    ) -> CompanyRead | None: ...
+
+    async def archive(self, company_id: uuid.UUID) -> CompanyRead | None: ...
+
+    async def restore(self, company_id: uuid.UUID) -> CompanyRead | None: ...
+
+    async def delete(self, company_id: uuid.UUID) -> bool: ...
 
     async def get_financial_analysis(
         self,

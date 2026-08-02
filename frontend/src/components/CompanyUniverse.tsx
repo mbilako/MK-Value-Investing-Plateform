@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FileUp, Inbox, Plus, Search } from "lucide-react";
+import { FileUp, Inbox, Plus, Search, Settings2 } from "lucide-react";
 
 import type { Company } from "../api/client";
 
@@ -9,6 +9,7 @@ interface CompanyUniverseProps {
   onImport: () => void;
   onFinancialImport: (company: Company) => void;
   onAnalysis: (company: Company) => void;
+  onManage: (company: Company) => void;
 }
 
 export function CompanyUniverse({
@@ -17,6 +18,7 @@ export function CompanyUniverse({
   onImport,
   onFinancialImport,
   onAnalysis,
+  onManage,
 }: CompanyUniverseProps) {
   const [query, setQuery] = useState("");
   const scoreFor = (company: Company) =>
@@ -55,32 +57,51 @@ export function CompanyUniverse({
           <div className="company-table__body">
             {filteredCompanies.map((company) => (
               <div className="company-table__row" role="row" key={company.id}>
-                <strong>{company.name}</strong>
+                <div className="company-name-cell">
+                  <strong>{company.name}</strong>
+                  {company.index_memberships?.length ? (
+                    <span className="index-badges">
+                      {company.index_memberships.map((index) => (
+                        <small key={index}>{index.replace("CACNEXT20", "CAC Next 20")}</small>
+                      ))}
+                    </span>
+                  ) : null}
+                </div>
                 <span className="ticker">{company.ticker}</span>
                 <span>{company.exchange}</span>
                 <span>{company.country}</span>
-                {company.status === "pending" ? (
+                <div className="company-row-actions">
+                  {company.status === "pending" ? (
+                    <button
+                      className="company-action"
+                      onClick={() => onFinancialImport(company)}
+                      aria-label={`Importer les données financières pour ${company.name}`}
+                    >
+                      <FileUp aria-hidden="true" size={16} />
+                      Ajouter les données
+                    </button>
+                  ) : (
+                    <button
+                      className="company-status company-status--ready company-analysis"
+                      onClick={() => onAnalysis(company)}
+                      aria-label={`Voir l’analyse financière de ${company.name}`}
+                    >
+                      <span className="status-dot" aria-hidden="true" />
+                      <span>Analyse prête</span>
+                      {scoreFor(company) != null && (
+                        <strong>MK Score {scoreFor(company)}</strong>
+                      )}
+                    </button>
+                  )}
                   <button
-                    className="company-action"
-                    onClick={() => onFinancialImport(company)}
-                    aria-label={`Importer les données financières pour ${company.name}`}
+                    className="row-manage"
+                    onClick={() => onManage(company)}
+                    aria-label={`Modifier ou retirer ${company.name}`}
+                    title="Modifier ou retirer"
                   >
-                    <FileUp aria-hidden="true" size={16} />
-                    Ajouter les données
+                    <Settings2 aria-hidden="true" size={17} />
                   </button>
-                ) : (
-                  <button
-                    className="company-status company-status--ready company-analysis"
-                    onClick={() => onAnalysis(company)}
-                    aria-label={`Voir l’analyse financière de ${company.name}`}
-                  >
-                    <span className="status-dot" aria-hidden="true" />
-                    <span>Analyse prête</span>
-                    {scoreFor(company) != null && (
-                      <strong>MK Score {scoreFor(company)}</strong>
-                    )}
-                  </button>
-                )}
+                </div>
               </div>
             ))}
             {!filteredCompanies.length && (
@@ -94,8 +115,7 @@ export function CompanyUniverse({
             <Inbox aria-hidden="true" size={40} strokeWidth={1.5} />
             <h3>Aucune entreprise importée</h3>
             <p>
-              Ajoutez une première société pour préparer son analyse
-              fondamentale.
+              Ajoutez une première société pour préparer son analyse fondamentale.
             </p>
             <button className="button button--secondary" onClick={onImport}>
               <Plus aria-hidden="true" size={18} />

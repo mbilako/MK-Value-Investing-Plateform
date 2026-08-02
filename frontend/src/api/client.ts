@@ -6,6 +6,11 @@ export interface CompanyPayload {
   exchange: string;
   country: string;
   currency: string;
+  isin?: string | null;
+  cik?: string | null;
+  lei?: string | null;
+  provider_symbols?: Record<string, string>;
+  index_memberships?: string[];
 }
 
 export interface Company extends CompanyPayload {
@@ -14,6 +19,39 @@ export interface Company extends CompanyPayload {
   latest_mk_score?: number | null;
   latest_quality_score?: number | null;
   latest_safety_score?: number | null;
+  archived_at?: string | null;
+}
+
+export interface IndexSummary {
+  code: string;
+  name: string;
+  isin: string;
+  market: string;
+  provider: string;
+}
+
+export interface IndexConstituent {
+  name: string;
+  isin: string;
+  mic: string;
+  trading_location: string;
+  country: string;
+}
+
+export interface IndexComposition extends IndexSummary {
+  as_of: string | null;
+  source_url: string;
+  constituents: IndexConstituent[];
+}
+
+export interface IndexCompanySelection extends IndexConstituent {
+  index_code: string;
+}
+
+export interface IndexBulkAddResult {
+  created: Company[];
+  existing: Company[];
+  errors: Array<{ name: string; isin: string; detail: string }>;
 }
 
 export interface User {
@@ -317,6 +355,13 @@ export interface CompanyClient {
   getDashboard?(): Promise<Dashboard>;
   analyzeWithAI?(payload: AIAnalysisPayload): Promise<AIAnalysis>;
   createCompany(payload: CompanyPayload): Promise<Company>;
+  updateCompany(id: string, payload: Partial<CompanyPayload>): Promise<Company>;
+  archiveCompany(id: string): Promise<Company>;
+  restoreCompany(id: string): Promise<Company>;
+  deleteCompany(id: string): Promise<void>;
+  listIndices(): Promise<IndexSummary[]>;
+  getIndex(code: string): Promise<IndexComposition>;
+  addIndexCompanies(companies: IndexCompanySelection[]): Promise<IndexBulkAddResult>;
   importFinancials(
     companyId: string,
     payload: FinancialPayload,
@@ -480,6 +525,24 @@ export function createApiClient(): CompanyClient {
       request<Company>("/companies", {
         method: "POST",
         body: JSON.stringify(payload),
+      }),
+    updateCompany: (id, payload) =>
+      request<Company>(`/companies/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    archiveCompany: (id) =>
+      request<Company>(`/companies/${id}/archive`, { method: "POST" }),
+    restoreCompany: (id) =>
+      request<Company>(`/companies/${id}/restore`, { method: "POST" }),
+    deleteCompany: (id) =>
+      request<void>(`/companies/${id}`, { method: "DELETE" }),
+    listIndices: () => request<IndexSummary[]>("/indices"),
+    getIndex: (code) => request<IndexComposition>(`/indices/${code}`),
+    addIndexCompanies: (companies) =>
+      request<IndexBulkAddResult>("/indices/companies/bulk", {
+        method: "POST",
+        body: JSON.stringify({ companies }),
       }),
     importFinancials: (companyId, payload) =>
       request<FinancialAnalysis>(`/companies/${companyId}/financials`, {

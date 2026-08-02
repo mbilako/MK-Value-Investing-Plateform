@@ -142,8 +142,8 @@ export function FinancialDrawer({
               <div>
                 <h3 id="automatic-import-title">Import public automatique</h3>
                 <p>
-                  Récupère le dernier exercice annuel disponible et le
-                  normalise avant de calculer le MK Score.
+                  Recherche un exercice annuel complet parmi Yahoo Finance,
+                  SEC EDGAR et ESEF, puis le normalise avant le MK Score.
                 </p>
               </div>
               <button
@@ -153,8 +153,8 @@ export function FinancialDrawer({
                 onClick={submitAutomatically}
               >
                 {automaticSubmitting
-                  ? "Import Yahoo en cours…"
-                  : "Importer automatiquement avec Yahoo Finance"}
+                  ? "Recherche des sources en cours…"
+                  : "Importer depuis les sources gratuites"}
               </button>
             </section>
             <div className="manual-import-separator">

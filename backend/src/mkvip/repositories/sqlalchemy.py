@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import asdict
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,7 +16,12 @@ from mkvip.models.financial import FinancialSnapshotOrm
 from mkvip.models.scoring import ScoringAnalysisOrm
 from mkvip.models.valuation import ValuationAnalysisOrm
 from mkvip.repositories.company import DuplicateTickerError
-from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyStatus
+from mkvip.schemas.company import (
+    CompanyCreate,
+    CompanyRead,
+    CompanyStatus,
+    CompanyUpdate,
+)
 from mkvip.schemas.financial import (
     FinancialAnalysisRead,
     FinancialSnapshotCreate,
@@ -29,12 +35,11 @@ class SqlAlchemyCompanyRepository:
         self._session = session
         self._owner_id = owner_id
 
-    async def list(self) -> list[CompanyRead]:
-        result = await self._session.scalars(
-            select(CompanyOrm)
-            .where(CompanyOrm.owner_id == self._owner_id)
-            .order_by(CompanyOrm.name)
-        )
+    async def list(self, *, include_archived: bool = False) -> list[CompanyRead]:
+        query = select(CompanyOrm).where(CompanyOrm.owner_id == self._owner_id)
+        if not include_archived:
+            query = query.where(CompanyOrm.archived_at.is_(None))
+        result = await self._session.scalars(query.order_by(CompanyOrm.name))
         return [CompanyRead.model_validate(company) for company in result]
 
     async def get_by_ticker(self, ticker: str) -> CompanyRead | None:
@@ -70,6 +75,62 @@ class SqlAlchemyCompanyRepository:
             raise
         await self._session.refresh(record)
         return CompanyRead.model_validate(record)
+
+    async def update(
+        self, company_id: uuid.UUID, company: CompanyUpdate
+    ) -> CompanyRead | None:
+        record = await self._find_owned_company_record(company_id)
+        if record is None:
+            return None
+        changes = company.model_dump(exclude_unset=True)
+        for field in (
+            "name",
+            "ticker",
+            "exchange",
+            "country",
+            "currency",
+            "provider_symbols",
+            "index_memberships",
+        ):
+            if changes.get(field) is None:
+                changes.pop(field, None)
+        for field, value in changes.items():
+            setattr(record, field, value)
+        try:
+            await self._session.commit()
+        except IntegrityError as error:
+            await self._session.rollback()
+            if _is_owner_ticker_collision(error):
+                raise DuplicateTickerError from error
+            raise
+        await self._session.refresh(record)
+        return CompanyRead.model_validate(record)
+
+    async def archive(self, company_id: uuid.UUID) -> CompanyRead | None:
+        record = await self._find_owned_company_record(company_id)
+        if record is None:
+            return None
+        record.archived_at = datetime.now(UTC)
+        await self._session.commit()
+        await self._session.refresh(record)
+        return CompanyRead.model_validate(record)
+
+    async def restore(self, company_id: uuid.UUID) -> CompanyRead | None:
+        record = await self._find_owned_company_record(company_id)
+        if record is None:
+            return None
+        record.archived_at = None
+        await self._session.commit()
+        await self._session.refresh(record)
+        return CompanyRead.model_validate(record)
+
+    async def delete(self, company_id: uuid.UUID) -> bool:
+        record = await self._find_owned_company_record(company_id)
+        if record is None:
+            return False
+        await self._session.delete(record)
+        await self._session.commit()
+        return True
 
     async def get_financial_analysis(
         self,
@@ -283,6 +344,17 @@ class SqlAlchemyCompanyRepository:
         if company is None:
             raise PermissionError("Company is outside repository scope")
         return company
+
+    async def _find_owned_company_record(
+        self,
+        company_id: uuid.UUID,
+    ) -> CompanyOrm | None:
+        return await self._session.scalar(
+            select(CompanyOrm).where(
+                CompanyOrm.id == company_id,
+                CompanyOrm.owner_id == self._owner_id,
+            )
+        )
 
 
 def _is_owner_ticker_collision(error: IntegrityError) -> bool:

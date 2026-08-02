@@ -7,7 +7,13 @@ from datetime import UTC, datetime
 from mkvip.analysis.financials import FinancialAnalysis
 from mkvip.analysis.scoring import ScoringAnalysis
 from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
-from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyStatus
+from mkvip.repositories.company import DuplicateTickerError
+from mkvip.schemas.company import (
+    CompanyCreate,
+    CompanyRead,
+    CompanyStatus,
+    CompanyUpdate,
+)
 from mkvip.schemas.financial import (
     FinancialAnalysisRead,
     FinancialIndicatorRead,
@@ -33,8 +39,12 @@ class InMemoryCompanyRepository:
         self._valuations: list[ValuationAnalysisRead] = []
         self._scores: list[ScoringAnalysisRead] = []
 
-    async def list(self) -> list[CompanyRead]:
-        return list(self._companies.values())
+    async def list(self, *, include_archived: bool = False) -> list[CompanyRead]:
+        return [
+            company
+            for company in self._companies.values()
+            if include_archived or company.archived_at is None
+        ]
 
     async def get_by_ticker(self, ticker: str) -> CompanyRead | None:
         return self._companies.get(ticker.upper())
@@ -57,6 +67,66 @@ class InMemoryCompanyRepository:
         )
         self._companies[record.ticker] = record
         return record
+
+    async def update(
+        self, company_id: uuid.UUID, company: CompanyUpdate
+    ) -> CompanyRead | None:
+        current = await self.get_by_id(company_id)
+        if current is None:
+            return None
+        changes = company.model_dump(exclude_unset=True)
+        for field in (
+            "name",
+            "ticker",
+            "exchange",
+            "country",
+            "currency",
+            "provider_symbols",
+            "index_memberships",
+        ):
+            if changes.get(field) is None:
+                changes.pop(field, None)
+        updated = current.model_copy(update=changes)
+        if updated.ticker != current.ticker:
+            if updated.ticker in self._companies:
+                raise DuplicateTickerError
+            del self._companies[current.ticker]
+        self._companies[updated.ticker] = updated
+        return updated
+
+    async def archive(self, company_id: uuid.UUID) -> CompanyRead | None:
+        current = await self.get_by_id(company_id)
+        if current is None:
+            return None
+        updated = current.model_copy(update={"archived_at": datetime.now(UTC)})
+        self._companies[current.ticker] = updated
+        return updated
+
+    async def restore(self, company_id: uuid.UUID) -> CompanyRead | None:
+        current = await self.get_by_id(company_id)
+        if current is None:
+            return None
+        updated = current.model_copy(update={"archived_at": None})
+        self._companies[current.ticker] = updated
+        return updated
+
+    async def delete(self, company_id: uuid.UUID) -> bool:
+        current = await self.get_by_id(company_id)
+        if current is None:
+            return False
+        del self._companies[current.ticker]
+        self._financials = {
+            key: value
+            for key, value in self._financials.items()
+            if key[0] != company_id
+        }
+        self._valuations = [
+            value for value in self._valuations if value.company_id != company_id
+        ]
+        self._scores = [
+            value for value in self._scores if value.company_id != company_id
+        ]
+        return True
 
     async def list_valuation_analyses(
         self,

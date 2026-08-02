@@ -11,7 +11,11 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - comptes personnels et isolation des données par utilisateur ;
 - authentification multifacteur TOTP et gestion des sessions actives ;
 - import des entreprises et de leurs données financières annuelles ;
-- import automatique du dernier exercice public via Yahoo Finance ;
+- import automatique du dernier exercice public avec repli Yahoo Finance,
+  SEC EDGAR puis ESEF européen ;
+- explorateur CAC 40, CAC Next 20 et SBF 120 avec ajout multiple sans saisie de
+  ticker ;
+- modification, archivage ou suppression d’une entreprise dans les deux vues ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
 - valorisation par DCF, Owner Earnings, EPV, Graham et multiple de résultat ;
 - scoring global qualité, sécurité, valeur et moat quantitatif ;
@@ -44,7 +48,9 @@ Le parcours applicatif commence par un compte personnel vérifié :
 2. se connecter avec le compte vérifié ;
 3. ouvrir « Sécurité » pour configurer le MFA, conserver les codes de
    récupération et contrôler les sessions actives ;
-4. importer une entreprise ;
+4. utiliser « Explorer les indices » pour sélectionner une ou plusieurs
+   composantes du CAC 40, du CAC Next 20 ou du SBF 120, ou importer une
+   entreprise manuellement ;
 5. utiliser « Ajouter les données », puis choisir l’import public automatique
    ou la saisie manuelle d’un exercice financier normalisé ;
 6. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
@@ -96,10 +102,15 @@ Les montants du formulaire sont exprimés en millions dans la devise de
 l’entreprise. La source doit identifier le rapport annuel ou le dépôt
 réglementaire utilisé.
 
-L’import automatique utilise le ticker Yahoo Finance de l’entreprise
-(`AI.PA` pour Air Liquide), sélectionne le dernier exercice commun aux trois
-états financiers, convertit les montants en millions puis applique exactement
-le même moteur d’analyse que le formulaire manuel.
+L’import automatique essaie un snapshot annuel complet à la fois : Yahoo
+Finance en premier, SEC EDGAR pour les sociétés qui y déposent leurs comptes,
+puis ESEF/filings.xbrl.org pour les entreprises européennes disposant d’un
+ISIN ou d’un LEI. Les rapprochements ISIN–LEI proviennent de GLEIF. La source
+réellement retenue est enregistrée, les montants sont convertis en millions et
+le même moteur d’analyse est appliqué que pour le formulaire manuel. Toutes
+ces sources sont gratuites ; aucun fournisseur payant n’est requis. Les
+détails et limites figurent dans
+[`docs/public-data-sources.md`](docs/public-data-sources.md).
 
 Pour arrêter :
 
@@ -165,6 +176,13 @@ POST /api/v1/companies/{company_id}/scores
 GET  /api/v1/companies/{company_id}/scores
 GET  /api/v1/dashboard
 POST /api/v1/ai/analyses
+GET  /api/v1/indices
+GET  /api/v1/indices/{code}
+POST /api/v1/indices/companies/bulk
+PATCH /api/v1/companies/{company_id}
+POST /api/v1/companies/{company_id}/archive
+POST /api/v1/companies/{company_id}/restore
+DELETE /api/v1/companies/{company_id}
 ```
 
 ## Comptes personnels

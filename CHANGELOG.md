@@ -4,6 +4,15 @@
 
 ### Added
 
+- Modification, archivage réversible et suppression définitive des entreprises
+  depuis le portefeuille de recherche et l’univers d’investissement.
+- Explorateur des compositions CAC 40, CAC Next 20 et SBF 120 avec sélection
+  multiple, résolution automatique du ticker et ajout idempotent à l’univers.
+- Identifiants stables ISIN, CIK et LEI, symboles par fournisseur et badges
+  d’appartenance aux indices.
+- Repli automatique par exercice annuel complet entre Yahoo Finance, SEC EDGAR
+  et les dépôts européens ESEF gratuits exposés par filings.xbrl.org et GLEIF.
+
 - Configuration Docker Compose dédiée à un VPS avec HTTPS automatique Caddy,
   réseaux privés et secrets montés comme fichiers.
 - Endpoint `/api/v1/ready` vérifiant réellement PostgreSQL, identifiants de
@@ -12,6 +21,11 @@
   arrière pour l’exploitation sur une VM Linux.
 
 ### Changed
+
+- L’import public automatique n’est plus lié à Yahoo Finance : la provenance
+  de la source effectivement retenue est enregistrée dans chaque snapshot.
+- Les entreprises archivées sont masquées par défaut sans perdre leurs
+  analyses ; une suppression définitive conserve une confirmation explicite.
 
 - Le frontend de production applique des en-têtes HTTP de sécurité et une
   limitation périphérique des routes d’authentification.

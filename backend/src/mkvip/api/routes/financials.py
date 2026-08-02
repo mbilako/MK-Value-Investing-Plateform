@@ -132,6 +132,8 @@ async def import_financials_automatically(
                     payload = await load_latest_snapshot(
                         provider,
                         company.ticker,
+                        isin=company.isin,
+                        lei=company.lei,
                     )
             except ProviderBusyError as error:
                 raise HTTPException(
@@ -143,7 +145,7 @@ async def import_financials_automatically(
                 raise HTTPException(
                     status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                     detail=(
-                        "L’import Yahoo Finance a dépassé le délai autorisé."
+                        "L’import automatique a dépassé le délai autorisé."
                     ),
                 ) from error
             except ProviderDataError as error:
@@ -182,7 +184,7 @@ async def import_financials_automatically(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                "La limite d’imports Yahoo Finance simultanés est atteinte."
+                "La limite d’imports automatiques simultanés est atteinte."
             ),
             headers={"Retry-After": "1"},
         ) from error
