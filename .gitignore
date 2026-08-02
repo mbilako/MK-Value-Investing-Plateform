@@ -27,6 +27,8 @@ frontend/coverage/
 .env
 .env.*
 !.env.example
+deploy/secrets/*
+!deploy/secrets/README.md
 *.db
 *.sqlite3
 

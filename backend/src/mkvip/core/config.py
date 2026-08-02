@@ -1,12 +1,24 @@
+import os
 from functools import lru_cache
+from typing import Literal, Self
 
 from cryptography.fernet import Fernet
-from pydantic import Field, PositiveFloat, PositiveInt, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, PositiveFloat, PositiveInt, SecretStr, field_validator, model_validator
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SecretsSettingsSource,
+    SettingsConfigDict,
+)
+
+DEFAULT_AUTH_EMAIL_HASH_SECRET = "change-me-outside-local-development"
+DEFAULT_MFA_ENCRYPTION_KEY = "M2M2YjVjOTAzNmRhMmQ4OGY0NmFhOGM2NjFlZTVjNjc="
 
 
 class Settings(BaseSettings):
     app_name: str = "MK-VIP API"
+    environment: Literal["development", "test", "production"] = "development"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: str = (
         "postgresql+asyncpg://mkvip:mkvip@localhost:5432/mkvip"
     )
@@ -16,6 +28,7 @@ class Settings(BaseSettings):
     )
     openai_model: str = "gpt-5.6-sol"
     allowed_origins: list[str] = ["http://localhost:5173"]
+    allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
     public_app_url: str = "http://localhost:5173"
     smtp_host: str = "mailpit"
     smtp_port: PositiveInt = 1025
@@ -24,12 +37,8 @@ class Settings(BaseSettings):
     smtp_starttls: bool = False
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
-    auth_email_hash_secret: SecretStr = SecretStr(
-        "change-me-outside-local-development"
-    )
-    mfa_encryption_key: SecretStr = SecretStr(
-        "M2M2YjVjOTAzNmRhMmQ4OGY0NmFhOGM2NjFlZTVjNjc="
-    )
+    auth_email_hash_secret: SecretStr = SecretStr(DEFAULT_AUTH_EMAIL_HASH_SECRET)
+    mfa_encryption_key: SecretStr = SecretStr(DEFAULT_MFA_ENCRYPTION_KEY)
     email_verification_ttl_hours: PositiveInt = 24
     password_reset_ttl_minutes: PositiveInt = 30
     auth_email_cooldown_seconds: PositiveInt = 60
@@ -55,8 +64,30 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=("../.env.local", ".env.local", ".env"),
         env_prefix="MKVIP_",
+        populate_by_name=True,
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        sources: tuple[PydanticBaseSettingsSource, ...] = (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+        )
+        secrets_dir = os.getenv("MKVIP_SECRETS_DIR")
+        if secrets_dir:
+            sources += (
+                SecretsSettingsSource(settings_cls, secrets_dir=secrets_dir),
+            )
+        return (*sources, file_secret_settings)
 
     @field_validator("mfa_encryption_key")
     @classmethod
@@ -68,6 +99,42 @@ class Settings(BaseSettings):
                 "mfa_encryption_key must be a URL-safe base64 Fernet key"
             ) from error
         return value
+
+    @model_validator(mode="after")
+    def validate_production_configuration(self) -> Self:
+        if self.environment != "production":
+            return self
+
+        errors: list[str] = []
+        if not self.database_url.startswith("postgresql+asyncpg://"):
+            errors.append("database_url must use PostgreSQL with asyncpg")
+        if not self.public_app_url.startswith("https://"):
+            errors.append("public_app_url must use HTTPS")
+        if not self.allowed_origins or any(
+            not origin.startswith("https://") for origin in self.allowed_origins
+        ):
+            errors.append("allowed_origins must contain only HTTPS origins")
+        if not self.allowed_hosts or "*" in self.allowed_hosts:
+            errors.append("allowed_hosts must explicitly list production hosts")
+        if not self.session_cookie_secure:
+            errors.append("session_cookie_secure must be enabled")
+        if (
+            self.auth_email_hash_secret.get_secret_value()
+            == DEFAULT_AUTH_EMAIL_HASH_SECRET
+        ):
+            errors.append("auth_email_hash_secret must be replaced")
+        if self.mfa_encryption_key.get_secret_value() == DEFAULT_MFA_ENCRYPTION_KEY:
+            errors.append("mfa_encryption_key must be replaced")
+        if not self.smtp_starttls:
+            errors.append("smtp_starttls must be enabled")
+        if not self.smtp_username or self.smtp_password is None:
+            errors.append("SMTP credentials are required")
+        if self.openai_api_key is None:
+            errors.append("OPENAI_API_KEY is required")
+
+        if errors:
+            raise ValueError("Invalid production configuration: " + "; ".join(errors))
+        return self
 
 
 @lru_cache

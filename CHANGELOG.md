@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Configuration Docker Compose dédiée à un VPS avec HTTPS automatique Caddy,
+  réseaux privés et secrets montés comme fichiers.
+- Endpoint `/api/v1/ready` vérifiant réellement PostgreSQL, identifiants de
+  requête et journaux d’accès JSON.
+- Runbook de déploiement, sauvegarde, restauration, diagnostic et retour
+  arrière pour l’exploitation sur une VM Linux.
+
+### Changed
+
+- Le frontend de production applique des en-têtes HTTP de sécurité et une
+  limitation périphérique des routes d’authentification.
+- Les migrations Alembic sont exécutées par un service ponctuel avant le
+  démarrage du backend.
+
+### Security
+
+- Le démarrage en mode production refuse les valeurs de développement, les
+  origines non HTTPS, les cookies non sécurisés et les secrets manquants.
+- PostgreSQL et l’API ne publient aucun port directement sur le VPS ; seul
+  Caddy expose HTTP et HTTPS.
+
 ## 0.11.0 - 2026-08-02
 
 ### Added

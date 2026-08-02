@@ -61,3 +61,32 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+
+  production-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production configuration
+        env:
+          ACME_EMAIL: ops@example.com
+          MKVIP_DOMAIN: invest.example.com
+          MKVIP_SMTP_HOST: smtp.example.com
+          MKVIP_SMTP_FROM: MK-VIP <no-reply@example.com>
+          MKVIP_SMTP_USERNAME: mkvip
+          POSTGRES_PASSWORD_FILE: ${{ runner.temp }}/mkvip-secrets/postgres_password
+          MKVIP_DATABASE_URL_FILE: ${{ runner.temp }}/mkvip-secrets/database_url
+          OPENAI_API_KEY_FILE: ${{ runner.temp }}/mkvip-secrets/openai_api_key
+          MKVIP_AUTH_EMAIL_HASH_SECRET_FILE: ${{ runner.temp }}/mkvip-secrets/auth_email_hash_secret
+          MKVIP_MFA_ENCRYPTION_KEY_FILE: ${{ runner.temp }}/mkvip-secrets/mfa_encryption_key
+          MKVIP_SMTP_PASSWORD_FILE: ${{ runner.temp }}/mkvip-secrets/smtp_password
+        run: |
+          mkdir -p "$RUNNER_TEMP/mkvip-secrets"
+          touch \
+            "$POSTGRES_PASSWORD_FILE" \
+            "$MKVIP_DATABASE_URL_FILE" \
+            "$OPENAI_API_KEY_FILE" \
+            "$MKVIP_AUTH_EMAIL_HASH_SECRET_FILE" \
+            "$MKVIP_MFA_ENCRYPTION_KEY_FILE" \
+            "$MKVIP_SMTP_PASSWORD_FILE"
+          docker compose -f compose.production.yml config --quiet
+          sh -n deploy/deploy.sh deploy/backup.sh deploy/smoke-test.sh

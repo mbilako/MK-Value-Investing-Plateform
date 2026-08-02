@@ -3,6 +3,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from mkvip import __version__
 from mkvip.api.dependencies import get_current_user
@@ -18,6 +19,7 @@ from mkvip.api.routes import (
     valuations,
 )
 from mkvip.core.config import get_settings
+from mkvip.core.observability import RequestObservabilityMiddleware
 from mkvip.core.origin import OriginValidationMiddleware
 
 
@@ -56,6 +58,14 @@ def create_app() -> FastAPI:
     application.add_exception_handler(
         RequestValidationError,
         validation_error_handler,
+    )
+    application.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=settings.allowed_hosts,
+    )
+    application.add_middleware(
+        RequestObservabilityMiddleware,
+        log_level=settings.log_level,
     )
     application.add_middleware(
         CORSMiddleware,
