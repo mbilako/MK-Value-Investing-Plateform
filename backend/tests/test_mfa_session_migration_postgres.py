@@ -51,7 +51,13 @@ def test_mfa_session_migration_preserves_existing_accounts_and_sessions() -> Non
                 CURRENT_TIMESTAMP,
                 CURRENT_TIMESTAMP,
                 CURRENT_TIMESTAMP
-            );
+            )
+            """
+        )
+    )
+    asyncio.run(
+        execute(
+            """
             INSERT INTO sessions (
                 id, user_id, token_hash, created_at, expires_at
             ) VALUES (

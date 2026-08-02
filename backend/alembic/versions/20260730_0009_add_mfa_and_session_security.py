@@ -33,7 +33,12 @@ def upgrade() -> None:
         "sessions", sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True)
     )
     op.execute("UPDATE sessions SET last_seen_at = created_at")
-    op.alter_column("sessions", "last_seen_at", nullable=False)
+    op.alter_column(
+        "sessions",
+        "last_seen_at",
+        nullable=False,
+        server_default=sa.text("CURRENT_TIMESTAMP"),
+    )
     op.add_column("sessions", sa.Column("ip_hash", sa.String(length=64)))
     op.add_column("sessions", sa.Column("user_agent", sa.String(length=256)))
 
