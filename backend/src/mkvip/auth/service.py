@@ -13,13 +13,20 @@ from mkvip.auth.security import (
     ActionToken,
     SessionToken,
     create_action_token,
+    create_recovery_codes,
     create_session_token,
+    create_totp_secret,
+    decrypt_mfa_secret,
     digest_action_token,
     digest_email_recipient,
+    digest_rate_limit_subject,
     digest_session_token,
+    encrypt_mfa_secret,
     hash_password,
     normalize_email,
+    totp_uri,
     verify_password,
+    verify_totp_code,
 )
 from mkvip.core.config import Settings
 from mkvip.models.auth_action import (
@@ -27,13 +34,16 @@ from mkvip.models.auth_action import (
     AuthActionTokenOrm,
     AuthEmailRateLimitOrm,
 )
+from mkvip.models.auth_rate_limit import AuthRateLimitOrm
 from mkvip.models.company import CompanyOrm
+from mkvip.models.mfa import MfaRecoveryCodeOrm
 from mkvip.models.session import SessionOrm
 from mkvip.models.user import UserOrm
-from mkvip.schemas.auth import LoginRequest, RegisterRequest, UserRead
+from mkvip.schemas.auth import LoginRequest, RegisterRequest, SessionRead, UserRead
 
 INVALID_CREDENTIALS_MESSAGE = "Identifiants invalides."
 AUTH_CLEANUP_BATCH_SIZE = 100
+SESSION_TOUCH_INTERVAL = timedelta(minutes=5)
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +60,10 @@ class AuthTokenInvalidError(Exception):
 
 
 class AuthTokenExpiredError(Exception):
+    pass
+
+
+class MfaVerificationError(Exception):
     pass
 
 
@@ -76,6 +90,25 @@ class EmailDispatch:
     recipient: str
     token: str
     purpose: AuthActionPurpose
+
+
+@dataclass(frozen=True)
+class LoginContext:
+    ip_address: str
+    user_agent: str | None
+
+
+@dataclass(frozen=True)
+class MfaChallenge:
+    token: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class MfaSetup:
+    secret: str
+    otpauth_uri: str
+    expires_at: datetime
 
 
 class AuthService:
@@ -221,14 +254,31 @@ class AuthService:
             await self._session.rollback()
             raise
 
-    async def login(self, payload: LoginRequest) -> AuthGrant:
+    async def login(
+        self,
+        payload: LoginRequest,
+        context: LoginContext | None = None,
+    ) -> AuthGrant | MfaChallenge:
         email = normalize_email(str(payload.email))
         now = _as_utc(self._now())
+        context = context or LoginContext(ip_address="unknown", user_agent=None)
         invalid_credentials = False
         unverified_email = False
-        grant: AuthGrant | None = None
+        grant: AuthGrant | MfaChallenge | None = None
 
         try:
+            ip_allowed = await self._admit_rate_limit(
+                f"ip:{context.ip_address}",
+                "login_ip",
+                self._settings.login_ip_max_per_window,
+                now,
+            )
+            account_allowed = await self._admit_rate_limit(
+                f"account:{email}",
+                "login_account",
+                self._settings.login_account_max_per_window,
+                now,
+            )
             user = await self._session.scalar(
                 select(UserOrm)
                 .where(
@@ -238,7 +288,7 @@ class AuthService:
                 .with_for_update()
             )
 
-            if user is None:
+            if not ip_allowed or not account_allowed or user is None:
                 verify_password(payload.password, DUMMY_PASSWORD_HASH)
                 invalid_credentials = True
             else:
@@ -269,22 +319,10 @@ class AuthService:
                 else:
                     user.failed_login_attempts = 0
                     user.locked_until = None
-                    expires_at = now + timedelta(
-                        days=self._settings.session_duration_days
-                    )
-                    token = self._token_factory()
-                    self._session.add(
-                        SessionOrm(
-                            user_id=user.id,
-                            token_hash=token.digest,
-                            created_at=now,
-                            expires_at=expires_at,
-                        )
-                    )
-                    grant = AuthGrant(
-                        user=UserRead.model_validate(user),
-                        token=token.raw,
-                        expires_at=expires_at,
+                    grant = (
+                        await self._issue_mfa_challenge(user, now)
+                        if user.mfa_enabled
+                        else self._create_session(user, now, context)
                     )
             await self._session.commit()
         except Exception:
@@ -299,13 +337,143 @@ class AuthService:
             raise RuntimeError("Authentication grant was not created")
         return grant
 
+    async def verify_mfa_challenge(
+        self,
+        raw_token: str,
+        code: str,
+        context: LoginContext,
+    ) -> AuthGrant:
+        now = _as_utc(self._now())
+        try:
+            ip_allowed = await self._admit_rate_limit(
+                f"ip:{context.ip_address}",
+                "mfa_ip",
+                self._settings.login_ip_max_per_window,
+                now,
+            )
+            await self._session.commit()
+            if not ip_allowed:
+                raise MfaVerificationError
+
+            challenge_user_id = await self._session.scalar(
+                select(AuthActionTokenOrm.user_id).where(
+                    AuthActionTokenOrm.token_hash == digest_action_token(raw_token),
+                    AuthActionTokenOrm.purpose == AuthActionPurpose.MFA_LOGIN.value,
+                )
+            )
+            if challenge_user_id is None:
+                raise AuthTokenInvalidError
+            account_allowed = await self._admit_rate_limit(
+                f"account:{challenge_user_id}",
+                "mfa_account",
+                self._settings.login_account_max_per_window,
+                now,
+            )
+            await self._session.commit()
+            if not account_allowed:
+                raise MfaVerificationError
+
+            token, user = await self._consume_action_token(
+                raw_token,
+                AuthActionPurpose.MFA_LOGIN,
+                now,
+            )
+            if not user.mfa_enabled or not await self._verify_mfa_code(user, code, now):
+                raise MfaVerificationError
+            token.consumed_at = now
+            grant = self._create_session(user, now, context)
+            await self._session.commit()
+            return grant
+        except Exception:
+            await self._session.rollback()
+            raise
+
+    async def begin_mfa_setup(self, user: UserRead) -> MfaSetup:
+        now = _as_utc(self._now())
+        secret = create_totp_secret()
+        expires_at = now + timedelta(minutes=self._settings.mfa_pending_setup_ttl_minutes)
+        record = await self._session.scalar(
+            select(UserOrm).where(UserOrm.id == user.id).with_for_update()
+        )
+        if record is None or record.mfa_enabled:
+            raise MfaVerificationError
+        record.mfa_pending_secret_encrypted = encrypt_mfa_secret(
+            secret, self._settings.mfa_encryption_key
+        )
+        record.mfa_pending_expires_at = expires_at
+        await self._session.commit()
+        return MfaSetup(secret, totp_uri(secret, user.email), expires_at)
+
+    async def confirm_mfa_setup(self, user: UserRead, code: str) -> list[str]:
+        now = _as_utc(self._now())
+        try:
+            record = await self._session.scalar(
+                select(UserOrm).where(UserOrm.id == user.id).with_for_update()
+            )
+            if (
+                record is None
+                or record.mfa_enabled
+                or record.mfa_pending_secret_encrypted is None
+                or record.mfa_pending_expires_at is None
+                or _as_utc(record.mfa_pending_expires_at) <= now
+            ):
+                raise MfaVerificationError
+            secret = decrypt_mfa_secret(
+                record.mfa_pending_secret_encrypted,
+                self._settings.mfa_encryption_key,
+            )
+            if not verify_totp_code(secret, code, int(now.timestamp())):
+                raise MfaVerificationError
+            recovery_codes = create_recovery_codes(self._settings.mfa_recovery_code_count)
+            record.mfa_enabled = True
+            record.mfa_secret_encrypted = record.mfa_pending_secret_encrypted
+            record.mfa_pending_secret_encrypted = None
+            record.mfa_pending_expires_at = None
+            await self._session.execute(
+                delete(MfaRecoveryCodeOrm).where(MfaRecoveryCodeOrm.user_id == record.id)
+            )
+            self._session.add_all(
+                [
+                    MfaRecoveryCodeOrm(
+                        user_id=record.id,
+                        code_hash=hash_password(recovery_code),
+                    )
+                    for recovery_code in recovery_codes
+                ]
+            )
+            await self._session.commit()
+            return recovery_codes
+        except Exception:
+            await self._session.rollback()
+            raise
+
+    async def disable_mfa(self, user: UserRead, code: str) -> None:
+        now = _as_utc(self._now())
+        try:
+            record = await self._session.scalar(
+                select(UserOrm).where(UserOrm.id == user.id).with_for_update()
+            )
+            if record is None or not await self._verify_mfa_code(record, code, now):
+                raise MfaVerificationError
+            record.mfa_enabled = False
+            record.mfa_secret_encrypted = None
+            record.mfa_pending_secret_encrypted = None
+            record.mfa_pending_expires_at = None
+            await self._session.execute(
+                delete(MfaRecoveryCodeOrm).where(MfaRecoveryCodeOrm.user_id == record.id)
+            )
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
+
     async def resolve_user(self, raw_token: str | None) -> UserRead | None:
         if raw_token is None:
             return None
 
         now = _as_utc(self._now())
-        user = await self._session.scalar(
-            select(UserOrm)
+        result = await self._session.execute(
+            select(UserOrm, SessionOrm)
             .join(SessionOrm, SessionOrm.user_id == UserOrm.id)
             .where(
                 SessionOrm.token_hash == digest_session_token(raw_token),
@@ -315,8 +483,13 @@ class AuthService:
                 UserOrm.email_verified_at.is_not(None),
             )
         )
-        if user is None:
+        record = result.one_or_none()
+        if record is None:
             return None
+        user, session = record
+        if _as_utc(session.last_seen_at) <= now - SESSION_TOUCH_INTERVAL:
+            session.last_seen_at = now
+            await self._session.commit()
         return UserRead.model_validate(user)
 
     async def logout(self, raw_token: str | None) -> None:
@@ -325,6 +498,50 @@ class AuthService:
         await self._session.execute(
             delete(SessionOrm).where(
                 SessionOrm.token_hash == digest_session_token(raw_token)
+            )
+        )
+        await self._session.commit()
+
+    async def list_sessions(
+        self, user: UserRead, raw_token: str | None
+    ) -> list[SessionRead]:
+        now = _as_utc(self._now())
+        current_hash = digest_session_token(raw_token) if raw_token else None
+        records = list(
+            await self._session.scalars(
+                select(SessionOrm)
+                .where(SessionOrm.user_id == user.id, SessionOrm.expires_at > now)
+                .order_by(SessionOrm.last_seen_at.desc())
+            )
+        )
+        return [
+            SessionRead(
+                id=record.id,
+                created_at=record.created_at,
+                last_seen_at=record.last_seen_at,
+                expires_at=record.expires_at,
+                user_agent=record.user_agent,
+                current=record.token_hash == current_hash,
+            )
+            for record in records
+        ]
+
+    async def revoke_session(self, user: UserRead, session_id: uuid.UUID) -> bool:
+        result = await self._session.execute(
+            delete(SessionOrm).where(
+                SessionOrm.id == session_id, SessionOrm.user_id == user.id
+            )
+        )
+        await self._session.commit()
+        return result.rowcount == 1
+
+    async def revoke_other_sessions(self, user: UserRead, raw_token: str | None) -> None:
+        if raw_token is None:
+            return
+        await self._session.execute(
+            delete(SessionOrm).where(
+                SessionOrm.user_id == user.id,
+                SessionOrm.token_hash != digest_session_token(raw_token),
             )
         )
         await self._session.commit()
@@ -430,6 +647,137 @@ class AuthService:
         if _as_utc(token.expires_at) <= now:
             raise AuthTokenExpiredError
         return token, user
+
+    def _create_session(
+        self,
+        user: UserOrm,
+        now: datetime,
+        context: LoginContext,
+    ) -> AuthGrant:
+        expires_at = now + timedelta(days=self._settings.session_duration_days)
+        token = self._token_factory()
+        self._session.add(
+            SessionOrm(
+                user_id=user.id,
+                token_hash=token.digest,
+                created_at=now,
+                last_seen_at=now,
+                expires_at=expires_at,
+                ip_hash=digest_rate_limit_subject(
+                    context.ip_address, self._settings.auth_email_hash_secret
+                ),
+                user_agent=(context.user_agent or "")[:256] or None,
+            )
+        )
+        return AuthGrant(
+            user=UserRead.model_validate(user),
+            token=token.raw,
+            expires_at=expires_at,
+        )
+
+    async def _issue_mfa_challenge(
+        self, user: UserOrm, now: datetime
+    ) -> MfaChallenge:
+        await self._session.execute(
+            update(AuthActionTokenOrm)
+            .where(
+                AuthActionTokenOrm.user_id == user.id,
+                AuthActionTokenOrm.purpose == AuthActionPurpose.MFA_LOGIN.value,
+                AuthActionTokenOrm.consumed_at.is_(None),
+            )
+            .values(consumed_at=now)
+        )
+        token = self._action_token_factory()
+        expires_at = now + timedelta(minutes=self._settings.mfa_challenge_ttl_minutes)
+        self._session.add(
+            AuthActionTokenOrm(
+                user_id=user.id,
+                purpose=AuthActionPurpose.MFA_LOGIN.value,
+                token_hash=token.digest,
+                created_at=now,
+                expires_at=expires_at,
+            )
+        )
+        return MfaChallenge(token.raw, expires_at)
+
+    async def _verify_mfa_code(
+        self, user: UserOrm, code: str, now: datetime
+    ) -> bool:
+        if user.mfa_secret_encrypted is not None:
+            secret = decrypt_mfa_secret(
+                user.mfa_secret_encrypted,
+                self._settings.mfa_encryption_key,
+            )
+            if verify_totp_code(secret, code, int(now.timestamp())):
+                return True
+        recovery_codes = list(
+            await self._session.scalars(
+                select(MfaRecoveryCodeOrm)
+                .where(
+                    MfaRecoveryCodeOrm.user_id == user.id,
+                    MfaRecoveryCodeOrm.used_at.is_(None),
+                )
+                .with_for_update()
+            )
+        )
+        for recovery_code in recovery_codes:
+            if verify_password(code.upper(), recovery_code.code_hash):
+                recovery_code.used_at = now
+                return True
+        return False
+
+    async def _admit_rate_limit(
+        self,
+        subject: str,
+        purpose: str,
+        limit: int,
+        now: datetime,
+    ) -> bool:
+        window_seconds = self._settings.login_rate_limit_window_minutes * 60
+        window_start = datetime.fromtimestamp(
+            (int(now.timestamp()) // window_seconds) * window_seconds,
+            tz=UTC,
+        )
+        subject_hash = digest_rate_limit_subject(
+            subject, self._settings.auth_email_hash_secret
+        )
+        try:
+            async with self._session.begin_nested():
+                self._session.add(
+                    AuthRateLimitOrm(
+                        subject_hash=subject_hash,
+                        purpose=purpose,
+                        window_start=window_start,
+                        request_count=0,
+                    )
+                )
+                await self._session.flush()
+        except IntegrityError:
+            pass
+        result = await self._session.execute(
+            update(AuthRateLimitOrm)
+            .where(
+                AuthRateLimitOrm.subject_hash == subject_hash,
+                AuthRateLimitOrm.purpose == purpose,
+                or_(
+                    AuthRateLimitOrm.window_start < window_start,
+                    (AuthRateLimitOrm.window_start == window_start)
+                    & (AuthRateLimitOrm.request_count < limit),
+                ),
+            )
+            .values(
+                window_start=window_start,
+                request_count=case(
+                    (
+                        AuthRateLimitOrm.window_start == window_start,
+                        AuthRateLimitOrm.request_count + 1,
+                    ),
+                    else_=1,
+                ),
+            )
+            .returning(AuthRateLimitOrm.id)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def _admit_email_request(
         self,

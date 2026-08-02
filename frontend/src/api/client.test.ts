@@ -12,6 +12,7 @@ describe("API client authentication", () => {
       id: "user-1",
       email: "alice@example.com",
       created_at: "2026-07-26T10:00:00Z",
+      mfa_enabled: false,
     };
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -149,6 +150,7 @@ describe("API client authentication", () => {
       id: "user-1",
       email: "alice@example.com",
       created_at: "2026-07-26T10:00:00Z",
+      mfa_enabled: false,
     };
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(expectedUser), { status: 200 }),
@@ -165,6 +167,99 @@ describe("API client authentication", () => {
         method: "POST",
         body: JSON.stringify(credentials),
         credentials: "include",
+      }),
+    );
+  });
+
+  it("returns an MFA challenge without treating it as an authenticated session", async () => {
+    const challenge = {
+      mfa_required: true,
+      challenge_token: "challenge-token",
+      expires_at: "2026-07-26T10:05:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(challenge), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      createApiClient().login({
+        email: "alice@example.com",
+        password: "correct-password",
+      }),
+    ).resolves.toEqual(challenge);
+  });
+
+  it("uses the protected MFA and session-management endpoints", async () => {
+    const authenticatedUser = {
+      id: "user-1",
+      email: "alice@example.com",
+      created_at: "2026-07-26T10:00:00Z",
+      mfa_enabled: true,
+    };
+    const setup = {
+      secret: "JBSWY3DPEHPK3PXP",
+      otpauth_uri: "otpauth://totp/MK-VIP:alice@example.com",
+      expires_at: "2026-07-26T10:10:00Z",
+    };
+    const sessions = [
+      {
+        id: "session-1",
+        created_at: "2026-07-26T10:00:00Z",
+        last_seen_at: "2026-07-26T10:05:00Z",
+        expires_at: "2026-08-25T10:00:00Z",
+        user_agent: "Test browser",
+        current: true,
+      },
+    ];
+    const jsonResponse = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(authenticatedUser))
+      .mockResolvedValueOnce(jsonResponse(setup))
+      .mockResolvedValueOnce(jsonResponse({ recovery_codes: ["AAAAA-BBBBB"] }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(jsonResponse(sessions))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createApiClient();
+
+    await expect(client.verifyMfa("challenge-token", "123456")).resolves.toEqual(
+      authenticatedUser,
+    );
+    await expect(client.setupMfa()).resolves.toEqual(setup);
+    await expect(client.confirmMfa("123456")).resolves.toEqual({
+      recovery_codes: ["AAAAA-BBBBB"],
+    });
+    await expect(client.disableMfa("AAAAA-BBBBB")).resolves.toBeUndefined();
+    await expect(client.listSessions()).resolves.toEqual(sessions);
+    await expect(client.revokeSession("session-1")).resolves.toBeUndefined();
+    await expect(client.revokeOtherSessions()).resolves.toBeUndefined();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/v1/auth/mfa/verify",
+      "/api/v1/auth/mfa/setup",
+      "/api/v1/auth/mfa/confirm",
+      "/api/v1/auth/mfa/disable",
+      "/api/v1/auth/sessions",
+      "/api/v1/auth/sessions/session-1",
+      "/api/v1/auth/sessions/revoke-other",
+    ]);
+    expect(fetchMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          challenge_token: "challenge-token",
+          code: "123456",
+        }),
       }),
     );
   });

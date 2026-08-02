@@ -26,6 +26,9 @@ from mkvip.auth.service import (
     AuthTokenInvalidError,
     EmailDispatch,
     InvalidCredentialsError,
+    LoginContext,
+    MfaChallenge,
+    MfaVerificationError,
     UnverifiedEmailError,
 )
 from mkvip.core.config import Settings, get_settings
@@ -34,8 +37,14 @@ from mkvip.schemas.auth import (
     EmailRequest,
     LoginRequest,
     MessageRead,
+    MfaChallengeRead,
+    MfaChallengeRequest,
+    MfaCodeRequest,
+    MfaRecoveryCodesRead,
+    MfaSetupRead,
     PasswordResetConfirmRequest,
     RegisterRequest,
+    SessionRead,
     TokenRequest,
     UserRead,
 )
@@ -137,6 +146,13 @@ def _set_session_cookie(
     )
 
 
+def _login_context(request: Request) -> LoginContext:
+    return LoginContext(
+        ip_address=request.client.host if request.client is not None else "unknown",
+        user_agent=request.headers.get("user-agent"),
+    )
+
+
 @router.post(
     "/register",
     response_model=MessageRead,
@@ -229,15 +245,16 @@ async def confirm_password_reset(
         ) from error
 
 
-@router.post("/login", response_model=UserRead)
+@router.post("/login", response_model=UserRead | MfaChallengeRead)
 async def login(
     payload: LoginRequest,
+    request: Request,
     response: Response,
     service: Service,
     settings: AppSettings,
 ) -> UserRead:
     try:
-        grant = await service.login(payload)
+        result = await service.login(payload, _login_context(request))
     except UnverifiedEmailError as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -248,13 +265,140 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants invalides.",
         ) from error
+    if isinstance(result, MfaChallenge):
+        return MfaChallengeRead(
+            challenge_token=result.token,
+            expires_at=result.expires_at,
+        )
+    _set_session_cookie(response, result, settings)
+    return result.user
+
+
+@router.post("/mfa/verify", response_model=UserRead)
+async def verify_mfa(
+    payload: MfaChallengeRequest,
+    request: Request,
+    response: Response,
+    service: Service,
+    settings: AppSettings,
+) -> UserRead | MfaChallengeRead:
+    try:
+        grant = await service.verify_mfa_challenge(
+            payload.challenge_token,
+            payload.code,
+            _login_context(request),
+        )
+    except (AuthTokenExpiredError, AuthTokenInvalidError, MfaVerificationError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Code de vérification invalide ou expiré.",
+        ) from error
     _set_session_cookie(response, grant, settings)
     return grant.user
+
+
+@router.post("/mfa/setup", response_model=MfaSetupRead)
+async def setup_mfa(current_user: CurrentUser, service: Service) -> MfaSetupRead:
+    try:
+        setup = await service.begin_mfa_setup(current_user)
+    except MfaVerificationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="L’authentification à deux facteurs est déjà activée.",
+        ) from error
+    return MfaSetupRead(
+        secret=setup.secret,
+        otpauth_uri=setup.otpauth_uri,
+        expires_at=setup.expires_at,
+    )
+
+
+@router.post("/mfa/confirm", response_model=MfaRecoveryCodesRead)
+async def confirm_mfa(
+    payload: MfaCodeRequest,
+    current_user: CurrentUser,
+    service: Service,
+) -> MfaRecoveryCodesRead:
+    try:
+        recovery_codes = await service.confirm_mfa_setup(current_user, payload.code)
+    except MfaVerificationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Code de vérification invalide ou configuration expirée.",
+        ) from error
+    return MfaRecoveryCodesRead(recovery_codes=recovery_codes)
+
+
+@router.post("/mfa/disable", status_code=status.HTTP_204_NO_CONTENT)
+async def disable_mfa(
+    payload: MfaCodeRequest,
+    current_user: CurrentUser,
+    service: Service,
+) -> None:
+    try:
+        await service.disable_mfa(current_user, payload.code)
+    except MfaVerificationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Code de vérification invalide.",
+        ) from error
 
 
 @router.get("/me", response_model=UserRead)
 async def me(current_user: CurrentUser) -> UserRead:
     return current_user
+
+
+@router.get("/sessions", response_model=list[SessionRead])
+async def list_sessions(
+    request: Request,
+    current_user: CurrentUser,
+    service: Service,
+    settings: AppSettings,
+) -> list[SessionRead]:
+    return await service.list_sessions(
+        current_user,
+        request.cookies.get(settings.session_cookie_name),
+    )
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_session(
+    session_id: UUID,
+    request: Request,
+    response: Response,
+    current_user: CurrentUser,
+    service: Service,
+    settings: AppSettings,
+) -> None:
+    sessions = await service.list_sessions(
+        current_user,
+        request.cookies.get(settings.session_cookie_name),
+    )
+    current = next((item.current for item in sessions if item.id == session_id), False)
+    if not await service.revoke_session(current_user, session_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session inconnue.")
+    if current:
+        response.delete_cookie(
+            key=settings.session_cookie_name,
+            path="/api",
+            secure=settings.session_cookie_secure,
+            httponly=True,
+            samesite="strict",
+        )
+
+
+@router.post("/sessions/revoke-other", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_other_sessions(
+    request: Request,
+    current_user: CurrentUser,
+    service: Service,
+    settings: AppSettings,
+) -> None:
+    await service.revoke_other_sessions(
+        current_user,
+        request.cookies.get(settings.session_cookie_name),
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

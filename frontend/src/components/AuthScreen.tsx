@@ -3,10 +3,13 @@ import { useState } from "react";
 import type {
   AuthCredentials,
   AuthMessage,
+  LoginResult,
+  MfaChallenge,
 } from "../api/client";
 import type { AuthLink } from "../auth/link";
 import { AuthCredentialsForm } from "./auth/AuthCredentialsForm";
 import { PasswordResetFlow } from "./auth/PasswordResetFlow";
+import { MfaChallengeFlow } from "./auth/MfaChallengeFlow";
 import { VerificationFlow } from "./auth/VerificationFlow";
 
 type AuthView =
@@ -16,13 +19,15 @@ type AuthView =
   | { kind: "verification-result"; status: "success" | "error" }
   | { kind: "reset-request"; message: string | null }
   | { kind: "reset-confirm"; token: string; status: "form" }
-  | { kind: "reset-confirm"; status: "success" };
+  | { kind: "reset-confirm"; status: "success" }
+  | { kind: "mfa-challenge"; challenge: MfaChallenge };
 
 export interface AuthScreenProps {
   authLink: AuthLink | null;
   notice?: string | null;
   onAuthLinkHandled(): void;
-  onLogin(credentials: AuthCredentials): Promise<void>;
+  onLogin(credentials: AuthCredentials): Promise<LoginResult>;
+  onVerifyMfa(challengeToken: string, code: string): Promise<void>;
   onRegister(credentials: AuthCredentials): Promise<AuthMessage>;
   onVerifyEmail(token: string): Promise<void>;
   onResendVerification(email: string): Promise<AuthMessage>;
@@ -53,6 +58,7 @@ export function AuthScreen({
   notice = null,
   onAuthLinkHandled,
   onLogin,
+  onVerifyMfa,
   onRegister,
   onVerifyEmail,
   onResendVerification,
@@ -78,6 +84,7 @@ export function AuthScreen({
         mode={view.mode}
         notice={notice}
         onLogin={onLogin}
+        onMfaRequired={(challenge) => setView({ kind: "mfa-challenge", challenge })}
         onRegister={onRegister}
         onVerificationPending={showVerificationPending}
         onSelectMode={(mode) => setView({ kind: "credentials", mode })}
@@ -138,6 +145,14 @@ export function AuthScreen({
               : current,
           )
         }
+        onBackToLogin={showLogin}
+      />
+    );
+  } else if (view.kind === "mfa-challenge") {
+    content = (
+      <MfaChallengeFlow
+        challenge={view.challenge}
+        onVerify={onVerifyMfa}
         onBackToLogin={showLogin}
       />
     );

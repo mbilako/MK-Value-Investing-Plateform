@@ -1,4 +1,8 @@
 import asyncio
+import base64
+import hashlib
+import hmac
+import struct
 from datetime import timedelta
 
 import pytest
@@ -33,6 +37,20 @@ GENERIC_PASSWORD_RESET_MESSAGE = {
 def set_session_token(client: TestClient, token: str) -> None:
     client.cookies.clear()
     client.cookies.set("mkvip_session", token, path="/api")
+
+
+def totp_code(secret: str, timestamp: int) -> str:
+    key = base64.b32decode(secret + "=" * (-len(secret) % 8))
+    digest = hmac.new(
+        key,
+        struct.pack(">Q", timestamp // 30),
+        hashlib.sha1,
+    ).digest()
+    offset = digest[-1] & 0x0F
+    value = (
+        struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    ) % 1_000_000
+    return f"{value:06d}"
 
 
 def contains_input_key(value: object) -> bool:
@@ -707,6 +725,254 @@ def test_logout_revokes_only_the_presented_session(
         == 204
     )
 
+    set_session_token(database_client, first_token)
+    assert database_client.get("/api/v1/auth/me").status_code == 401
+    set_session_token(database_client, second_token)
+    assert database_client.get("/api/v1/auth/me").status_code == 200
+
+
+def test_mfa_totp_and_recovery_codes_gate_login(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    trusted_origin_headers: dict[str, str],
+    api_clock,
+) -> None:
+    register_verify_and_login_user(database_client, email_sender)
+    setup = database_client.post(
+        "/api/v1/auth/mfa/setup",
+        headers=trusted_origin_headers,
+    )
+    assert setup.status_code == 200
+    secret = setup.json()["secret"]
+    confirmation = database_client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=trusted_origin_headers,
+        json={"code": totp_code(secret, int(api_clock.value.timestamp()))},
+    )
+    assert confirmation.status_code == 200
+    recovery_code = confirmation.json()["recovery_codes"][0]
+
+    database_client.cookies.clear()
+    challenge = database_client.post(
+        "/api/v1/auth/login",
+        headers=trusted_origin_headers,
+        json={"email": "alice@example.com", "password": "correct horse battery"},
+    )
+    assert challenge.status_code == 200
+    assert challenge.json()["mfa_required"] is True
+    assert challenge.cookies.get("mkvip_session") is None
+
+    verified = database_client.post(
+        "/api/v1/auth/mfa/verify",
+        headers=trusted_origin_headers,
+        json={
+            "challenge_token": challenge.json()["challenge_token"],
+            "code": recovery_code,
+        },
+    )
+    assert verified.status_code == 200
+    assert verified.cookies.get("mkvip_session") is not None
+
+    database_client.cookies.clear()
+    consumed_challenge = database_client.post(
+        "/api/v1/auth/login",
+        headers=trusted_origin_headers,
+        json={"email": "alice@example.com", "password": "correct horse battery"},
+    )
+    consumed = database_client.post(
+        "/api/v1/auth/mfa/verify",
+        headers=trusted_origin_headers,
+        json={
+            "challenge_token": consumed_challenge.json()["challenge_token"],
+            "code": recovery_code,
+        },
+    )
+    assert consumed.status_code == 401
+
+
+def test_mfa_can_be_disabled_with_a_valid_recovery_code(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    trusted_origin_headers: dict[str, str],
+    api_clock,
+) -> None:
+    register_verify_and_login_user(database_client, email_sender)
+    setup = database_client.post(
+        "/api/v1/auth/mfa/setup",
+        headers=trusted_origin_headers,
+    )
+    secret = setup.json()["secret"]
+    confirmation = database_client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=trusted_origin_headers,
+        json={"code": totp_code(secret, int(api_clock.value.timestamp()))},
+    )
+    recovery_code = confirmation.json()["recovery_codes"][0]
+
+    invalid = database_client.post(
+        "/api/v1/auth/mfa/disable",
+        headers=trusted_origin_headers,
+        json={"code": "000000"},
+    )
+    assert invalid.status_code == 400
+    assert database_client.get("/api/v1/auth/me").json()["mfa_enabled"] is True
+
+    disabled = database_client.post(
+        "/api/v1/auth/mfa/disable",
+        headers=trusted_origin_headers,
+        json={"code": recovery_code},
+    )
+    assert disabled.status_code == 204
+    assert database_client.get("/api/v1/auth/me").json()["mfa_enabled"] is False
+
+    database_client.cookies.clear()
+    login = database_client.post(
+        "/api/v1/auth/login",
+        headers=trusted_origin_headers,
+        json={"email": "alice@example.com", "password": "correct horse battery"},
+    )
+    assert login.status_code == 200
+    assert "mfa_required" not in login.json()
+    assert login.cookies.get("mkvip_session") is not None
+
+
+@pytest.mark.parametrize(
+    "database_client",
+    [
+        {
+            "login_ip_max_per_window": 1,
+            "login_account_max_per_window": 1,
+            "mfa_challenge_ttl_minutes": 30,
+        }
+    ],
+    indirect=True,
+)
+def test_failed_mfa_attempts_persist_their_rate_limit_counters(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    trusted_origin_headers: dict[str, str],
+    api_clock,
+) -> None:
+    register_verify_and_login_user(database_client, email_sender)
+    setup = database_client.post(
+        "/api/v1/auth/mfa/setup",
+        headers=trusted_origin_headers,
+    )
+    secret = setup.json()["secret"]
+    assert database_client.post(
+        "/api/v1/auth/mfa/confirm",
+        headers=trusted_origin_headers,
+        json={"code": totp_code(secret, int(api_clock.value.timestamp()))},
+    ).status_code == 200
+
+    database_client.cookies.clear()
+    api_clock.advance(timedelta(minutes=15, seconds=1))
+    challenge = database_client.post(
+        "/api/v1/auth/login",
+        headers=trusted_origin_headers,
+        json={"email": "alice@example.com", "password": "correct horse battery"},
+    )
+    challenge_token = challenge.json()["challenge_token"]
+    invalid = database_client.post(
+        "/api/v1/auth/mfa/verify",
+        headers=trusted_origin_headers,
+        json={"challenge_token": challenge_token, "code": "000000"},
+    )
+    assert invalid.status_code == 401
+
+    limited = database_client.post(
+        "/api/v1/auth/mfa/verify",
+        headers=trusted_origin_headers,
+        json={
+            "challenge_token": challenge_token,
+            "code": totp_code(secret, int(api_clock.value.timestamp())),
+        },
+    )
+    assert limited.status_code == 401
+
+    api_clock.advance(timedelta(minutes=15, seconds=1))
+    verified = database_client.post(
+        "/api/v1/auth/mfa/verify",
+        headers=trusted_origin_headers,
+        json={
+            "challenge_token": challenge_token,
+            "code": totp_code(secret, int(api_clock.value.timestamp())),
+        },
+    )
+    assert verified.status_code == 200
+    assert verified.cookies.get("mkvip_session") is not None
+
+
+@pytest.mark.parametrize(
+    "database_client",
+    [
+        {
+            "login_ip_max_per_window": 1,
+            "login_account_max_per_window": 1,
+        }
+    ],
+    indirect=True,
+)
+def test_login_rate_limit_is_generic_and_resets_after_the_window(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    trusted_origin_headers: dict[str, str],
+    api_clock,
+) -> None:
+    register_and_verify_user(database_client, email_sender)
+    credentials = {
+        "email": "alice@example.com",
+        "password": "correct horse battery",
+    }
+
+    assert database_client.post(
+        "/api/v1/auth/login",
+        headers=trusted_origin_headers,
+        json=credentials,
+    ).status_code == 200
+    limited = database_client.post(
+        "/api/v1/auth/login",
+        headers=trusted_origin_headers,
+        json=credentials,
+    )
+    assert limited.status_code == 401
+    assert limited.json() == {"detail": "Identifiants invalides."}
+
+    api_clock.advance(timedelta(minutes=15, seconds=1))
+    assert database_client.post(
+        "/api/v1/auth/login",
+        headers=trusted_origin_headers,
+        json=credentials,
+    ).status_code == 200
+
+
+def test_session_list_and_other_session_revocation(
+    database_client: TestClient,
+    email_sender: RecordingEmailSender,
+    trusted_origin_headers: dict[str, str],
+) -> None:
+    first = register_verify_and_login_user(database_client, email_sender)
+    first_token = first.cookies.get("mkvip_session")
+    assert first_token is not None
+    database_client.cookies.clear()
+    second = database_client.post(
+        "/api/v1/auth/login",
+        headers=trusted_origin_headers,
+        json={"email": "alice@example.com", "password": "correct horse battery"},
+    )
+    second_token = second.cookies.get("mkvip_session")
+    assert second_token is not None
+
+    sessions = database_client.get("/api/v1/auth/sessions")
+    assert sessions.status_code == 200
+    assert len(sessions.json()) == 2
+    assert sum(item["current"] for item in sessions.json()) == 1
+
+    revoke = database_client.post(
+        "/api/v1/auth/sessions/revoke-other",
+        headers=trusted_origin_headers,
+    )
+    assert revoke.status_code == 204
     set_session_token(database_client, first_token)
     assert database_client.get("/api/v1/auth/me").status_code == 401
     set_session_token(database_client, second_token)

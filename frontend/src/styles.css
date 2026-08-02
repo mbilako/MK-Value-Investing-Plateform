@@ -241,6 +241,170 @@ button {
   white-space: nowrap;
 }
 
+.security-drawer {
+  width: min(620px, 100%);
+}
+
+.security-drawer__body {
+  display: grid;
+  gap: 26px;
+  padding: 28px 32px 36px;
+  overflow-y: auto;
+}
+
+.security-section {
+  display: grid;
+  gap: 14px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.security-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.security-section h3,
+.security-section p {
+  margin: 0;
+}
+
+.security-section h3 {
+  color: var(--navy);
+  font-size: 17px;
+}
+
+.security-section > p,
+.security-setup > p,
+.security-recovery-codes > p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.security-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.security-setup,
+.security-recovery-codes {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(8, 122, 87, 0.24);
+  border-radius: 10px;
+  background: var(--emerald-tint);
+}
+
+.security-setup--danger {
+  border-color: rgba(180, 35, 24, 0.24);
+  background: #fef3f2;
+}
+
+.security-setup__link {
+  width: fit-content;
+  color: var(--emerald-dark);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.security-actions,
+.security-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.security-status {
+  justify-content: space-between;
+}
+
+.security-setup code,
+.security-recovery-codes li {
+  overflow-wrap: anywhere;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.security-setup input {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--navy);
+  background: #fff;
+}
+
+.security-recovery-codes ul {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.security-recovery-codes li {
+  padding: 8px;
+  border-radius: 6px;
+  background: #fff;
+  font-family: ui-monospace, monospace;
+}
+
+.security-sessions {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.security-sessions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--subtle);
+}
+
+.security-sessions div {
+  display: grid;
+  gap: 3px;
+}
+
+.security-sessions strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.security-sessions span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.button--danger {
+  border-color: #b42318;
+  background: #b42318;
+  color: #fff;
+}
+
+.button--danger:hover {
+  border-color: #912018;
+  background: #912018;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .auth-card input:focus-visible,
 .auth-card button:focus-visible,
 .user-menu button:focus-visible {

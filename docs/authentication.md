@@ -1,6 +1,6 @@
 # Authentification et isolation des données
 
-MK-VIP v0.10 utilise des comptes personnels dont l’adresse email doit être
+MK-VIP v0.11 utilise des comptes personnels dont l’adresse email doit être
 vérifiée. Toutes les routes métier exigent une session valide et chaque
 entreprise appartient à un seul utilisateur.
 
@@ -23,6 +23,12 @@ d’un compte actif et vérifié. La confirmation d’un nouveau mot de passe
 supprime toutes les sessions du compte : les cookies déjà présents ne
 résolvent alors plus aucun utilisateur.
 
+Le menu « Sécurité » liste les sessions non expirées, leur navigateur, leur
+dernière activité et leur échéance. Une session précise peut être révoquée, ou
+toutes les autres sessions peuvent l’être en une seule opération. La dernière
+activité est actualisée au plus une fois toutes les cinq minutes afin d’éviter
+une écriture en base à chaque requête authentifiée.
+
 ## Mots de passe et verrouillage
 
 Les mots de passe ne sont jamais stockés en clair. Ils sont hachés avec
@@ -31,6 +37,39 @@ Argon2id par `pwdlib`. Après cinq échecs consécutifs
 (`MKVIP_LOGIN_LOCK_MINUTES=15`). Les échecs liés aux identifiants, à un compte
 inactif ou à son verrouillage partagent la même réponse. Un mot de passe valide
 sur un compte non vérifié reçoit une invitation explicite à vérifier l’adresse.
+
+Les tentatives de connexion sont également admises atomiquement dans une
+fenêtre partagée par PostgreSQL : 20 tentatives par IP et 10 par compte sur
+15 minutes par défaut. Les mêmes compteurs protègent la validation MFA. Les
+valeurs sont configurables avec `MKVIP_LOGIN_IP_MAX_PER_WINDOW`,
+`MKVIP_LOGIN_ACCOUNT_MAX_PER_WINDOW` et
+`MKVIP_LOGIN_RATE_LIMIT_WINDOW_MINUTES`. Une tentative refusée conserve la
+réponse générique « Identifiants invalides ».
+
+## Authentification multifacteur
+
+Un compte connecté peut activer un second facteur depuis « Sécurité ». MK-VIP
+génère un secret TOTP compatible avec les applications d’authentification
+standard, puis exige un premier code à six chiffres avant d’activer le MFA.
+Le secret temporaire expire après 10 minutes
+(`MKVIP_MFA_PENDING_SETUP_TTL_MINUTES=10`).
+
+Après activation, une connexion par email et mot de passe ne crée plus de
+session immédiatement. Elle renvoie un défi à usage unique valable cinq
+minutes (`MKVIP_MFA_CHALLENGE_TTL_MINUTES=5`). La session n’est créée qu’après
+validation d’un code TOTP ou d’un code de récupération.
+
+Huit codes de récupération sont générés par défaut
+(`MKVIP_MFA_RECOVERY_CODE_COUNT=8`). Ils ne sont affichés qu’une fois, sont
+conservés sous forme de hachage Argon2id et deviennent invalides dès leur
+première utilisation. La désactivation du MFA exige un code TOTP ou de
+récupération valide et supprime tous les codes restants.
+
+Le secret TOTP est chiffré en base avec Fernet. La clé
+`MKVIP_MFA_ENCRYPTION_KEY` doit être une clé Fernet URL-safe valide, distincte
+pour chaque environnement et conservée dans le gestionnaire de secrets. La
+perte ou le remplacement non planifié de cette clé rendrait les configurations
+MFA existantes illisibles.
 
 ## Origines, CORS et requêtes d’écriture
 
@@ -135,14 +174,17 @@ production :
   `MKVIP_SESSION_COOKIE_SECURE=true` ;
 - remplacer `MKVIP_AUTH_EMAIL_HASH_SECRET` par un secret HMAC fort, aléatoire,
   unique à l’environnement et géré hors du dépôt ;
+- remplacer `MKVIP_MFA_ENCRYPTION_KEY` par une clé Fernet aléatoire et la
+  sauvegarder durablement dans le gestionnaire de secrets ;
 - utiliser un relais SMTP authentifié, renseigner
   `MKVIP_SMTP_USERNAME`/`MKVIP_SMTP_PASSWORD` et activer
   `MKVIP_SMTP_STARTTLS=true` ;
 - configurer `MKVIP_PUBLIC_APP_URL` avec l’origine HTTPS publique exacte.
 
-L’authentification multifacteur et la limitation de débit globale au niveau de
-l’infrastructure restent différées. Depuis v0.9.1, l’Analyste IA dispose d’un
-quota quotidien et d’un cache persistant isolés par utilisateur. Les imports
-Yahoo disposent aussi d’une admission locale par utilisateur et par
-entreprise ; une limite partagée entre plusieurs instances reste à fournir par
-l’infrastructure.
+La limitation applicative des connexions est partagée par PostgreSQL entre les
+instances MK-VIP. Elle doit être complétée en production par une limitation en
+périphérie et un pare-feu applicatif afin de bloquer le trafic avant qu’il
+n’atteigne l’API. Depuis v0.9.1, l’Analyste IA dispose d’un quota quotidien et
+d’un cache persistant isolés par utilisateur. Les imports Yahoo disposent aussi
+d’une admission locale par utilisateur et par entreprise ; une limite partagée
+entre plusieurs instances reste à fournir par l’infrastructure.

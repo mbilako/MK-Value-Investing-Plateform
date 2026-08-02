@@ -4,6 +4,7 @@ export const testUser: User = {
   id: "user-1",
   email: "investor@example.com",
   created_at: "2026-07-26T10:00:00Z",
+  mfa_enabled: false,
 };
 
 const testAuthMessage: AuthMessage = {
@@ -17,6 +18,17 @@ export function createTestClient(
     getCurrentUser: async () => testUser,
     register: async () => testAuthMessage,
     login: async () => testUser,
+    verifyMfa: async () => testUser,
+    setupMfa: async () => ({
+      secret: "JBSWY3DPEHPK3PXP",
+      otpauth_uri: "otpauth://totp/MK-VIP:investor@example.com",
+      expires_at: "2026-07-26T10:10:00Z",
+    }),
+    confirmMfa: async () => ({ recovery_codes: [] }),
+    disableMfa: async () => undefined,
+    listSessions: async () => [],
+    revokeSession: async () => undefined,
+    revokeOtherSessions: async () => undefined,
     logout: async () => undefined,
     verifyEmail: async () => undefined,
     resendVerification: async () => testAuthMessage,
