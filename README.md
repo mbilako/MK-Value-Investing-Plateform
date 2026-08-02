@@ -9,6 +9,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - PostgreSQL et migrations Alembic ;
 - interface React/TypeScript ;
 - comptes personnels et isolation des données par utilisateur ;
+- authentification multifacteur TOTP et gestion des sessions actives ;
 - import des entreprises et de leurs données financières annuelles ;
 - import automatique du dernier exercice public via Yahoo Finance ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
@@ -41,17 +42,19 @@ Le parcours applicatif commence par un compte personnel vérifié :
 1. créer un compte, ouvrir l’email reçu dans Mailpit et suivre son lien de
    vérification ;
 2. se connecter avec le compte vérifié ;
-3. importer une entreprise ;
-4. utiliser « Ajouter les données », puis choisir l’import public automatique
+3. ouvrir « Sécurité » pour configurer le MFA, conserver les codes de
+   récupération et contrôler les sessions actives ;
+4. importer une entreprise ;
+5. utiliser « Ajouter les données », puis choisir l’import public automatique
    ou la saisie manuelle d’un exercice financier normalisé ;
-5. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
+6. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
    indicateurs et tendances historiques ;
-6. préparer une valorisation, ajuster les hypothèses et comparer les cinq
+7. préparer une valorisation, ajuster les hypothèses et comparer les cinq
    méthodes à la capitalisation observée ;
-7. calculer le scoring global et lire les quatre contributions et explications ;
-8. revenir au tableau de décision pour comparer les derniers scorings, filtrer
+8. calculer le scoring global et lire les quatre contributions et explications ;
+9. revenir au tableau de décision pour comparer les derniers scorings, filtrer
    les signaux et rouvrir un dossier prioritaire.
-9. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
+10. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
    entreprises ou poser une question sur les analyses MK-VIP disponibles.
 
 ### Tester la vérification et la réinitialisation
@@ -83,8 +86,10 @@ que la limite soit atteinte.
 
 La configuration locale est volontairement adaptée à HTTP et à Mailpit. En
 production, servir MK-VIP exclusivement en HTTPS, activer le cookie `Secure`,
-remplacer `MKVIP_AUTH_EMAIL_HASH_SECRET` par un secret HMAC fort et unique, et
-utiliser un relais SMTP authentifié avec chiffrement STARTTLS. Voir
+remplacer `MKVIP_AUTH_EMAIL_HASH_SECRET` par un secret HMAC fort et unique,
+remplacer `MKVIP_MFA_ENCRYPTION_KEY` par une clé Fernet aléatoire conservée
+durablement, puis utiliser un relais SMTP authentifié avec chiffrement
+STARTTLS. Voir
 [`docs/authentication.md`](docs/authentication.md).
 
 Les montants du formulaire sont exprimés en millions dans la devise de
@@ -161,7 +166,14 @@ POST /api/v1/auth/verify-email
 POST /api/v1/auth/password-reset/request
 POST /api/v1/auth/password-reset/confirm
 POST /api/v1/auth/login
+POST /api/v1/auth/mfa/verify
+POST /api/v1/auth/mfa/setup
+POST /api/v1/auth/mfa/confirm
+POST /api/v1/auth/mfa/disable
 GET  /api/v1/auth/me
+GET  /api/v1/auth/sessions
+DELETE /api/v1/auth/sessions/{session_id}
+POST /api/v1/auth/sessions/revoke-other
 POST /api/v1/auth/logout
 ```
 
@@ -258,6 +270,8 @@ reste disponible lorsqu’un champ public est absent ou doit être corrigé.
 
 Les analyses IA sont produites à la demande et ne sont pas historisées comme
 des dossiers permanents. Les réponses identiques sont toutefois conservées
-temporairement dans un cache isolé par utilisateur. L’authentification
-multifacteur et une limitation de débit globale au niveau de l’infrastructure
-restent à ajouter avant une exploitation multi-utilisateur à grande échelle.
+temporairement dans un cache isolé par utilisateur. La limitation des
+connexions de la v0.11 est partagée par PostgreSQL entre les instances de
+l’application ; une protection complémentaire en périphérie, avec pare-feu
+applicatif et limitation réseau, reste recommandée avant une exploitation
+publique à grande échelle.

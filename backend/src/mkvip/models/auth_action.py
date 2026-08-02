@@ -19,13 +19,14 @@ from mkvip.db.base import Base
 class AuthActionPurpose(enum.StrEnum):
     EMAIL_VERIFICATION = "email_verification"
     PASSWORD_RESET = "password_reset"
+    MFA_LOGIN = "mfa_login"
 
 
 class AuthActionTokenOrm(Base):
     __tablename__ = "auth_action_tokens"
     __table_args__ = (
         CheckConstraint(
-            "purpose IN ('email_verification', 'password_reset')",
+            "purpose IN ('email_verification', 'password_reset', 'mfa_login')",
             name="ck_auth_action_tokens_purpose",
         ),
         UniqueConstraint("token_hash", name="uq_auth_action_tokens_hash"),

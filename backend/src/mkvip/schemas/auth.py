@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -24,6 +25,15 @@ class LoginRequest(BaseModel):
     @classmethod
     def normalized_email(cls, value: EmailStr) -> str:
         return normalize_email(str(value))
+
+
+class MfaChallengeRequest(BaseModel):
+    challenge_token: str = Field(min_length=32, max_length=256)
+    code: str = Field(min_length=6, max_length=32)
+
+
+class MfaCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=32)
 
 
 class EmailRequest(BaseModel):
@@ -54,3 +64,29 @@ class UserRead(BaseModel):
     id: uuid.UUID
     email: str
     created_at: datetime
+    mfa_enabled: bool = False
+
+
+class MfaChallengeRead(BaseModel):
+    mfa_required: Literal[True] = True
+    challenge_token: str
+    expires_at: datetime
+
+
+class MfaSetupRead(BaseModel):
+    secret: str
+    otpauth_uri: str
+    expires_at: datetime
+
+
+class MfaRecoveryCodesRead(BaseModel):
+    recovery_codes: list[str]
+
+
+class SessionRead(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    last_seen_at: datetime
+    expires_at: datetime
+    user_agent: str | None
+    current: bool

@@ -252,6 +252,14 @@ export function PasswordResetFlow(props: PasswordResetFlowProps) {
             : "Mettre à jour le mot de passe"}
         </button>
       </form>
+      <button
+        className="button button--text auth-back"
+        type="button"
+        onClick={props.onBackToLogin}
+        disabled={busy}
+      >
+        Retour à la connexion
+      </button>
     </div>
   );
 }

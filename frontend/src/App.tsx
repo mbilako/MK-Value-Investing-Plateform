@@ -5,6 +5,7 @@ import {
   apiClient,
   type AuthCredentials,
   type CompanyClient,
+  type LoginResult,
   type User,
 } from "./api/client";
 import { readAndClearAuthLink } from "./auth/link";
@@ -71,11 +72,18 @@ export function App({ client = apiClient }: AppProps) {
     };
   }, [client, shouldRestoreSession]);
 
-  const authenticate = async (
-    action: (credentials: AuthCredentials) => Promise<User>,
-    credentials: AuthCredentials,
-  ) => {
-    const authenticatedUser = await action(credentials);
+  const login = async (credentials: AuthCredentials): Promise<LoginResult> => {
+    const result = await client.login(credentials);
+    if (!("mfa_required" in result)) {
+      setUser(result);
+      setNotice(null);
+      setStatus("authenticated");
+    }
+    return result;
+  };
+
+  const verifyMfa = async (challengeToken: string, code: string) => {
+    const authenticatedUser = await client.verifyMfa(challengeToken, code);
     setUser(authenticatedUser);
     setNotice(null);
     setStatus("authenticated");
@@ -98,7 +106,18 @@ export function App({ client = apiClient }: AppProps) {
   }
 
   if (status === "authenticated" && user) {
-    return <Workspace client={client} user={user} onLogout={logout} />;
+    return (
+      <Workspace
+        client={client}
+        user={user}
+        onLogout={logout}
+        onMfaStatusChange={(mfaEnabled) =>
+          setUser((current) =>
+            current ? { ...current, mfa_enabled: mfaEnabled } : current,
+          )
+        }
+      />
+    );
   }
 
   return (
@@ -106,9 +125,8 @@ export function App({ client = apiClient }: AppProps) {
       notice={notice}
       authLink={authLink}
       onAuthLinkHandled={() => setAuthLink(null)}
-      onLogin={(credentials) =>
-        authenticate(client.login.bind(client), credentials)
-      }
+      onLogin={login}
+      onVerifyMfa={verifyMfa}
       onRegister={(credentials) => client.register(credentials)}
       onVerifyEmail={(token) => client.verifyEmail(token)}
       onResendVerification={(email) => client.resendVerification(email)}

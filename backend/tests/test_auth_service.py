@@ -22,6 +22,7 @@ from mkvip.models.auth_action import (
     AuthActionTokenOrm,
     AuthEmailRateLimitOrm,
 )
+from mkvip.models.auth_rate_limit import AuthRateLimitOrm
 from mkvip.models.company import CompanyOrm
 from mkvip.models.session import SessionOrm
 from mkvip.models.user import LEGACY_OWNER_EMAIL, LEGACY_OWNER_ID, UserOrm
@@ -986,3 +987,65 @@ async def test_logout_deletes_only_the_presented_session(
     await auth_service.logout(first.token)
     assert await auth_service.resolve_user(first.token) is None
     assert await auth_service.resolve_user(second.token) is not None
+
+
+@pytest.mark.asyncio
+async def test_session_last_seen_is_touched_at_a_bounded_frequency(
+    auth_service: AuthService,
+    session: AsyncSession,
+    clock: MutableClock,
+) -> None:
+    await persist_verified_user(session)
+    grant = await auth_service.login(
+        LoginRequest(
+            email="alice@example.com",
+            password="correct horse battery",
+        )
+    )
+    record = await session.scalar(select(SessionOrm))
+    assert record is not None
+    assert record.last_seen_at.replace(tzinfo=UTC) == FIXED_NOW
+
+    clock.advance(timedelta(minutes=4))
+    assert await auth_service.resolve_user(grant.token) is not None
+    await session.refresh(record)
+    assert record.last_seen_at.replace(tzinfo=UTC) == FIXED_NOW
+
+    clock.advance(timedelta(minutes=2))
+    assert await auth_service.resolve_user(grant.token) is not None
+    await session.refresh(record)
+    assert record.last_seen_at.replace(tzinfo=UTC) == FIXED_NOW + timedelta(minutes=6)
+
+
+@pytest.mark.asyncio
+async def test_login_rate_limit_supports_windows_longer_than_one_hour(
+    session: AsyncSession,
+    clock: MutableClock,
+) -> None:
+    await persist_verified_user(session)
+    service = AuthService(
+        session,
+        Settings(
+            login_ip_max_per_window=1,
+            login_account_max_per_window=1,
+            login_rate_limit_window_minutes=90,
+            _env_file=None,
+        ),
+        now=clock,
+    )
+    credentials = LoginRequest(
+        email="alice@example.com",
+        password="correct horse battery",
+    )
+
+    await service.login(credentials)
+    with pytest.raises(InvalidCredentialsError):
+        await service.login(credentials)
+
+    windows = set(await session.scalars(select(AuthRateLimitOrm.window_start)))
+    assert {window.replace(tzinfo=UTC) for window in windows} == {
+        FIXED_NOW.replace(hour=9)
+    }
+
+    clock.advance(timedelta(minutes=31))
+    await service.login(credentials)

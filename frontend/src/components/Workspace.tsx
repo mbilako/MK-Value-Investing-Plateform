@@ -24,14 +24,21 @@ import { ImportDrawer } from "./ImportDrawer";
 import { Sidebar } from "./Sidebar";
 import { SummaryStrip } from "./SummaryStrip";
 import { UserMenu } from "./UserMenu";
+import { SecurityDrawer } from "./SecurityDrawer";
 
 export interface WorkspaceProps {
   client: CompanyClient;
   user: User;
   onLogout(): Promise<void>;
+  onMfaStatusChange(mfaEnabled: boolean): void;
 }
 
-export function Workspace({ client, user, onLogout }: WorkspaceProps) {
+export function Workspace({
+  client,
+  user,
+  onLogout,
+  onMfaStatusChange,
+}: WorkspaceProps) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [isImportOpen, setImportOpen] = useState(false);
@@ -47,6 +54,7 @@ export function Workspace({ client, user, onLogout }: WorkspaceProps) {
   const [scoringAnalyses, setScoringAnalyses] = useState<ScoringAnalysis[]>([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [isSecurityOpen, setSecurityOpen] = useState(false);
   const aiCompanies = companies.filter(
     (company) => company.status === "ready",
   );
@@ -144,7 +152,11 @@ export function Workspace({ client, user, onLogout }: WorkspaceProps) {
         <header className="topbar">
           <h1>Vue d’ensemble</h1>
           <div className="topbar__actions">
-            <UserMenu user={user} onLogout={onLogout} />
+            <UserMenu
+              user={user}
+              onLogout={onLogout}
+              onOpenSecurity={() => setSecurityOpen(true)}
+            />
             <span className="data-status">
               <span className="status-dot" aria-hidden="true" />
               Données prêtes
@@ -266,6 +278,14 @@ export function Workspace({ client, user, onLogout }: WorkspaceProps) {
             setValuations([]);
             setScoringAnalyses([]);
           }}
+        />
+      )}
+      {isSecurityOpen && (
+        <SecurityDrawer
+          client={client}
+          user={user}
+          onMfaStatusChange={onMfaStatusChange}
+          onClose={() => setSecurityOpen(false)}
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 from functools import lru_cache
 
-from pydantic import Field, PositiveFloat, PositiveInt, SecretStr
+from cryptography.fernet import Fernet
+from pydantic import Field, PositiveFloat, PositiveInt, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +27,9 @@ class Settings(BaseSettings):
     auth_email_hash_secret: SecretStr = SecretStr(
         "change-me-outside-local-development"
     )
+    mfa_encryption_key: SecretStr = SecretStr(
+        "M2M2YjVjOTAzNmRhMmQ4OGY0NmFhOGM2NjFlZTVjNjc="
+    )
     email_verification_ttl_hours: PositiveInt = 24
     password_reset_ttl_minutes: PositiveInt = 30
     auth_email_cooldown_seconds: PositiveInt = 60
@@ -35,6 +39,12 @@ class Settings(BaseSettings):
     session_duration_days: PositiveInt = 30
     login_max_attempts: PositiveInt = 5
     login_lock_minutes: PositiveInt = 15
+    login_ip_max_per_window: PositiveInt = 20
+    login_account_max_per_window: PositiveInt = 10
+    login_rate_limit_window_minutes: PositiveInt = 15
+    mfa_challenge_ttl_minutes: PositiveInt = 5
+    mfa_pending_setup_ttl_minutes: PositiveInt = 10
+    mfa_recovery_code_count: PositiveInt = 8
     ai_daily_quota: PositiveInt = 20
     ai_cache_ttl_seconds: PositiveInt = 3600
     yahoo_max_concurrency: PositiveInt = 8
@@ -47,6 +57,17 @@ class Settings(BaseSettings):
         env_prefix="MKVIP_",
         extra="ignore",
     )
+
+    @field_validator("mfa_encryption_key")
+    @classmethod
+    def validate_mfa_encryption_key(cls, value: SecretStr) -> SecretStr:
+        try:
+            Fernet(value.get_secret_value().encode("ascii"))
+        except (UnicodeEncodeError, ValueError) as error:
+            raise ValueError(
+                "mfa_encryption_key must be a URL-safe base64 Fernet key"
+            ) from error
+        return value
 
 
 @lru_cache

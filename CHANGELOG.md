@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.11.0 - 2026-08-02
+
+### Added
+
+- Authentification multifacteur TOTP avec application d’authentification.
+- Huit codes de récupération à usage unique, affichés une seule fois lors de
+  l’activation du MFA.
+- Écran de sécurité permettant d’activer ou désactiver le MFA, de consulter
+  les sessions actives et de révoquer un appareil ou toutes les autres
+  sessions.
+- Migration PostgreSQL dédiée aux secrets MFA chiffrés, codes de récupération,
+  compteurs de connexion et métadonnées de session.
+
+### Changed
+
+- Le parcours de connexion crée une session uniquement après la validation du
+  second facteur lorsqu’il est activé.
+- L’activité d’une session est actualisée au plus une fois toutes les cinq
+  minutes afin de conserver une information utile sans écrire à chaque appel.
+- Un lien de réinitialisation invalide permet désormais de revenir clairement
+  à l’écran de connexion.
+
+### Security
+
+- Secrets TOTP chiffrés avec Fernet et clé dédiée validée au démarrage.
+- Limitation atomique des tentatives de connexion et de MFA par IP et par
+  compte, avec fenêtres configurables.
+- Réponses de connexion génériques lorsque les identifiants ou les limites
+  sont invalides, afin de ne pas révéler l’état d’un compte.
+- Désactivation du MFA protégée par un code TOTP ou un code de récupération
+  valide ; les codes restants sont supprimés après désactivation.
+
 ## 0.10.0 - 2026-07-28
 
 ### Added

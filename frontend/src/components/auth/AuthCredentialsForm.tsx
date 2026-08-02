@@ -4,6 +4,8 @@ import {
   ApiError,
   type AuthCredentials,
   type AuthMessage,
+  type LoginResult,
+  type MfaChallenge,
 } from "../../api/client";
 
 type AuthMode = "login" | "register";
@@ -11,7 +13,8 @@ type AuthMode = "login" | "register";
 interface AuthCredentialsFormProps {
   mode: AuthMode;
   notice: string | null;
-  onLogin(credentials: AuthCredentials): Promise<void>;
+  onLogin(credentials: AuthCredentials): Promise<LoginResult>;
+  onMfaRequired(challenge: MfaChallenge): void;
   onRegister(credentials: AuthCredentials): Promise<AuthMessage>;
   onVerificationPending(email: string, message: string): void;
   onSelectMode(mode: AuthMode): void;
@@ -23,6 +26,7 @@ export function AuthCredentialsForm({
   mode,
   notice,
   onLogin,
+  onMfaRequired,
   onRegister,
   onVerificationPending,
   onSelectMode,
@@ -55,7 +59,10 @@ export function AuthCredentialsForm({
         const result = await onRegister(credentials);
         onVerificationPending(email, result.message);
       } else {
-        await onLogin(credentials);
+        const result = await onLogin(credentials);
+        if ("mfa_required" in result) {
+          onMfaRequired(result);
+        }
       }
     } catch (caughtError) {
       setCanResend(

@@ -20,6 +20,7 @@ export interface User {
   id: string;
   email: string;
   created_at: string;
+  mfa_enabled: boolean;
 }
 
 export interface AuthCredentials {
@@ -30,6 +31,33 @@ export interface AuthCredentials {
 export interface AuthMessage {
   message: string;
 }
+
+export interface MfaChallenge {
+  mfa_required: true;
+  challenge_token: string;
+  expires_at: string;
+}
+
+export interface MfaSetup {
+  secret: string;
+  otpauth_uri: string;
+  expires_at: string;
+}
+
+export interface MfaRecoveryCodes {
+  recovery_codes: string[];
+}
+
+export interface AccountSession {
+  id: string;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  user_agent: string | null;
+  current: boolean;
+}
+
+export type LoginResult = User | MfaChallenge;
 
 export class ApiError extends Error {
   constructor(
@@ -271,7 +299,14 @@ export interface AIAnalysis {
 export interface CompanyClient {
   getCurrentUser(): Promise<User>;
   register(credentials: AuthCredentials): Promise<AuthMessage>;
-  login(credentials: AuthCredentials): Promise<User>;
+  login(credentials: AuthCredentials): Promise<LoginResult>;
+  verifyMfa(challengeToken: string, code: string): Promise<User>;
+  setupMfa(): Promise<MfaSetup>;
+  confirmMfa(code: string): Promise<MfaRecoveryCodes>;
+  disableMfa(code: string): Promise<void>;
+  listSessions(): Promise<AccountSession[]>;
+  revokeSession(sessionId: string): Promise<void>;
+  revokeOtherSessions(): Promise<void>;
   logout(): Promise<void>;
   verifyEmail(token: string): Promise<void>;
   resendVerification(email: string): Promise<AuthMessage>;
@@ -375,11 +410,36 @@ export function createApiClient(): CompanyClient {
         false,
       ),
     login: (credentials) =>
-      request<User>(
+      request<LoginResult>(
         "/auth/login",
         { method: "POST", body: JSON.stringify(credentials) },
         false,
       ),
+    verifyMfa: (challengeToken, code) =>
+      request<User>(
+        "/auth/mfa/verify",
+        {
+          method: "POST",
+          body: JSON.stringify({ challenge_token: challengeToken, code }),
+        },
+        false,
+      ),
+    setupMfa: () => request<MfaSetup>("/auth/mfa/setup", { method: "POST" }),
+    confirmMfa: (code) =>
+      request<MfaRecoveryCodes>("/auth/mfa/confirm", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+    disableMfa: (code) =>
+      request<void>("/auth/mfa/disable", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+    listSessions: () => request<AccountSession[]>("/auth/sessions"),
+    revokeSession: (sessionId) =>
+      request<void>(`/auth/sessions/${sessionId}`, { method: "DELETE" }),
+    revokeOtherSessions: () =>
+      request<void>("/auth/sessions/revoke-other", { method: "POST" }),
     logout: () => request<void>("/auth/logout", { method: "POST" }, false),
     verifyEmail: (token) =>
       request<void>(

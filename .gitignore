@@ -18,6 +18,7 @@ backend/.piptmp/
 
 # Node
 node_modules/
+.pnpm-store/
 frontend/dist/
 frontend/coverage/
 *.tsbuildinfo

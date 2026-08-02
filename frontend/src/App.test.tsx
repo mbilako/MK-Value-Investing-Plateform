@@ -284,6 +284,38 @@ describe("MK-VIP authentication", () => {
     expect(confirmPasswordReset).not.toHaveBeenCalled();
   });
 
+  it("lets the user leave an invalid password-reset link", async () => {
+    window.location.hash = "#reset-password=invalid-token";
+    const confirmPasswordReset = vi.fn().mockRejectedValue(
+      new ApiError(400, "Jeton de réinitialisation invalide."),
+    );
+    const user = userEvent.setup();
+
+    render(<App client={createTestClient({ confirmPasswordReset })} />);
+
+    await user.type(
+      screen.getByLabelText("Nouveau mot de passe"),
+      "correct horse battery",
+    );
+    await user.type(
+      screen.getByLabelText("Confirmer le mot de passe"),
+      "correct horse battery",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Mettre à jour le mot de passe" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Jeton de réinitialisation invalide.",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Retour à la connexion" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Se connecter" }),
+    ).toBeInTheDocument();
+  });
+
   it("offers verification email resend after an unverified login", async () => {
     const user = userEvent.setup();
     const login = vi.fn().mockRejectedValue(
@@ -400,6 +432,49 @@ describe("MK-VIP authentication", () => {
     ).toBeDisabled();
   });
 
+  it("completes an MFA challenge before opening the workspace", async () => {
+    const user = userEvent.setup();
+    const challenge = {
+      mfa_required: true as const,
+      challenge_token: "challenge-token",
+      expires_at: "2026-07-26T10:05:00Z",
+    };
+    const login = vi.fn().mockResolvedValue(challenge);
+    const verifyMfa = vi.fn().mockResolvedValue({
+      ...testUser,
+      mfa_enabled: true,
+    });
+    const client = createTestClient({
+      getCurrentUser: async () => {
+        throw new ApiError(401, "Session absente ou expirée.");
+      },
+      login,
+      verifyMfa,
+    });
+
+    render(<App client={client} />);
+
+    await user.type(
+      await screen.findByLabelText("Adresse email"),
+      "investor@example.com",
+    );
+    await user.type(screen.getByLabelText("Mot de passe"), "secret");
+    await user.click(screen.getByRole("button", { name: "Se connecter" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Vérification en deux étapes",
+      }),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Code de vérification"), "123456");
+    await user.click(screen.getByRole("button", { name: "Continuer" }));
+
+    expect(verifyMfa).toHaveBeenCalledWith("challenge-token", "123456");
+    expect(
+      await screen.findByRole("heading", { name: "Vue d’ensemble" }),
+    ).toBeInTheDocument();
+  });
+
   it("logs out and returns to the login screen", async () => {
     const user = userEvent.setup();
     const logout = vi.fn().mockResolvedValue(undefined);
@@ -468,8 +543,86 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
     expect(
-      screen.getByText("Version 0.10 Comptes personnels"),
+      screen.getByText("Version 0.11 Sécurité renforcée"),
     ).toBeInTheDocument();
+  });
+
+  it("configures and disables MFA from the security drawer", async () => {
+    const user = userEvent.setup();
+    const setupMfa = vi.fn().mockResolvedValue({
+      secret: "JBSWY3DPEHPK3PXP",
+      otpauth_uri: "otpauth://totp/MK-VIP:investor@example.com",
+      expires_at: "2026-07-26T10:10:00Z",
+    });
+    const confirmMfa = vi.fn().mockResolvedValue({
+      recovery_codes: ["AAAAA-BBBBB", "CCCCC-DDDDD"],
+    });
+    const disableMfa = vi.fn().mockResolvedValue(undefined);
+    const client = createTestClient({ setupMfa, confirmMfa, disableMfa });
+
+    render(<App client={client} />);
+
+    await user.click(await screen.findByRole("button", { name: "Sécurité" }));
+    await user.click(
+      screen.getByRole("button", { name: "Configurer le MFA" }),
+    );
+    expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Code de vérification"), "123456");
+    await user.click(screen.getByRole("button", { name: "Activer le MFA" }));
+
+    expect(confirmMfa).toHaveBeenCalledWith("123456");
+    expect(await screen.findByText("AAAAA-BBBBB")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "J’ai enregistré mes codes" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Désactiver le MFA" }),
+    );
+    await user.type(screen.getByLabelText("Code de vérification"), "AAAAA-BBBBB");
+    await user.click(
+      screen.getByRole("button", { name: "Désactiver le MFA" }),
+    );
+
+    expect(disableMfa).toHaveBeenCalledWith("AAAAA-BBBBB");
+    expect(
+      await screen.findByRole("button", { name: "Configurer le MFA" }),
+    ).toBeInTheDocument();
+  });
+
+  it("lists and revokes another active session", async () => {
+    const user = userEvent.setup();
+    const currentSession = {
+      id: "session-current",
+      created_at: "2026-07-26T10:00:00Z",
+      last_seen_at: "2026-07-26T10:05:00Z",
+      expires_at: "2026-08-25T10:00:00Z",
+      user_agent: "Navigateur actuel",
+      current: true,
+    };
+    const otherSession = {
+      id: "session-other",
+      created_at: "2026-07-25T08:00:00Z",
+      last_seen_at: "2026-07-25T09:00:00Z",
+      expires_at: "2026-08-24T08:00:00Z",
+      user_agent: "Autre navigateur",
+      current: false,
+    };
+    const listSessions = vi
+      .fn()
+      .mockResolvedValueOnce([currentSession, otherSession])
+      .mockResolvedValueOnce([currentSession]);
+    const revokeSession = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <App client={createTestClient({ listSessions, revokeSession })} />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Sécurité" }));
+    expect(await screen.findByText("Autre navigateur")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Révoquer" }));
+
+    expect(revokeSession).toHaveBeenCalledWith("session-other");
+    expect(screen.queryByText("Autre navigateur")).not.toBeInTheDocument();
   });
 
   it("opens the Air Liquide import form with normalized defaults", async () => {
