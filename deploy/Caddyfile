@@ -1,0 +1,20 @@
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$MKVIP_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+
+	reverse_proxy frontend:80
+}

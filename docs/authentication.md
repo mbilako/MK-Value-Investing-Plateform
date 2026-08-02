@@ -188,3 +188,7 @@ n’atteigne l’API. Depuis v0.9.1, l’Analyste IA dispose d’un quota quotid
 d’un cache persistant isolés par utilisateur. Les imports Yahoo disposent aussi
 d’une admission locale par utilisateur et par entreprise ; une limite partagée
 entre plusieurs instances reste à fournir par l’infrastructure.
+
+Le déploiement VPS de référence, les fichiers secrets attendus et les
+procédures de sauvegarde et de retour arrière sont détaillés dans
+[`deployment-vps.md`](deployment-vps.md).

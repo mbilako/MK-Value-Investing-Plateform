@@ -1,0 +1,194 @@
+x-backend-environment: &backend-environment
+  MKVIP_ENVIRONMENT: production
+  MKVIP_LOG_LEVEL: ${MKVIP_LOG_LEVEL:-INFO}
+  MKVIP_SECRETS_DIR: /run/secrets
+  MKVIP_ALLOWED_ORIGINS: '["https://${MKVIP_DOMAIN:?Set MKVIP_DOMAIN}"]'
+  MKVIP_ALLOWED_HOSTS: '["${MKVIP_DOMAIN:?Set MKVIP_DOMAIN}"]'
+  MKVIP_PUBLIC_APP_URL: https://${MKVIP_DOMAIN:?Set MKVIP_DOMAIN}
+  MKVIP_SESSION_COOKIE_SECURE: "true"
+  MKVIP_SESSION_DURATION_DAYS: ${MKVIP_SESSION_DURATION_DAYS:-30}
+  MKVIP_LOGIN_MAX_ATTEMPTS: ${MKVIP_LOGIN_MAX_ATTEMPTS:-5}
+  MKVIP_LOGIN_LOCK_MINUTES: ${MKVIP_LOGIN_LOCK_MINUTES:-15}
+  MKVIP_LOGIN_IP_MAX_PER_WINDOW: ${MKVIP_LOGIN_IP_MAX_PER_WINDOW:-20}
+  MKVIP_LOGIN_ACCOUNT_MAX_PER_WINDOW: ${MKVIP_LOGIN_ACCOUNT_MAX_PER_WINDOW:-10}
+  MKVIP_LOGIN_RATE_LIMIT_WINDOW_MINUTES: ${MKVIP_LOGIN_RATE_LIMIT_WINDOW_MINUTES:-15}
+  MKVIP_MFA_CHALLENGE_TTL_MINUTES: ${MKVIP_MFA_CHALLENGE_TTL_MINUTES:-5}
+  MKVIP_MFA_PENDING_SETUP_TTL_MINUTES: ${MKVIP_MFA_PENDING_SETUP_TTL_MINUTES:-10}
+  MKVIP_MFA_RECOVERY_CODE_COUNT: ${MKVIP_MFA_RECOVERY_CODE_COUNT:-8}
+  MKVIP_AI_DAILY_QUOTA: ${MKVIP_AI_DAILY_QUOTA:-20}
+  MKVIP_AI_CACHE_TTL_SECONDS: ${MKVIP_AI_CACHE_TTL_SECONDS:-3600}
+  MKVIP_YAHOO_MAX_CONCURRENCY: ${MKVIP_YAHOO_MAX_CONCURRENCY:-8}
+  MKVIP_YAHOO_RESPONSE_TIMEOUT_SECONDS: ${MKVIP_YAHOO_RESPONSE_TIMEOUT_SECONDS:-10}
+  MKVIP_YAHOO_IMPORT_TIMEOUT_SECONDS: ${MKVIP_YAHOO_IMPORT_TIMEOUT_SECONDS:-30}
+  MKVIP_YAHOO_IMPORTS_PER_USER: ${MKVIP_YAHOO_IMPORTS_PER_USER:-1}
+  MKVIP_OPENAI_MODEL: ${MKVIP_OPENAI_MODEL:-gpt-5.6-sol}
+  MKVIP_SMTP_HOST: ${MKVIP_SMTP_HOST:?Set MKVIP_SMTP_HOST}
+  MKVIP_SMTP_PORT: ${MKVIP_SMTP_PORT:-587}
+  MKVIP_SMTP_FROM: ${MKVIP_SMTP_FROM:?Set MKVIP_SMTP_FROM}
+  MKVIP_SMTP_TIMEOUT_SECONDS: ${MKVIP_SMTP_TIMEOUT_SECONDS:-10}
+  MKVIP_SMTP_STARTTLS: "true"
+  MKVIP_SMTP_USERNAME: ${MKVIP_SMTP_USERNAME:?Set MKVIP_SMTP_USERNAME}
+  MKVIP_EMAIL_VERIFICATION_TTL_HOURS: ${MKVIP_EMAIL_VERIFICATION_TTL_HOURS:-24}
+  MKVIP_PASSWORD_RESET_TTL_MINUTES: ${MKVIP_PASSWORD_RESET_TTL_MINUTES:-30}
+  MKVIP_AUTH_EMAIL_COOLDOWN_SECONDS: ${MKVIP_AUTH_EMAIL_COOLDOWN_SECONDS:-60}
+  MKVIP_AUTH_EMAIL_MAX_PER_HOUR: ${MKVIP_AUTH_EMAIL_MAX_PER_HOUR:-5}
+
+x-backend-secrets: &backend-secrets
+  - source: database_url
+    target: MKVIP_DATABASE_URL
+  - source: openai_api_key
+    target: OPENAI_API_KEY
+  - source: auth_email_hash_secret
+    target: MKVIP_AUTH_EMAIL_HASH_SECRET
+  - source: mfa_encryption_key
+    target: MKVIP_MFA_ENCRYPTION_KEY
+  - source: smtp_password
+    target: MKVIP_SMTP_PASSWORD
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mkvip}
+      POSTGRES_USER: ${POSTGRES_USER:-mkvip}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data
+
+  migrate:
+    image: mkvip-backend:${MKVIP_IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+    environment: *backend-environment
+    secrets: *backend-secrets
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - data
+
+  backend:
+    image: mkvip-backend:${MKVIP_IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment: *backend-environment
+    secrets: *backend-secrets
+    command:
+      - uvicorn
+      - mkvip.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+      - --no-access-log
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; request = urllib.request.Request('http://localhost:8000/api/v1/ready', headers={'Host': '${MKVIP_DOMAIN}'}); urllib.request.urlopen(request, timeout=5)"
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+      - data
+
+  frontend:
+    image: mkvip-frontend:${MKVIP_IMAGE_TAG:-latest}
+    build:
+      context: ./frontend
+      args:
+        NGINX_CONFIG: nginx.production.conf
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+      - app
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+      MKVIP_DOMAIN: ${MKVIP_DOMAIN:?Set MKVIP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+
+networks:
+  edge:
+  app:
+    internal: true
+  data:
+    internal: true
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE}
+  database_url:
+    file: ${MKVIP_DATABASE_URL_FILE:?Set MKVIP_DATABASE_URL_FILE}
+  openai_api_key:
+    file: ${OPENAI_API_KEY_FILE:?Set OPENAI_API_KEY_FILE}
+  auth_email_hash_secret:
+    file: ${MKVIP_AUTH_EMAIL_HASH_SECRET_FILE:?Set MKVIP_AUTH_EMAIL_HASH_SECRET_FILE}
+  mfa_encryption_key:
+    file: ${MKVIP_MFA_ENCRYPTION_KEY_FILE:?Set MKVIP_MFA_ENCRYPTION_KEY_FILE}
+  smtp_password:
+    file: ${MKVIP_SMTP_PASSWORD_FILE:?Set MKVIP_SMTP_PASSWORD_FILE}

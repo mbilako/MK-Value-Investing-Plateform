@@ -109,6 +109,16 @@ docker compose down
 
 Les données PostgreSQL sont conservées dans le volume `postgres_data`.
 
+## Déploiement sur un VPS
+
+La configuration de production est séparée du Compose local. Elle utilise
+Caddy pour HTTPS automatique, des réseaux Docker privés, des secrets montés
+comme fichiers, une migration Alembic contrôlée et des contrôles de santé
+distincts pour le processus API et PostgreSQL.
+
+Le guide complet de préparation, déploiement, sauvegarde et retour arrière est
+disponible dans [`docs/deployment-vps.md`](docs/deployment-vps.md).
+
 ## Développement local
 
 ### Backend

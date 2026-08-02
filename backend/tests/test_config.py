@@ -42,3 +42,63 @@ def test_security_limits_and_timeouts_require_positive_values(
 def test_mfa_encryption_key_must_be_a_valid_fernet_key() -> None:
     with pytest.raises(ValidationError, match="URL-safe base64 Fernet key"):
         Settings(_env_file=None, mfa_encryption_key="not-a-fernet-key")
+
+
+def test_production_configuration_rejects_development_defaults() -> None:
+    with pytest.raises(ValidationError, match="Invalid production configuration"):
+        Settings(_env_file=None, _secrets_dir=None, environment="production")
+
+
+def test_production_configuration_accepts_explicit_secure_values() -> None:
+    settings = Settings(
+        _env_file=None,
+        _secrets_dir=None,
+        environment="production",
+        database_url="postgresql+asyncpg://mkvip:secret@db:5432/mkvip",
+        openai_api_key="test-openai-key",
+        allowed_origins=["https://invest.example.com"],
+        allowed_hosts=["invest.example.com"],
+        public_app_url="https://invest.example.com",
+        smtp_host="smtp.example.com",
+        smtp_starttls=True,
+        smtp_username="mkvip",
+        smtp_password="smtp-secret",
+        auth_email_hash_secret="a-strong-and-unique-hmac-secret",
+        mfa_encryption_key="ZmYxZDZlNzU2M2U1NzJjMTdkYjViYjIzMDI0NTE0YjA=",
+        session_cookie_secure=True,
+    )
+
+    assert settings.environment == "production"
+
+
+def test_production_configuration_reads_docker_secret_files(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret_values = {
+        "MKVIP_DATABASE_URL": "postgresql+asyncpg://mkvip:secret@db:5432/mkvip",
+        "OPENAI_API_KEY": "test-openai-key",
+        "MKVIP_AUTH_EMAIL_HASH_SECRET": "a-strong-and-unique-hmac-secret",
+        "MKVIP_MFA_ENCRYPTION_KEY": "ZmYxZDZlNzU2M2U1NzJjMTdkYjViYjIzMDI0NTE0YjA=",
+        "MKVIP_SMTP_PASSWORD": "smtp-secret",
+    }
+    for name, value in secret_values.items():
+        monkeypatch.delenv(name, raising=False)
+        (tmp_path / name).write_text(value, encoding="utf-8")
+    monkeypatch.setenv("MKVIP_SECRETS_DIR", str(tmp_path))
+
+    settings = Settings(
+        _env_file=None,
+        environment="production",
+        allowed_origins=["https://invest.example.com"],
+        allowed_hosts=["invest.example.com"],
+        public_app_url="https://invest.example.com",
+        smtp_host="smtp.example.com",
+        smtp_starttls=True,
+        smtp_username="mkvip",
+        session_cookie_secure=True,
+    )
+
+    assert settings.database_url == secret_values["MKVIP_DATABASE_URL"]
+    assert settings.smtp_password is not None
+    assert settings.smtp_password.get_secret_value() == "smtp-secret"
