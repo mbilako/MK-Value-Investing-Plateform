@@ -53,7 +53,11 @@ export function DecisionDashboard({
   const distributionTotal = Math.max(dashboard.summary.companies, 1);
 
   return (
-    <section className="section decision-dashboard" aria-labelledby="decision-title">
+    <section
+      className="section decision-dashboard"
+      id="analyses"
+      aria-labelledby="decision-title"
+    >
       <div className="decision-dashboard__head">
         <div>
           <p className="section-eyebrow">Lecture comparative</p>

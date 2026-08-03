@@ -1,8 +1,9 @@
 # Sources de données publiques
 
-MK-VIP assemble uniquement des sources gratuites. Un import automatique
-retient un exercice annuel complet auprès d’un seul fournisseur comptable ; il
-ne mélange pas ligne par ligne des exercices ou des normes différentes.
+MK-VIP assemble uniquement des sources gratuites. Un import automatique charge
+jusqu’aux dix derniers exercices structurés disponibles. Chaque exercice est
+retenu intégralement auprès d’un seul fournisseur comptable : aucune ligne d’un
+même exercice n’est mélangée entre plusieurs normes ou plusieurs sources.
 
 ## Ordre de repli financier
 
@@ -11,15 +12,39 @@ ne mélange pas ligne par ligne des exercices ou des normes différentes.
 2. **SEC EDGAR** fournit les faits XBRL US-GAAP des formulaires annuels 10-K,
    20-F et 40-F. Le profil et la capitalisation de marché restent obtenus via
    Yahoo Finance et cette provenance combinée est explicitement enregistrée.
+   Un ticker portant un suffixe de place étrangère, par exemple `.PA`, n'est
+   jamais tronqué pour chercher un homonyme américain. Un CIK explicite est
+   exigé pour rapprocher une cotation non américaine d'EDGAR.
 3. **ESEF européen** utilise les dépôts XBRL publics de
    [filings.xbrl.org](https://filings.xbrl.org/docs/api). L’ISIN est rapproché
    du LEI via l’API gratuite de [GLEIF](https://www.gleif.org/en/lei-data/gleif-api/).
    La capitalisation de marché reste issue de Yahoo Finance.
 
-Si aucun fournisseur ne livre un compte de résultat, un bilan et un tableau de
-flux complets pour le même exercice, l’import est refusé avec le détail des
-sources essayées. L’utilisateur peut alors compléter les identifiants de
-l’entreprise ou utiliser le formulaire manuel avec le rapport annuel audité.
+Les années issues de plusieurs fournisseurs sont fusionnées par exercice, selon
+l’ordre de priorité ci-dessus. Un exercice déjà présent n’est pas recréé. Si
+aucun fournisseur ne livre un exercice exploitable, l’import est refusé avec le
+détail des sources essayées.
+
+La devise des états financiers peut différer de la devise de cotation. Dans ce
+cas, les cours historiques Yahoo Finance sont convertis dans la devise des
+comptes avec la paire de change publique correspondante. La capitalisation de
+fin d’exercice est calculée avec le dernier cours annuel et le nombre moyen
+d’actions publié ; à défaut, le nombre d’actions actuel sert d’estimation.
+
+## Banques, assurances et sociétés déficitaires
+
+Les banques et assureurs sont détectés à partir de leur classification
+sectorielle. Leurs données publiées sont importées, mais le **MK Score
+industriel**, la valorisation standard et le MK Global Score sont marqués non
+applicables. Ces entreprises présentent souvent leur bilan par ordre de
+liquidité et ne publient pas les postes actif circulant, passif exigible ou
+EBITDA selon le modèle des sociétés industrielles. Remplacer ces postes par des
+zéros ou par le total du bilan produirait des ratios artificiels.
+
+Les pertes, EBIT ou EBITDA négatifs ne sont pas traités comme des données
+manquantes. Ils sont conservés ; une règle dont le dénominateur est nul ou
+négatif reçoit un statut défavorable au lieu de devenir artificiellement
+favorable.
 
 ## Référentiels d’entreprises et d’indices
 

@@ -1,29 +1,36 @@
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from mkvip.analysis.rules import RuleStatus
+
+
+class FinancialProfile(StrEnum):
+    STANDARD = "standard"
+    FINANCIAL = "financial"
 
 
 class FinancialSnapshotCreate(BaseModel):
     fiscal_year: int = Field(ge=1900, le=2100)
     source: str = Field(min_length=1, max_length=250)
     currency: str = Field(min_length=3, max_length=3)
+    analysis_profile: FinancialProfile = FinancialProfile.STANDARD
     revenue: float = Field(gt=0)
-    ebitda: float = Field(gt=0)
-    depreciation_amortization: float = Field(ge=0)
-    ebit: float = Field(gt=0)
-    interest_expense: float = Field(ge=0)
-    operating_cash_flow: float
-    capex: float = Field(ge=0)
-    net_income: float = Field(gt=0)
+    ebitda: float | None = None
+    depreciation_amortization: float | None = Field(default=None, ge=0)
+    ebit: float | None = None
+    interest_expense: float | None = Field(default=None, ge=0)
+    operating_cash_flow: float | None = None
+    capex: float | None = Field(default=None, ge=0)
+    net_income: float
     market_cap: float = Field(gt=0)
     total_assets: float = Field(gt=0)
-    current_assets: float = Field(ge=0)
-    current_liabilities: float = Field(gt=0)
-    financial_debt: float = Field(ge=0)
-    cash: float = Field(ge=0)
+    current_assets: float | None = Field(default=None, ge=0)
+    current_liabilities: float | None = Field(default=None, gt=0)
+    financial_debt: float | None = Field(default=None, ge=0)
+    cash: float | None = Field(default=None, ge=0)
     total_equity: float = Field(gt=0)
 
     @field_validator("source")
@@ -36,11 +43,34 @@ class FinancialSnapshotCreate(BaseModel):
     def normalize_currency(cls, value: str) -> str:
         return value.strip().upper()
 
+    @model_validator(mode="after")
+    def require_standard_company_fields(self) -> "FinancialSnapshotCreate":
+        if self.analysis_profile is FinancialProfile.FINANCIAL:
+            return self
+        required = (
+            "ebitda",
+            "depreciation_amortization",
+            "ebit",
+            "interest_expense",
+            "operating_cash_flow",
+            "capex",
+            "current_assets",
+            "current_liabilities",
+            "financial_debt",
+            "cash",
+        )
+        missing = [field for field in required if getattr(self, field) is None]
+        if missing:
+            raise ValueError(
+                "Champs requis pour une société non financière : " + ", ".join(missing)
+            )
+        return self
+
 
 class FinancialMetricRead(BaseModel):
     key: str
     label: str
-    value: float
+    value: float | None
     status: RuleStatus
     source_note: str
 
@@ -58,9 +88,9 @@ class FinancialAnalysisRead(FinancialSnapshotCreate):
     company_id: uuid.UUID
     metrics: list[FinancialMetricRead]
     indicators: list[FinancialIndicatorRead]
-    mk_score: float
-    quality_score: float
-    safety_score: float
+    mk_score: float | None
+    quality_score: float | None
+    safety_score: float | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

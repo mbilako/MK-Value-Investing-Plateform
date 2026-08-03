@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { Landmark, Plus, Sparkles } from "lucide-react";
+import { Landmark, Sparkles } from "lucide-react";
 
 import {
   type Company,
   type CompanyClient,
   type Dashboard,
   type AIAnalysisPayload,
-  type FinancialAnalysis,
   type FinancialHistory,
   type IndexBulkAddResult,
   type ScoringAnalysis,
@@ -22,8 +21,8 @@ import { CompanyUniverse } from "./CompanyUniverse";
 import { CompanyManagementDrawer } from "./CompanyManagementDrawer";
 import { DecisionDashboard } from "./DecisionDashboard";
 import { FinancialDrawer } from "./FinancialDrawer";
-import { ImportDrawer } from "./ImportDrawer";
 import { IndexBrowserDrawer } from "./IndexBrowserDrawer";
+import { JournalSection } from "./JournalSection";
 import { Sidebar } from "./Sidebar";
 import { SummaryStrip } from "./SummaryStrip";
 import { UserMenu } from "./UserMenu";
@@ -44,7 +43,6 @@ export function Workspace({
 }: WorkspaceProps) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [isImportOpen, setImportOpen] = useState(false);
   const [isIndexBrowserOpen, setIndexBrowserOpen] = useState(false);
   const [managedCompany, setManagedCompany] = useState<Company | null>(null);
   const [isAIAnalystOpen, setAIAnalystOpen] = useState(false);
@@ -86,27 +84,34 @@ export function Workspace({
   };
 
   const completeFinancialImport = (
-    companyId: string,
-    analysis: FinancialAnalysis,
+    company: Company,
+    history: FinancialHistory,
   ) => {
+    const analysis = history.snapshots[0];
+    if (!analysis) return;
+    const readyCompany = {
+      ...company,
+      status: "ready" as const,
+      latest_mk_score: analysis.mk_score,
+      latest_quality_score: analysis.quality_score,
+      latest_safety_score: analysis.safety_score,
+    };
     setCompanies((current) =>
-      current.map((company) =>
-        company.id === companyId
-          ? {
-              ...company,
-              status: "ready",
-              latest_mk_score: analysis.mk_score,
-              latest_quality_score: analysis.quality_score,
-              latest_safety_score: analysis.safety_score,
-            }
-          : company,
+      current.map((record) =>
+        record.id === company.id ? readyCompany : record,
       ),
     );
-    setScores((current) => ({
-      ...current,
-      [companyId]: analysis.mk_score,
-    }));
+    if (analysis.mk_score !== null) {
+      setScores((current) => ({
+        ...current,
+        [company.id]: analysis.mk_score as number,
+      }));
+    }
     setFinancialCompany(null);
+    setAnalysisCompany(readyCompany);
+    setFinancialHistory(history);
+    setValuations([]);
+    setScoringAnalyses([]);
     void refreshDashboard();
   };
 
@@ -165,7 +170,7 @@ export function Workspace({
   return (
     <div className="app-shell">
       <Sidebar />
-      <main className="main">
+      <main className="main" id="overview">
         <header className="topbar">
           <h1>Vue d’ensemble</h1>
           <div className="topbar__actions">
@@ -188,18 +193,11 @@ export function Workspace({
               </button>
             )}
             <button
-              className="button button--secondary"
+              className="button button--primary"
               onClick={() => setIndexBrowserOpen(true)}
             >
               <Landmark aria-hidden="true" size={18} />
               Explorer les indices
-            </button>
-            <button
-              className="button button--primary"
-              onClick={() => setImportOpen(true)}
-            >
-              <Plus aria-hidden="true" size={19} />
-              Importer une entreprise
             </button>
           </div>
         </header>
@@ -222,29 +220,23 @@ export function Workspace({
           <CompanyUniverse
             companies={companies}
             scores={scores}
-            onImport={() => setImportOpen(true)}
+            onExploreIndices={() => setIndexBrowserOpen(true)}
             onFinancialImport={setFinancialCompany}
             onAnalysis={openAnalysis}
             onManage={setManagedCompany}
           />
           <AnalysisPipeline />
+          <JournalSection
+            dashboard={dashboard}
+            companies={companies}
+            onAnalysis={openAnalysis}
+          />
         </div>
         <footer className="statusbar">
           <span className="status-dot" aria-hidden="true" />
           API opérationnelle · PostgreSQL connecté
         </footer>
       </main>
-      {isImportOpen && (
-        <ImportDrawer
-          onClose={() => setImportOpen(false)}
-          onSubmit={async (payload) => {
-            const company = await client.createCompany(payload);
-            setCompanies((current) => [...current, company]);
-            setImportOpen(false);
-            void refreshDashboard();
-          }}
-        />
-      )}
       {isIndexBrowserOpen && (
         <IndexBrowserDrawer
           client={client}
@@ -295,17 +287,10 @@ export function Workspace({
           company={financialCompany}
           onClose={() => setFinancialCompany(null)}
           onAutomaticSubmit={async () => {
-            const analysis = await client.importFinancialsAutomatically(
+            const history = await client.importFinancialsAutomatically(
               financialCompany.id,
             );
-            completeFinancialImport(financialCompany.id, analysis);
-          }}
-          onSubmit={async (payload) => {
-            const analysis = await client.importFinancials(
-              financialCompany.id,
-              payload,
-            );
-            completeFinancialImport(financialCompany.id, analysis);
+            completeFinancialImport(financialCompany, history);
           }}
         />
       )}

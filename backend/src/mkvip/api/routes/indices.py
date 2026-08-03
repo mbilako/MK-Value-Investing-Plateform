@@ -22,9 +22,7 @@ from mkvip.schemas.index import (
 router = APIRouter(prefix="/indices", tags=["indices"])
 Repository = Annotated[CompanyRepository, Depends(get_company_repository)]
 IndexProvider = Annotated[EuronextIndexProvider, Depends(get_index_provider)]
-DiscoveryProvider = Annotated[
-    FinancialDataProvider, Depends(get_company_discovery_provider)
-]
+DiscoveryProvider = Annotated[FinancialDataProvider, Depends(get_company_discovery_provider)]
 
 
 @router.get("", response_model=list[IndexSummaryRead])
@@ -67,12 +65,35 @@ async def add_index_companies(
     for selection in payload.companies:
         current = by_isin.get(selection.isin)
         if current is not None:
-            memberships = sorted(
-                {*current.index_memberships, selection.index_code}
-            )
+            memberships = sorted({*current.index_memberships, selection.index_code})
+            changes: dict[str, object] = {"index_memberships": memberships}
+            if not _ticker_matches_market(current.ticker, selection.mic):
+                try:
+                    repaired_match = await _discover_market_match(
+                        discovery,
+                        selection.isin,
+                        selection.name,
+                        selection.mic,
+                    )
+                except ProviderDataError:
+                    repaired_match = None
+                ticker_owner = (
+                    by_ticker.get(repaired_match.ticker) if repaired_match is not None else None
+                )
+                if repaired_match is not None and (
+                    ticker_owner is None or ticker_owner.id == current.id
+                ):
+                    changes.update(
+                        ticker=repaired_match.ticker,
+                        exchange=(repaired_match.exchange or selection.trading_location),
+                        provider_symbols={
+                            **current.provider_symbols,
+                            "yahoo": repaired_match.ticker,
+                        },
+                    )
             updated = await repository.update(
                 current.id,
-                CompanyUpdate(index_memberships=memberships),
+                CompanyUpdate(**changes),
             )
             if updated is not None and updated.archived_at is not None:
                 updated = await repository.restore(updated.id)
@@ -80,7 +101,12 @@ async def add_index_companies(
             continue
 
         try:
-            results = await discovery.search_company(selection.name)
+            match = await _discover_market_match(
+                discovery,
+                selection.isin,
+                selection.name,
+                selection.mic,
+            )
         except ProviderDataError as error:
             errors.append(
                 IndexBulkAddError(
@@ -90,7 +116,6 @@ async def add_index_companies(
                 )
             )
             continue
-        match = _select_market_match(results, selection.mic)
         if match is None:
             errors.append(
                 IndexBulkAddError(
@@ -103,9 +128,7 @@ async def add_index_companies(
 
         current = by_ticker.get(match.ticker)
         if current is not None:
-            memberships = sorted(
-                {*current.index_memberships, selection.index_code}
-            )
+            memberships = sorted({*current.index_memberships, selection.index_code})
             updated = await repository.update(
                 current.id,
                 CompanyUpdate(
@@ -152,13 +175,47 @@ async def add_index_companies(
 def _select_market_match(results: list, mic: str):
     if not results:
         return None
-    suffixes = {
+    suffixes = _market_suffixes(mic)
+    if suffixes:
+        return next(
+            (result for result in results if result.ticker.endswith(suffixes)),
+            None,
+        )
+    return results[0]
+
+
+def _market_suffixes(mic: str) -> tuple[str, ...]:
+    return {
         "XPAR": (".PA",),
         "XAMS": (".AS",),
         "XBRU": (".BR",),
         "XLIS": (".LS",),
     }.get(mic.upper(), ())
-    return next(
-        (result for result in results if result.ticker.endswith(suffixes)),
-        results[0],
-    )
+
+
+def _ticker_matches_market(ticker: str, mic: str) -> bool:
+    suffixes = _market_suffixes(mic)
+    return not suffixes or ticker.endswith(suffixes)
+
+
+async def _discover_market_match(
+    discovery: FinancialDataProvider,
+    isin: str,
+    name: str,
+    mic: str,
+):
+    last_error: ProviderDataError | None = None
+    completed_search = False
+    for query in (isin, name):
+        try:
+            results = await discovery.search_company(query)
+        except ProviderDataError as error:
+            last_error = error
+            continue
+        completed_search = True
+        match = _select_market_match(results, mic)
+        if match is not None:
+            return match
+    if not completed_search and last_error is not None:
+        raise last_error
+    return None

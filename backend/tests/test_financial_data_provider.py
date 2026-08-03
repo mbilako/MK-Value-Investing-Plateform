@@ -97,6 +97,7 @@ async def test_latest_snapshot_uses_shared_year_and_converts_to_millions() -> No
         "fiscal_year": 2024,
         "source": "Public Test Data · AI.PA · exercice 2024",
         "currency": "EUR",
+        "analysis_profile": "standard",
         "revenue": 10_000,
         "ebitda": 4_500,
         "depreciation_amortization": 200,
@@ -222,6 +223,7 @@ async def test_yahoo_provider_builds_company_profile() -> None:
         country="France",
         currency="EUR",
         market_cap=50_000_000_000,
+        quote_currency="EUR",
     )
 
 
@@ -297,7 +299,7 @@ async def test_yahoo_provider_maps_daily_closing_prices() -> None:
             interval: str,
             auto_adjust: bool,
         ) -> PriceHistory:
-            assert period == "1y"
+            assert period == "10y"
             assert interval == "1d"
             assert auto_adjust is False
             return PriceHistory()
@@ -337,12 +339,11 @@ async def test_yahoo_provider_wraps_upstream_failures() -> None:
 
 
 @pytest.mark.asyncio
-async def test_latest_snapshot_rejects_values_the_analysis_cannot_use() -> None:
+async def test_latest_snapshot_keeps_zero_profit_for_an_explicit_fail() -> None:
     from mkvip.providers.base import (
         ProviderBalanceSheet,
         ProviderCashFlow,
         ProviderCompanyProfile,
-        ProviderDataIncompleteError,
         ProviderIncomeStatement,
     )
     from mkvip.providers.normalization import load_latest_snapshot
@@ -404,11 +405,9 @@ async def test_latest_snapshot_rejects_values_the_analysis_cannot_use() -> None:
                 )
             ]
 
-    with pytest.raises(
-        ProviderDataIncompleteError,
-        match="ne peuvent pas être normalisées",
-    ):
-        await load_latest_snapshot(LossMakingProvider(), "LOSS.PA")
+    snapshot = await load_latest_snapshot(LossMakingProvider(), "LOSS.PA")
+
+    assert snapshot.net_income == 0
 
 
 @pytest.mark.asyncio
@@ -440,6 +439,91 @@ async def test_yahoo_provider_skips_incomplete_historical_periods() -> None:
     cash_flows = await provider.get_cash_flow("AI.PA")
 
     assert [cash_flow.fiscal_year for cash_flow in cash_flows] == [2025]
+
+
+@pytest.mark.asyncio
+async def test_historical_snapshots_use_year_end_market_cap_and_limit() -> None:
+    from mkvip.providers.base import (
+        ProviderBalanceSheet,
+        ProviderCashFlow,
+        ProviderCompanyProfile,
+        ProviderIncomeStatement,
+        ProviderPricePoint,
+    )
+    from mkvip.providers.normalization import load_historical_snapshots
+
+    years = [2025, 2024, 2023]
+
+    class HistoricalProvider:
+        name = "Historical test"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="History SA",
+                exchange="Paris",
+                country="France",
+                currency="EUR",
+                market_cap=1_300_000_000,
+                shares_outstanding=100_000_000,
+            )
+
+        async def get_income_statements(self, ticker: str):
+            return [
+                ProviderIncomeStatement(
+                    fiscal_year=year,
+                    revenue=1_000_000_000,
+                    ebitda=300_000_000,
+                    depreciation_amortization=50_000_000,
+                    ebit=250_000_000,
+                    interest_expense=20_000_000,
+                    net_income=150_000_000,
+                    weighted_average_shares=100_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_balance_sheet(self, ticker: str):
+            return [
+                ProviderBalanceSheet(
+                    fiscal_year=year,
+                    total_assets=2_000_000_000,
+                    current_assets=600_000_000,
+                    current_liabilities=300_000_000,
+                    financial_debt=400_000_000,
+                    cash=100_000_000,
+                    total_equity=900_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_cash_flow(self, ticker: str):
+            return [
+                ProviderCashFlow(
+                    fiscal_year=year,
+                    operating_cash_flow=220_000_000,
+                    capex=80_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_price_history(self, ticker: str):
+            return [
+                ProviderPricePoint(
+                    timestamp=f"{year}-12-31T00:00:00",
+                    close=price,
+                )
+                for year, price in zip(years, [12.0, 11.0, 10.0], strict=True)
+            ]
+
+    snapshots = await load_historical_snapshots(
+        HistoricalProvider(),
+        "HIST.PA",
+        limit=2,
+    )
+
+    assert [snapshot.fiscal_year for snapshot in snapshots] == [2025, 2024]
+    assert [snapshot.market_cap for snapshot in snapshots] == [1_200, 1_100]
 
 
 @pytest.mark.asyncio

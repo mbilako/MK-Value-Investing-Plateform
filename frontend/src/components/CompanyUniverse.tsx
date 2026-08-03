@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
-import { FileUp, Inbox, Plus, Search, Settings2 } from "lucide-react";
+import { FileUp, Inbox, Landmark, Search, Settings2 } from "lucide-react";
 
 import type { Company } from "../api/client";
 
 interface CompanyUniverseProps {
   companies: Company[];
   scores: Record<string, number>;
-  onImport: () => void;
+  onExploreIndices: () => void;
   onFinancialImport: (company: Company) => void;
   onAnalysis: (company: Company) => void;
   onManage: (company: Company) => void;
@@ -15,7 +15,7 @@ interface CompanyUniverseProps {
 export function CompanyUniverse({
   companies,
   scores,
-  onImport,
+  onExploreIndices,
   onFinancialImport,
   onAnalysis,
   onManage,
@@ -34,7 +34,11 @@ export function CompanyUniverse({
   }, [companies, query]);
 
   return (
-    <section className="section" aria-labelledby="universe-title">
+    <section
+      className="section"
+      id="companies"
+      aria-labelledby="universe-title"
+    >
       <h2 id="universe-title">Univers d’investissement</h2>
       <label className="search-field">
         <Search aria-hidden="true" size={21} strokeWidth={1.75} />
@@ -78,7 +82,7 @@ export function CompanyUniverse({
                       aria-label={`Importer les données financières pour ${company.name}`}
                     >
                       <FileUp aria-hidden="true" size={16} />
-                      Ajouter les données
+                      Charger l’historique
                     </button>
                   ) : (
                     <button
@@ -115,11 +119,14 @@ export function CompanyUniverse({
             <Inbox aria-hidden="true" size={40} strokeWidth={1.5} />
             <h3>Aucune entreprise importée</h3>
             <p>
-              Ajoutez une première société pour préparer son analyse fondamentale.
+              Sélectionnez une ou plusieurs sociétés depuis un indice boursier.
             </p>
-            <button className="button button--secondary" onClick={onImport}>
-              <Plus aria-hidden="true" size={18} />
-              Commencer avec Air Liquide
+            <button
+              className="button button--primary"
+              onClick={onExploreIndices}
+            >
+              <Landmark aria-hidden="true" size={18} />
+              Choisir dans les indices
             </button>
           </div>
         )}

@@ -16,8 +16,12 @@ const steps = [
 
 export function AnalysisPipeline() {
   return (
-    <section className="section" aria-labelledby="pipeline-title">
-      <h2 id="pipeline-title">Moteur d’analyse</h2>
+    <section className="section" id="rules" aria-labelledby="pipeline-title">
+      <h2 id="pipeline-title">Méthode MK</h2>
+      <p className="section-intro">
+        Dix règles simples sont évaluées pour chaque exercice disponible afin
+        de rendre la tendance lisible et comparable.
+      </p>
       <ol className="pipeline">
         {steps.map(({ label, icon: Icon }, index) => (
           <li key={label}>

@@ -38,9 +38,7 @@ def test_financial_engine_calculates_cash_returns_and_specialized_scores() -> No
     analysis = financials.analyse_financials(snapshot())
 
     assert hasattr(analysis, "indicators"), "Les indicateurs v0.4 sont absents."
-    assert {
-        indicator.key: indicator.value for indicator in analysis.indicators
-    } == {
+    assert {indicator.key: indicator.value for indicator in analysis.indicators} == {
         "free_cash_flow": 260.0,
         "free_cash_flow_margin": 0.26,
         "return_on_equity": 0.25,
@@ -97,3 +95,50 @@ def test_financial_trend_requires_two_periods() -> None:
     assert trend.revenue_cagr is None
     assert trend.net_income_cagr is None
     assert trend.free_cash_flow_cagr is None
+
+
+def test_financial_institution_keeps_data_without_industrial_score() -> None:
+    financial_snapshot = FinancialSnapshotCreate(
+        fiscal_year=2025,
+        source="ESEF 2025",
+        currency="EUR",
+        analysis_profile="financial",
+        revenue=68_804,
+        ebitda=None,
+        depreciation_amortization=2_367,
+        ebit=16_296,
+        interest_expense=50_329,
+        operating_cash_flow=46_571,
+        capex=2_875,
+        net_income=12_225,
+        market_cap=120_000,
+        total_assets=2_792_981,
+        current_assets=None,
+        current_liabilities=None,
+        financial_debt=398_488,
+        cash=326_959,
+        total_equity=132_173,
+    )
+
+    analysis = financials.analyse_financials(financial_snapshot)
+
+    assert analysis.mk_score is None
+    assert analysis.quality_score is None
+    assert analysis.safety_score is None
+    assert analysis.metrics == []
+    assert {item.key for item in analysis.indicators} >= {
+        "reported_revenue",
+        "reported_net_income",
+        "return_on_equity",
+        "equity_to_assets",
+    }
+
+
+def test_loss_making_company_does_not_pass_negative_denominator_rules() -> None:
+    analysis = financials.analyse_financials(snapshot(net_income=-100))
+    metrics = {metric.key: metric for metric in analysis.metrics}
+
+    assert metrics["capex_to_net_income"].status.value == "fail"
+    assert metrics["capex_to_net_income"].value is None
+    assert metrics["pe_ratio"].status.value == "fail"
+    assert analysis.mk_score < 100

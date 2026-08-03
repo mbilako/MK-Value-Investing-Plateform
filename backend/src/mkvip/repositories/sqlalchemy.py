@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
 
@@ -28,6 +29,40 @@ from mkvip.schemas.financial import (
 )
 from mkvip.schemas.scoring import ScoringAnalysisRead
 from mkvip.schemas.valuation import ValuationAnalysisRead
+
+
+def _financial_record(
+    company_id: uuid.UUID,
+    snapshot: FinancialSnapshotCreate,
+    analysis: FinancialAnalysis,
+) -> FinancialSnapshotOrm:
+    return FinancialSnapshotOrm(
+        company_id=company_id,
+        metrics=[
+            {
+                "key": metric.key,
+                "label": metric.label,
+                "value": metric.value,
+                "status": metric.status.value,
+                "source_note": metric.source_note,
+            }
+            for metric in analysis.metrics
+        ],
+        indicators=[
+            {
+                "key": indicator.key,
+                "label": indicator.label,
+                "value": indicator.value,
+                "unit": indicator.unit,
+                "formula": indicator.formula,
+            }
+            for indicator in analysis.indicators
+        ],
+        mk_score=analysis.mk_score,
+        quality_score=analysis.quality_score,
+        safety_score=analysis.safety_score,
+        **snapshot.model_dump(),
+    )
 
 
 class SqlAlchemyCompanyRepository:
@@ -76,9 +111,7 @@ class SqlAlchemyCompanyRepository:
         await self._session.refresh(record)
         return CompanyRead.model_validate(record)
 
-    async def update(
-        self, company_id: uuid.UUID, company: CompanyUpdate
-    ) -> CompanyRead | None:
+    async def update(self, company_id: uuid.UUID, company: CompanyUpdate) -> CompanyRead | None:
         record = await self._find_owned_company_record(company_id)
         if record is None:
             return None
@@ -167,10 +200,7 @@ class SqlAlchemyCompanyRepository:
             )
             .order_by(FinancialSnapshotOrm.fiscal_year.desc())
         )
-        return [
-            FinancialAnalysisRead.model_validate(snapshot)
-            for snapshot in snapshots
-        ]
+        return [FinancialAnalysisRead.model_validate(snapshot) for snapshot in snapshots]
 
     async def create_financial_analysis(
         self,
@@ -179,33 +209,7 @@ class SqlAlchemyCompanyRepository:
         analysis: FinancialAnalysis,
     ) -> FinancialAnalysisRead:
         company = await self._get_owned_company_record(company_id)
-        record = FinancialSnapshotOrm(
-            company_id=company_id,
-            metrics=[
-                {
-                    "key": metric.key,
-                    "label": metric.label,
-                    "value": metric.value,
-                    "status": metric.status.value,
-                    "source_note": metric.source_note,
-                }
-                for metric in analysis.metrics
-            ],
-            indicators=[
-                {
-                    "key": indicator.key,
-                    "label": indicator.label,
-                    "value": indicator.value,
-                    "unit": indicator.unit,
-                    "formula": indicator.formula,
-                }
-                for indicator in analysis.indicators
-            ],
-            mk_score=analysis.mk_score,
-            quality_score=analysis.quality_score,
-            safety_score=analysis.safety_score,
-            **snapshot.model_dump(),
-        )
+        record = _financial_record(company_id, snapshot, analysis)
         company.status = CompanyStatus.READY.value
         company.latest_mk_score = analysis.mk_score
         company.latest_quality_score = analysis.quality_score
@@ -214,6 +218,42 @@ class SqlAlchemyCompanyRepository:
         await self._session.commit()
         await self._session.refresh(record)
         return FinancialAnalysisRead.model_validate(record)
+
+    async def create_financial_analyses(
+        self,
+        company_id: uuid.UUID,
+        analyses: Sequence[tuple[FinancialSnapshotCreate, FinancialAnalysis]],
+    ) -> list[FinancialAnalysisRead]:
+        if not analyses:
+            return []
+        company = await self._get_owned_company_record(company_id)
+        latest_existing = await self._session.scalar(
+            select(FinancialSnapshotOrm)
+            .where(FinancialSnapshotOrm.company_id == company_id)
+            .order_by(FinancialSnapshotOrm.fiscal_year.desc())
+            .limit(1)
+        )
+        records = [
+            _financial_record(company_id, snapshot, analysis) for snapshot, analysis in analyses
+        ]
+        latest_snapshot, latest_analysis = max(
+            analyses,
+            key=lambda item: item[0].fiscal_year,
+        )
+        if latest_existing is None or latest_snapshot.fiscal_year >= latest_existing.fiscal_year:
+            company.latest_mk_score = latest_analysis.mk_score
+            company.latest_quality_score = latest_analysis.quality_score
+            company.latest_safety_score = latest_analysis.safety_score
+        company.status = CompanyStatus.READY.value
+        self._session.add_all(records)
+        await self._session.commit()
+        for record in records:
+            await self._session.refresh(record)
+        return sorted(
+            (FinancialAnalysisRead.model_validate(record) for record in records),
+            key=lambda record: record.fiscal_year,
+            reverse=True,
+        )
 
     async def list_valuation_analyses(
         self,
@@ -231,10 +271,7 @@ class SqlAlchemyCompanyRepository:
             )
             .order_by(ValuationAnalysisOrm.created_at.desc())
         )
-        return [
-            ValuationAnalysisRead.model_validate(record)
-            for record in records
-        ]
+        return [ValuationAnalysisRead.model_validate(record) for record in records]
 
     async def get_valuation_analysis(
         self,
@@ -296,10 +333,7 @@ class SqlAlchemyCompanyRepository:
             )
             .order_by(ScoringAnalysisOrm.created_at.desc())
         )
-        return [
-            ScoringAnalysisRead.model_validate(record)
-            for record in records
-        ]
+        return [ScoringAnalysisRead.model_validate(record) for record in records]
 
     async def create_scoring_analysis(
         self,
@@ -314,14 +348,8 @@ class SqlAlchemyCompanyRepository:
             financial_snapshot_id=snapshot.id,
             valuation_analysis_id=valuation.id,
             fiscal_year=snapshot.fiscal_year,
-            components=[
-                asdict(component)
-                for component in analysis.components
-            ],
-            insights=[
-                asdict(insight)
-                for insight in analysis.insights
-            ],
+            components=[asdict(component) for component in analysis.components],
+            insights=[asdict(insight) for insight in analysis.insights],
             global_score=analysis.global_score,
             signal=analysis.signal,
             signal_label=analysis.signal_label,
@@ -366,13 +394,11 @@ def _is_owner_ticker_collision(error: IntegrityError) -> bool:
         getattr(original, "__context__", None),
     )
     if any(
-        getattr(source, "constraint_name", None)
-        == "uq_companies_owner_ticker"
+        getattr(source, "constraint_name", None) == "uq_companies_owner_ticker"
         for source in constraint_sources
         if source is not None
     ):
         return True
     return (
-        str(original).casefold()
-        == "unique constraint failed: companies.owner_id, companies.ticker"
+        str(original).casefold() == "unique constraint failed: companies.owner_id, companies.ticker"
     )

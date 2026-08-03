@@ -43,8 +43,18 @@ Le MK Score est calculé ainsi :
 nombre de règles favorables / nombre total de règles × 100
 ```
 
+Le calcul est réalisé séparément pour chaque exercice importé. L’interface
+affiche jusqu’à dix MK Scores annuels afin de distinguer une qualité durable
+d’un résultat ponctuel ; aucune moyenne pluriannuelle arbitraire n’est ajoutée.
+
 Une règle au statut `review` ou `fail` ne contribue pas au score. Ce score est
-un outil de présélection explicable, pas une recommandation d’investissement.
+un outil de présélection explicable, pas une recommandation d'investissement.
+
+Le calcul standard s'applique aux sociétés non financières. Pour une banque ou
+un assureur, le MK Score est affiché comme **non applicable** tant qu'un
+catalogue sectoriel distinct (solvabilité, qualité des actifs, coût du risque,
+ratio combiné, etc.) n'a pas été validé. Un dénominateur nul ou négatif sur une
+règle standard est classé défavorable et n'améliore jamais le score.
 
 ## Scores spécialisés
 

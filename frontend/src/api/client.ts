@@ -111,27 +111,28 @@ export interface FinancialPayload {
   fiscal_year: number;
   source: string;
   currency: string;
+  analysis_profile?: "standard" | "financial";
   revenue: number;
-  ebitda: number;
-  depreciation_amortization: number;
-  ebit: number;
-  interest_expense: number;
-  operating_cash_flow: number;
-  capex: number;
+  ebitda: number | null;
+  depreciation_amortization: number | null;
+  ebit: number | null;
+  interest_expense: number | null;
+  operating_cash_flow: number | null;
+  capex: number | null;
   net_income: number;
   market_cap: number;
   total_assets: number;
-  current_assets: number;
-  current_liabilities: number;
-  financial_debt: number;
-  cash: number;
+  current_assets: number | null;
+  current_liabilities: number | null;
+  financial_debt: number | null;
+  cash: number | null;
   total_equity: number;
 }
 
 export interface FinancialMetric {
   key: string;
   label: string;
-  value: number;
+  value: number | null;
   status: "pass" | "review" | "fail";
   source_note: string;
 }
@@ -149,9 +150,9 @@ export interface FinancialAnalysis extends FinancialPayload {
   company_id: string;
   metrics: FinancialMetric[];
   indicators: FinancialIndicator[];
-  mk_score: number;
-  quality_score: number;
-  safety_score: number;
+  mk_score: number | null;
+  quality_score: number | null;
+  safety_score: number | null;
   created_at: string;
 }
 
@@ -366,7 +367,7 @@ export interface CompanyClient {
     companyId: string,
     payload: FinancialPayload,
   ): Promise<FinancialAnalysis>;
-  importFinancialsAutomatically(companyId: string): Promise<FinancialAnalysis>;
+  importFinancialsAutomatically(companyId: string): Promise<FinancialHistory>;
   getFinancialHistory(companyId: string): Promise<FinancialHistory>;
   listValuations(companyId: string): Promise<ValuationAnalysis[]>;
   createValuation(
@@ -550,7 +551,7 @@ export function createApiClient(): CompanyClient {
         body: JSON.stringify(payload),
       }),
     importFinancialsAutomatically: (companyId) =>
-      request<FinancialAnalysis>(
+      request<FinancialHistory>(
         `/companies/${companyId}/financials/automatic`,
         { method: "POST" },
       ),

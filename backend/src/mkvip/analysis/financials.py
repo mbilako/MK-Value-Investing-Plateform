@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from mkvip.analysis.rules import RULES, RuleResult, RuleStatus, evaluate_rule
-from mkvip.schemas.financial import FinancialSnapshotCreate
+from mkvip.schemas.financial import FinancialProfile, FinancialSnapshotCreate
 
 QUALITY_RULE_KEYS = (
     "ebitda_margin",
@@ -31,9 +31,9 @@ class FinancialIndicator:
 class FinancialAnalysis:
     metrics: list[RuleResult]
     indicators: list[FinancialIndicator]
-    mk_score: float
-    quality_score: float
-    safety_score: float
+    mk_score: float | None
+    quality_score: float | None
+    safety_score: float | None
 
 
 @dataclass(frozen=True)
@@ -58,34 +58,129 @@ def _rounded_ratio(numerator: float, denominator: float) -> float | None:
     return round(numerator / denominator, 6)
 
 
-def _free_cash_flow(snapshot: FinancialSnapshotCreate) -> float:
+def _free_cash_flow(snapshot: FinancialSnapshotCreate) -> float | None:
+    if snapshot.operating_cash_flow is None or snapshot.capex is None:
+        return None
     return round(snapshot.operating_cash_flow - snapshot.capex, 6)
 
 
+def _failed_ratio(rule_key: str) -> RuleResult:
+    rule = RULES[rule_key]
+    return RuleResult(
+        key=rule.key,
+        label=rule.label,
+        value=None,
+        status=RuleStatus.FAIL,
+        source_note=(f"{rule.source_note} ; dénominateur nul ou négatif : défavorable"),
+    )
+
+
+def _financial_institution_analysis(
+    snapshot: FinancialSnapshotCreate,
+) -> FinancialAnalysis:
+    indicators = [
+        FinancialIndicator(
+            key="reported_revenue",
+            label="Revenus publiés / produit d'exploitation",
+            value=round(snapshot.revenue, 6),
+            unit=snapshot.currency,
+            formula="Poste de revenus publié par l'émetteur",
+        ),
+        FinancialIndicator(
+            key="reported_net_income",
+            label="Résultat net",
+            value=round(snapshot.net_income, 6),
+            unit=snapshot.currency,
+            formula="Résultat net publié",
+        ),
+        FinancialIndicator(
+            key="return_on_equity",
+            label="Rendement des capitaux propres (ROE)",
+            value=_rounded_ratio(snapshot.net_income, snapshot.total_equity),
+            unit="ratio",
+            formula="Résultat net / capitaux propres",
+        ),
+        FinancialIndicator(
+            key="equity_to_assets",
+            label="Capitaux propres / total actif",
+            value=_rounded_ratio(snapshot.total_equity, snapshot.total_assets),
+            unit="ratio",
+            formula="Capitaux propres / total actif",
+        ),
+        FinancialIndicator(
+            key="price_to_earnings",
+            label="Cours / bénéfice (PER)",
+            value=_rounded_ratio(snapshot.market_cap, snapshot.net_income),
+            unit="multiple",
+            formula="Capitalisation / résultat net",
+        ),
+    ]
+    if snapshot.operating_cash_flow is not None:
+        indicators.append(
+            FinancialIndicator(
+                key="operating_cash_flow",
+                label="Flux de trésorerie d'exploitation publié",
+                value=round(snapshot.operating_cash_flow, 6),
+                unit=snapshot.currency,
+                formula="Flux publié, à interpréter selon le modèle financier",
+            )
+        )
+    return FinancialAnalysis(
+        metrics=[],
+        indicators=indicators,
+        mk_score=None,
+        quality_score=None,
+        safety_score=None,
+    )
+
+
 def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
+    if snapshot.analysis_profile is FinancialProfile.FINANCIAL:
+        return _financial_institution_analysis(snapshot)
+
+    assert snapshot.ebitda is not None
+    assert snapshot.depreciation_amortization is not None
+    assert snapshot.ebit is not None
+    assert snapshot.interest_expense is not None
+    assert snapshot.capex is not None
+    assert snapshot.current_assets is not None
+    assert snapshot.current_liabilities is not None
+    assert snapshot.financial_debt is not None
+    assert snapshot.cash is not None
     ratios = {
         "ebitda_margin": snapshot.ebitda / snapshot.revenue,
-        "depreciation_to_ebit": snapshot.depreciation_amortization / snapshot.ebit,
-        "interest_to_ebit": snapshot.interest_expense / snapshot.ebit,
-        "capex_to_net_income": snapshot.capex / snapshot.net_income,
-        "pe_ratio": snapshot.market_cap / snapshot.net_income,
+        "depreciation_to_ebit": (
+            snapshot.depreciation_amortization / snapshot.ebit if snapshot.ebit > 0 else None
+        ),
+        "interest_to_ebit": (
+            snapshot.interest_expense / snapshot.ebit if snapshot.ebit > 0 else None
+        ),
+        "capex_to_net_income": (
+            snapshot.capex / snapshot.net_income if snapshot.net_income > 0 else None
+        ),
+        "pe_ratio": (
+            snapshot.market_cap / snapshot.net_income if snapshot.net_income > 0 else None
+        ),
         "net_margin": snapshot.net_income / snapshot.revenue,
         "financial_leverage": snapshot.financial_debt / snapshot.total_equity,
         "current_ratio": snapshot.current_assets / snapshot.current_liabilities,
         "market_cap_to_assets": snapshot.market_cap / snapshot.total_assets,
-        "net_debt_to_ebitda": (
-            snapshot.financial_debt - snapshot.cash
-        ) / snapshot.ebitda,
+        "net_debt_to_ebitda": (snapshot.financial_debt - snapshot.cash) / snapshot.ebitda
+        if snapshot.ebitda > 0
+        else None,
     }
     metrics = [
-        evaluate_rule(key, round(ratios[key], 6))
+        (
+            evaluate_rule(key, round(ratios[key], 6))
+            if ratios[key] is not None
+            else _failed_ratio(key)
+        )
         for key in RULES
     ]
     passing = sum(metric.status == RuleStatus.PASS for metric in metrics)
     free_cash_flow = _free_cash_flow(snapshot)
-    invested_capital = (
-        snapshot.total_equity + snapshot.financial_debt - snapshot.cash
-    )
+    assert free_cash_flow is not None
+    invested_capital = snapshot.total_equity + snapshot.financial_debt - snapshot.cash
     indicators = [
         FinancialIndicator(
             key="free_cash_flow",
@@ -172,6 +267,8 @@ def calculate_financial_trend(
             free_cash_flow_cagr=None,
         )
 
+    first_free_cash_flow = _free_cash_flow(first)
+    last_free_cash_flow = _free_cash_flow(last)
     return FinancialTrend(
         periods=len(ordered),
         first_year=first.fiscal_year,
@@ -182,9 +279,13 @@ def calculate_financial_trend(
             last.net_income,
             elapsed_years,
         ),
-        free_cash_flow_cagr=_cagr(
-            _free_cash_flow(first),
-            _free_cash_flow(last),
-            elapsed_years,
+        free_cash_flow_cagr=(
+            _cagr(
+                first_free_cash_flow,
+                last_free_cash_flow,
+                elapsed_years,
+            )
+            if first_free_cash_flow is not None and last_free_cash_flow is not None
+            else None
         ),
     )

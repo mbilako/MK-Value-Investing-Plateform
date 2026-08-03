@@ -11,8 +11,8 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - comptes personnels et isolation des données par utilisateur ;
 - authentification multifacteur TOTP et gestion des sessions actives ;
 - import des entreprises et de leurs données financières annuelles ;
-- import automatique du dernier exercice public avec repli Yahoo Finance,
-  SEC EDGAR puis ESEF européen ;
+- import automatique de jusqu’à dix exercices publics avec fusion annuelle
+  Yahoo Finance, SEC EDGAR et ESEF européen ;
 - explorateur CAC 40, CAC Next 20 et SBF 120 avec ajout multiple sans saisie de
   ticker ;
 - modification, archivage ou suppression d’une entreprise dans les deux vues ;
@@ -49,12 +49,11 @@ Le parcours applicatif commence par un compte personnel vérifié :
 3. ouvrir « Sécurité » pour configurer le MFA, conserver les codes de
    récupération et contrôler les sessions actives ;
 4. utiliser « Explorer les indices » pour sélectionner une ou plusieurs
-   composantes du CAC 40, du CAC Next 20 ou du SBF 120, ou importer une
-   entreprise manuellement ;
-5. utiliser « Ajouter les données », puis choisir l’import public automatique
-   ou la saisie manuelle d’un exercice financier normalisé ;
-6. ouvrir l’analyse d’une entreprise prête pour consulter ses scores,
-   indicateurs et tendances historiques ;
+   composantes du CAC 40, du CAC Next 20 ou du SBF 120 ;
+5. utiliser « Charger l’historique » pour récupérer jusqu’aux dix derniers
+   exercices structurés disponibles et calculer un MK Score par année ;
+6. ouvrir l’analyse d’une entreprise prête pour consulter ses fondamentaux,
+   ses scores annuels et ses tendances de long terme ;
 7. préparer une valorisation, ajuster les hypothèses et comparer les cinq
    méthodes à la capitalisation observée ;
 8. calculer le scoring global et lire les quatre contributions et explications ;
@@ -98,19 +97,25 @@ durablement, puis utiliser un relais SMTP authentifié avec chiffrement
 STARTTLS. Voir
 [`docs/authentication.md`](docs/authentication.md).
 
-Les montants du formulaire sont exprimés en millions dans la devise de
-l’entreprise. La source doit identifier le rapport annuel ou le dépôt
-réglementaire utilisé.
+Les montants stockés sont exprimés en millions dans la devise des comptes. La
+source identifie le fournisseur public et l’exercice utilisés.
 
-L’import automatique essaie un snapshot annuel complet à la fois : Yahoo
-Finance en premier, SEC EDGAR pour les sociétés qui y déposent leurs comptes,
-puis ESEF/filings.xbrl.org pour les entreprises européennes disposant d’un
-ISIN ou d’un LEI. Les rapprochements ISIN–LEI proviennent de GLEIF. La source
+L’import automatique assemble jusqu’à dix exercices complets : Yahoo Finance
+est prioritaire pour chaque année, SEC EDGAR complète les sociétés qui y
+déposent leurs comptes, puis ESEF/filings.xbrl.org complète les entreprises
+européennes disposant d’un ISIN ou d’un LEI. Les rapprochements ISIN–LEI
+proviennent de GLEIF. La source
 réellement retenue est enregistrée, les montants sont convertis en millions et
-le même moteur d’analyse est appliqué que pour le formulaire manuel. Toutes
-ces sources sont gratuites ; aucun fournisseur payant n’est requis. Les
+le même moteur d’analyse est appliqué à chaque année. Toutes ces sources sont
+gratuites ; aucun fournisseur payant n’est requis. Les
 détails et limites figurent dans
 [`docs/public-data-sources.md`](docs/public-data-sources.md).
+
+Les banques et assureurs disposent d'un profil distinct : leurs chiffres
+publics sont importés, mais les ratios industriels, la valorisation standard et
+le MK Score sont signalés comme non applicables. Les exercices déficitaires
+restent importables et leurs dénominateurs négatifs sont classés défavorables,
+sans transformer une perte en signal positif.
 
 Pour arrêter :
 
@@ -213,10 +218,10 @@ inconnu. La configuration, la migration du premier compte et les garanties de
 sécurité sont détaillées dans
 [`docs/authentication.md`](docs/authentication.md).
 
-Les routes d’import valident les données, refusent un second import pour le
-même exercice, historisent le snapshot, calculent les ratios et scores, puis
-passent l’entreprise à l’état `ready`. La route de lecture restitue les
-exercices du plus récent au plus ancien et leurs tendances.
+Les routes d’import valident les données, ignorent les exercices déjà présents,
+historisent les nouvelles années, calculent un MK Score par exercice applicable,
+puis passent l’entreprise à l’état `ready`. La route de lecture restitue jusqu’à
+dix exercices du plus récent au plus ancien et leurs tendances.
 
 ## Financial Engine
 
@@ -291,8 +296,8 @@ conditions d’utilisation doivent être respectées.
 
 MK-VIP conserve la source de chaque snapshot. Avant toute décision
 d’investissement, les chiffres importés doivent être rapprochés du rapport
-annuel audité ou du dépôt réglementaire de l’émetteur. Le formulaire manuel
-reste disponible lorsqu’un champ public est absent ou doit être corrigé.
+annuel audité ou du dépôt réglementaire de l’émetteur. Une année absente est
+signalée comme indisponible plutôt que complétée silencieusement.
 
 ## Limites actuelles
 

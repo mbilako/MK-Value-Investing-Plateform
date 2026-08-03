@@ -7,7 +7,6 @@ import { ApiError } from "./api/client";
 import type {
   AIAnalysisPayload,
   CompanyClient,
-  FinancialPayload,
 } from "./api/client";
 import { createTestClient, testUser } from "./test/client";
 
@@ -660,6 +659,31 @@ describe("MK-VIP dashboard", () => {
     ).toBeInTheDocument();
   });
 
+  it("connects every sidebar entry to a real section", async () => {
+    const user = userEvent.setup();
+    render(<App client={createTestClient()} />);
+
+    const destinations = [
+      ["Entreprises", "#companies"],
+      ["Analyses", "#analyses"],
+      ["Règles", "#rules"],
+      ["Journal", "#journal"],
+    ] as const;
+    for (const [label, href] of destinations) {
+      const link = await screen.findByRole("link", { name: label });
+      expect(link).toHaveAttribute("href", href);
+    }
+
+    await user.click(screen.getByRole("link", { name: "Journal" }));
+    expect(screen.getByRole("link", { name: "Journal" })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Journal des analyses" }),
+    ).toBeInTheDocument();
+  });
+
   it("configures and disables MFA from the security drawer", async () => {
     const user = userEvent.setup();
     const setupMfa = vi.fn().mockResolvedValue({
@@ -738,59 +762,21 @@ describe("MK-VIP dashboard", () => {
     expect(screen.queryByText("Autre navigateur")).not.toBeInTheDocument();
   });
 
-  it("opens the Air Liquide import form with normalized defaults", async () => {
+  it("uses index exploration instead of manual company import", async () => {
     const user = userEvent.setup();
     render(<App client={createTestClient()} />);
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Commencer avec Air Liquide",
+        name: "Choisir dans les indices",
       }),
     );
 
     expect(
-      screen.getByRole("heading", { name: "Importer une entreprise" }),
+      screen.getByRole("heading", { name: "Explorer un indice boursier" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Nom de l’entreprise")).toHaveValue(
-      "Air Liquide",
-    );
-    expect(screen.getByLabelText("Ticker")).toHaveValue("AI.PA");
-  });
-
-  it("adds an imported company to the universe", async () => {
-    const user = userEvent.setup();
-    const client = createTestClient({
-      listCompanies: async () => [],
-      createCompany: async (payload) => ({
-        id: "company-1",
-        status: "pending",
-        ...payload,
-        ticker: payload.ticker.toUpperCase(),
-        currency: payload.currency.toUpperCase(),
-      }),
-      importFinancials: async () => {
-        throw new Error("Non utilisé dans ce scénario.");
-      },
-      importFinancialsAutomatically: unusedAutomaticImport,
-      getFinancialHistory: unusedFinancialHistory,
-      listValuations: unusedValuations,
-      createValuation: unusedCreateValuation,
-      listScores: unusedScores,
-      createScore: unusedCreateScore,
-    });
-    render(<App client={client} />);
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Commencer avec Air Liquide",
-      }),
-    );
-    await user.click(screen.getByRole("button", { name: "Importer" }));
-
-    expect(await screen.findByText("AI.PA")).toBeInTheDocument();
-    expect(screen.getByText("Air Liquide")).toBeInTheDocument();
     expect(
-      screen.queryByText("Aucune entreprise importée"),
+      screen.queryByRole("heading", { name: "Importer une entreprise" }),
     ).not.toBeInTheDocument();
   });
 
@@ -833,7 +819,7 @@ describe("MK-VIP dashboard", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Importer les données financières",
+        name: "Charger l’historique financier",
       }),
     ).toBeInTheDocument();
   });
@@ -874,93 +860,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByLabelText("analyses : 1")).toBeInTheDocument();
   });
 
-  it("submits normalized financials and displays the MK score", async () => {
-    const user = userEvent.setup();
-    let importedRevenue: number | undefined;
-    let importedOperatingCashFlow: number | undefined;
-    const client = createTestClient({
-      listCompanies: async () => [
-        {
-          id: "company-1",
-          name: "Air Liquide",
-          ticker: "AI.PA",
-          exchange: "Euronext Paris",
-          country: "France",
-          currency: "EUR",
-          status: "pending" as const,
-        },
-      ],
-      createCompany: async (payload: Parameters<CompanyClient["createCompany"]>[0]) => ({
-        id: "company-2",
-        status: "pending" as const,
-        ...payload,
-      }),
-      importFinancials: async (
-        _companyId: string,
-        payload: FinancialPayload,
-      ) => {
-        importedRevenue = payload.revenue;
-        importedOperatingCashFlow = payload.operating_cash_flow;
-        return {
-          ...payload,
-          id: "analysis-1",
-          company_id: "company-1",
-          mk_score: 100,
-          metrics: [],
-          indicators: [],
-          quality_score: 100,
-          safety_score: 100,
-          created_at: "2026-07-25T00:00:00Z",
-        };
-      },
-      importFinancialsAutomatically: unusedAutomaticImport,
-      getFinancialHistory: unusedFinancialHistory,
-      listValuations: unusedValuations,
-      createValuation: unusedCreateValuation,
-      listScores: unusedScores,
-      createScore: unusedCreateScore,
-    });
-    render(<App client={client} />);
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Importer les données financières pour Air Liquide",
-      }),
-    );
-
-    const fields: Array<[string, string]> = [
-      ["Source", "Rapport annuel 2025"],
-      ["Chiffre d’affaires", "1000"],
-      ["EBITDA", "450"],
-      ["Dotations aux amortissements", "20"],
-      ["EBIT", "400"],
-      ["Charges d’intérêts", "40"],
-      ["Flux de trésorerie d’exploitation", "-25"],
-      ["Investissements (Capex)", "40"],
-      ["Résultat net", "250"],
-      ["Capitalisation boursière", "4500"],
-      ["Total actif", "4000"],
-      ["Actif circulant", "600"],
-      ["Passif exigible", "250"],
-      ["Dette financière", "600"],
-      ["Trésorerie", "100"],
-      ["Capitaux propres", "1000"],
-    ];
-    for (const [label, value] of fields) {
-      await user.type(screen.getByLabelText(label), value);
-    }
-    await user.click(
-      screen.getByRole("button", { name: "Calculer le MK Score" }),
-    );
-
-    expect(importedRevenue).toBe(1000);
-    expect(importedOperatingCashFlow).toBe(-25);
-    expect(await screen.findByText("MK Score 100")).toBeInTheDocument();
-    expect(screen.getByText("Analyse prête")).toBeInTheDocument();
-    expect(screen.getByLabelText("analyses : 1")).toBeInTheDocument();
-  });
-
-  it("imports the latest public financial data automatically", async () => {
+  it("imports the available public financial history automatically", async () => {
     const user = userEvent.setup();
     const client = createTestClient({
       listCompanies: async () => [
@@ -988,7 +888,7 @@ describe("MK-VIP dashboard", () => {
         if (companyId !== "company-1") {
           throw new Error("Mauvaise entreprise.");
         }
-        return {
+        const snapshot = {
           id: "analysis-1",
           company_id: companyId,
           fiscal_year: 2025,
@@ -1016,6 +916,18 @@ describe("MK-VIP dashboard", () => {
           safety_score: 100,
           created_at: "2026-07-26T00:00:00Z",
         };
+        return {
+          company_id: companyId,
+          snapshots: [snapshot],
+          trend: {
+            periods: 1,
+            first_year: 2025,
+            last_year: 2025,
+            revenue_cagr: null,
+            net_income_cagr: null,
+            free_cash_flow_cagr: null,
+          },
+        };
       },
       getFinancialHistory: unusedFinancialHistory,
       listValuations: unusedValuations,
@@ -1032,12 +944,11 @@ describe("MK-VIP dashboard", () => {
     );
     await user.click(
       screen.getByRole("button", {
-        name: "Importer depuis les sources gratuites",
+        name: "Charger l’historique",
       }),
     );
 
-    expect(await screen.findByText("MK Score 80")).toBeInTheDocument();
-    expect(screen.getByText("Analyse prête")).toBeInTheDocument();
+    expect(await screen.findByText("1 exercice disponible")).toBeInTheDocument();
   });
 
   it("opens the financial engine analysis for a ready company", async () => {
@@ -1139,10 +1050,12 @@ describe("MK-VIP dashboard", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Analyse financière" }),
+      await screen.findByRole("heading", { name: "Historique fondamental" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Quality Score")).toBeInTheDocument();
-    expect(screen.getByText("Safety Score")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Fondamentaux du dernier exercice" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Historique annuel" })).toBeInTheDocument();
     expect(screen.getAllByText("Free Cash Flow").length).toBeGreaterThan(0);
     expect(screen.getByText("260 M EUR")).toBeInTheDocument();
     expect(screen.getByText("Historique insuffisant")).toBeInTheDocument();
@@ -1752,7 +1665,7 @@ describe("MK-VIP dashboard", () => {
       }),
     );
     expect(
-      await screen.findByRole("dialog", { name: "Analyse financière" }),
+      await screen.findByRole("dialog", { name: "Historique fondamental" }),
     ).toBeInTheDocument();
   });
 

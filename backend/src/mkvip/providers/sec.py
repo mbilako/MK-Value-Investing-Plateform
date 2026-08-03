@@ -39,20 +39,41 @@ class SecEdgarProvider:
         self._user_agent = user_agent
         self._fetch_json = fetch_json or _fetch_json
         self._ticker_to_cik: dict[str, str] | None = None
+        self._ticker_by_cik: dict[str, str] = {}
         self._facts: dict[str, dict[str, Any]] = {}
 
-    async def search_company(
-        self, query: str
-    ) -> list[ProviderCompanySearchResult]:
+    async def resolve_identifier(
+        self,
+        ticker: str,
+        *,
+        isin: str | None = None,
+        cik: str | None = None,
+        lei: str | None = None,
+    ) -> str:
+        del isin, lei
+        normalized_ticker = ticker.upper()
+        if cik:
+            resolved_cik = cik.zfill(10)
+            self._ticker_by_cik[resolved_cik] = normalized_ticker
+            return resolved_cik
+        if "." in normalized_ticker:
+            raise ProviderDataIncompleteError(
+                f"{normalized_ticker} est coté hors des États-Unis et ne "
+                "peut pas être rapproché d'EDGAR sans CIK explicite."
+            )
+        resolved_cik = await self._resolve_ticker_cik(normalized_ticker)
+        self._ticker_by_cik[resolved_cik] = normalized_ticker
+        return resolved_cik
+
+    async def search_company(self, query: str) -> list[ProviderCompanySearchResult]:
         return await self._market_provider.search_company(query)
 
     async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
         await self._get_us_gaap_facts(ticker)
-        return await self._market_provider.get_profile(ticker)
+        market_ticker = self._ticker_by_cik.get(ticker, ticker)
+        return await self._market_provider.get_profile(market_ticker)
 
-    async def get_income_statements(
-        self, ticker: str
-    ) -> list[ProviderIncomeStatement]:
+    async def get_income_statements(self, ticker: str) -> list[ProviderIncomeStatement]:
         facts = await self._get_us_gaap_facts(ticker)
         revenue = _annual_values(
             facts,
@@ -74,6 +95,12 @@ class SecEdgarProvider:
             "InterestAndDebtExpense",
         )
         net_income = _annual_values(facts, "NetIncomeLoss", "ProfitLoss")
+        shares = _annual_values(
+            facts,
+            "WeightedAverageNumberOfDilutedSharesOutstanding",
+            "WeightedAverageNumberOfShareOutstandingBasicAndDiluted",
+            "WeightedAverageNumberOfSharesOutstandingBasic",
+        )
         years = revenue.keys() & ebit.keys() & depreciation.keys() & net_income.keys()
         statements = [
             ProviderIncomeStatement(
@@ -84,15 +111,13 @@ class SecEdgarProvider:
                 ebit=ebit[year],
                 interest_expense=abs(interest.get(year, 0.0)),
                 net_income=net_income[year],
+                weighted_average_shares=shares.get(year),
             )
             for year in sorted(years, reverse=True)
-            if ebit[year] > 0 and net_income[year] > 0
         ]
         return _require_statements(statements, ticker, "résultat")
 
-    async def get_balance_sheet(
-        self, ticker: str
-    ) -> list[ProviderBalanceSheet]:
+    async def get_balance_sheet(self, ticker: str) -> list[ProviderBalanceSheet]:
         facts = await self._get_us_gaap_facts(ticker)
         assets = _instant_values(facts, "Assets")
         current_assets = _instant_values(facts, "AssetsCurrent")
@@ -132,8 +157,7 @@ class SecEdgarProvider:
                 total_assets=assets[year],
                 current_assets=current_assets[year],
                 current_liabilities=current_liabilities[year],
-                financial_debt=abs(debt.get(year, 0.0))
-                + abs(long_debt.get(year, 0.0)),
+                financial_debt=abs(debt.get(year, 0.0)) + abs(long_debt.get(year, 0.0)),
                 cash=abs(cash[year]),
                 total_equity=equity[year],
             )
@@ -166,31 +190,42 @@ class SecEdgarProvider:
         return _require_statements(statements, ticker, "flux de trésorerie")
 
     async def get_price_history(self, ticker: str) -> list[ProviderPricePoint]:
-        return await self._market_provider.get_price_history(ticker)
+        market_ticker = self._ticker_by_cik.get(ticker, ticker)
+        return await self._market_provider.get_price_history(market_ticker)
 
-    async def _get_us_gaap_facts(self, ticker: str) -> dict[str, Any]:
-        normalized = ticker.upper().split(".", 1)[0]
-        if self._ticker_to_cik is None:
-            payload = await asyncio.to_thread(
-                self._fetch_json, self.tickers_url, self._user_agent
-            )
-            fields = payload.get("fields", [])
-            try:
-                ticker_index = fields.index("ticker")
-                cik_index = fields.index("cik")
-            except ValueError as error:
-                raise ProviderDataError(
-                    "Le référentiel public SEC est illisible."
-                ) from error
-            self._ticker_to_cik = {
-                str(row[ticker_index]).upper(): str(row[cik_index]).zfill(10)
-                for row in payload.get("data", [])
-            }
+    async def _load_ticker_map(self) -> None:
+        if self._ticker_to_cik is not None:
+            return
+        payload = await asyncio.to_thread(self._fetch_json, self.tickers_url, self._user_agent)
+        fields = payload.get("fields", [])
+        try:
+            ticker_index = fields.index("ticker")
+            cik_index = fields.index("cik")
+        except ValueError as error:
+            raise ProviderDataError("Le référentiel public SEC est illisible.") from error
+        self._ticker_to_cik = {
+            str(row[ticker_index]).upper(): str(row[cik_index]).zfill(10)
+            for row in payload.get("data", [])
+        }
+
+    async def _resolve_ticker_cik(self, ticker: str) -> str:
+        normalized = ticker.upper()
+        if "." in normalized:
+            raise ProviderDataIncompleteError(f"{normalized} n'est pas un ticker américain EDGAR.")
+        await self._load_ticker_map()
+        assert self._ticker_to_cik is not None
         cik = self._ticker_to_cik.get(normalized)
         if cik is None:
-            raise ProviderDataIncompleteError(
-                f"{ticker.upper()} n'est pas référencé auprès de la SEC."
-            )
+            raise ProviderDataIncompleteError(f"{normalized} n'est pas référencé auprès de la SEC.")
+        return cik
+
+    async def _get_us_gaap_facts(self, ticker: str) -> dict[str, Any]:
+        normalized = ticker.upper()
+        cik = (
+            normalized
+            if normalized.isdigit() and len(normalized) == 10
+            else await self._resolve_ticker_cik(normalized)
+        )
         if cik not in self._facts:
             payload = await asyncio.to_thread(
                 self._fetch_json,

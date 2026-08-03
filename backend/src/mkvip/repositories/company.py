@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import Protocol
 
 from mkvip.analysis.financials import FinancialAnalysis
@@ -25,9 +26,7 @@ class CompanyRepository(Protocol):
 
     async def create(self, company: CompanyCreate) -> CompanyRead: ...
 
-    async def update(
-        self, company_id: uuid.UUID, company: CompanyUpdate
-    ) -> CompanyRead | None: ...
+    async def update(self, company_id: uuid.UUID, company: CompanyUpdate) -> CompanyRead | None: ...
 
     async def archive(self, company_id: uuid.UUID) -> CompanyRead | None: ...
 
@@ -52,6 +51,12 @@ class CompanyRepository(Protocol):
         snapshot: FinancialSnapshotCreate,
         analysis: FinancialAnalysis,
     ) -> FinancialAnalysisRead: ...
+
+    async def create_financial_analyses(
+        self,
+        company_id: uuid.UUID,
+        analyses: Sequence[tuple[FinancialSnapshotCreate, FinancialAnalysis]],
+    ) -> list[FinancialAnalysisRead]: ...
 
     async def list_valuation_analyses(
         self,
