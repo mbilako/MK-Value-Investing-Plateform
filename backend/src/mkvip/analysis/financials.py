@@ -44,6 +44,11 @@ class FinancialTrend:
     revenue_cagr: float | None
     net_income_cagr: float | None
     free_cash_flow_cagr: float | None
+    operating_income_cagr: float | None
+    pretax_income_cagr: float | None
+    pe_annual_change: float | None
+    roe_annual_change: float | None
+    current_ratio_annual_change: float | None
 
 
 def _score(metrics: list[RuleResult], rule_keys: tuple[str, ...]) -> float:
@@ -240,6 +245,30 @@ def _cagr(first: float, last: float, elapsed_years: int) -> float | None:
     return round((last / first) ** (1 / elapsed_years) - 1, 6)
 
 
+def _annual_change(
+    first: float | None,
+    last: float | None,
+    elapsed_years: int,
+) -> float | None:
+    if first is None or last is None or elapsed_years <= 0:
+        return None
+    return round((last - first) / elapsed_years, 6)
+
+
+def _pe_ratio(snapshot: FinancialSnapshotCreate) -> float | None:
+    return _rounded_ratio(snapshot.market_cap, snapshot.net_income)
+
+
+def _roe(snapshot: FinancialSnapshotCreate) -> float | None:
+    return _rounded_ratio(snapshot.net_income, snapshot.total_equity)
+
+
+def _current_ratio(snapshot: FinancialSnapshotCreate) -> float | None:
+    if snapshot.current_assets is None or snapshot.current_liabilities is None:
+        return None
+    return _rounded_ratio(snapshot.current_assets, snapshot.current_liabilities)
+
+
 def calculate_financial_trend(
     snapshots: Sequence[FinancialSnapshotCreate],
 ) -> FinancialTrend:
@@ -252,6 +281,11 @@ def calculate_financial_trend(
             revenue_cagr=None,
             net_income_cagr=None,
             free_cash_flow_cagr=None,
+            operating_income_cagr=None,
+            pretax_income_cagr=None,
+            pe_annual_change=None,
+            roe_annual_change=None,
+            current_ratio_annual_change=None,
         )
 
     first = ordered[0]
@@ -265,6 +299,11 @@ def calculate_financial_trend(
             revenue_cagr=None,
             net_income_cagr=None,
             free_cash_flow_cagr=None,
+            operating_income_cagr=None,
+            pretax_income_cagr=None,
+            pe_annual_change=None,
+            roe_annual_change=None,
+            current_ratio_annual_change=None,
         )
 
     first_free_cash_flow = _free_cash_flow(first)
@@ -287,5 +326,30 @@ def calculate_financial_trend(
             )
             if first_free_cash_flow is not None and last_free_cash_flow is not None
             else None
+        ),
+        operating_income_cagr=(
+            _cagr(first.ebit, last.ebit, elapsed_years)
+            if first.ebit is not None and last.ebit is not None
+            else None
+        ),
+        pretax_income_cagr=(
+            _cagr(first.pretax_income, last.pretax_income, elapsed_years)
+            if first.pretax_income is not None and last.pretax_income is not None
+            else None
+        ),
+        pe_annual_change=_annual_change(
+            _pe_ratio(first),
+            _pe_ratio(last),
+            elapsed_years,
+        ),
+        roe_annual_change=_annual_change(
+            _roe(first),
+            _roe(last),
+            elapsed_years,
+        ),
+        current_ratio_annual_change=_annual_change(
+            _current_ratio(first),
+            _current_ratio(last),
+            elapsed_years,
         ),
     )

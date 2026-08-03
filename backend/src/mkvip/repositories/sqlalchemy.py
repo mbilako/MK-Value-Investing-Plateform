@@ -36,33 +36,41 @@ def _financial_record(
     snapshot: FinancialSnapshotCreate,
     analysis: FinancialAnalysis,
 ) -> FinancialSnapshotOrm:
-    return FinancialSnapshotOrm(
-        company_id=company_id,
-        metrics=[
-            {
-                "key": metric.key,
-                "label": metric.label,
-                "value": metric.value,
-                "status": metric.status.value,
-                "source_note": metric.source_note,
-            }
-            for metric in analysis.metrics
-        ],
-        indicators=[
-            {
-                "key": indicator.key,
-                "label": indicator.label,
-                "value": indicator.value,
-                "unit": indicator.unit,
-                "formula": indicator.formula,
-            }
-            for indicator in analysis.indicators
-        ],
-        mk_score=analysis.mk_score,
-        quality_score=analysis.quality_score,
-        safety_score=analysis.safety_score,
-        **snapshot.model_dump(),
-    )
+    record = FinancialSnapshotOrm(company_id=company_id)
+    return _update_financial_record(record, snapshot, analysis)
+
+
+def _update_financial_record(
+    record: FinancialSnapshotOrm,
+    snapshot: FinancialSnapshotCreate,
+    analysis: FinancialAnalysis,
+) -> FinancialSnapshotOrm:
+    for field, value in snapshot.model_dump().items():
+        setattr(record, field, value)
+    record.metrics = [
+        {
+            "key": metric.key,
+            "label": metric.label,
+            "value": metric.value,
+            "status": metric.status.value,
+            "source_note": metric.source_note,
+        }
+        for metric in analysis.metrics
+    ]
+    record.indicators = [
+        {
+            "key": indicator.key,
+            "label": indicator.label,
+            "value": indicator.value,
+            "unit": indicator.unit,
+            "formula": indicator.formula,
+        }
+        for indicator in analysis.indicators
+    ]
+    record.mk_score = analysis.mk_score
+    record.quality_score = analysis.quality_score
+    record.safety_score = analysis.safety_score
+    return record
 
 
 class SqlAlchemyCompanyRepository:
@@ -233,9 +241,22 @@ class SqlAlchemyCompanyRepository:
             .order_by(FinancialSnapshotOrm.fiscal_year.desc())
             .limit(1)
         )
-        records = [
-            _financial_record(company_id, snapshot, analysis) for snapshot, analysis in analyses
-        ]
+        years = [snapshot.fiscal_year for snapshot, _ in analyses]
+        existing_records = await self._session.scalars(
+            select(FinancialSnapshotOrm).where(
+                FinancialSnapshotOrm.company_id == company_id,
+                FinancialSnapshotOrm.fiscal_year.in_(years),
+            )
+        )
+        existing_by_year = {record.fiscal_year: record for record in existing_records}
+        records = []
+        for snapshot, analysis in analyses:
+            record = existing_by_year.get(snapshot.fiscal_year)
+            if record is None:
+                record = _financial_record(company_id, snapshot, analysis)
+            else:
+                _update_financial_record(record, snapshot, analysis)
+            records.append(record)
         latest_snapshot, latest_analysis = max(
             analyses,
             key=lambda item: item[0].fiscal_year,

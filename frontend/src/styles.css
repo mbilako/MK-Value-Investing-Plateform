@@ -1689,7 +1689,9 @@ a:focus-visible {
 }
 
 .indicator-card > span,
-.growth-grid span {
+.indicator-card__head > span,
+.growth-grid article > span,
+.growth-grid .indicator-card__head > span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
@@ -1703,6 +1705,43 @@ a:focus-visible {
 
 .indicator-card small {
   line-height: 1.4;
+}
+
+.indicator-card__head,
+.history-column-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.move-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.move-controls button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--navy);
+  background: #fff;
+  cursor: pointer;
+}
+
+.move-controls button:hover:not(:disabled) {
+  border-color: rgba(8, 122, 87, 0.45);
+  color: var(--emerald);
+}
+
+.move-controls button:disabled {
+  opacity: 0.28;
+  cursor: default;
 }
 
 .growth-grid {
@@ -1804,7 +1843,7 @@ section[id] {
   text-transform: uppercase;
 }
 
-.fundamental-history__head span,
+.fundamental-history__head > span,
 .fundamental-history__row > span,
 .fundamental-history__row > strong {
   padding: 12px 14px;
@@ -1818,6 +1857,15 @@ section[id] {
 
 .fundamental-history__row:nth-child(odd) {
   background: #fbfcfd;
+}
+
+.history-column-head {
+  min-width: 0;
+}
+
+.history-column-head .move-controls {
+  margin-top: -6px;
+  margin-right: -8px;
 }
 
 .analysis-details {

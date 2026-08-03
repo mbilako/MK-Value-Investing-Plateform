@@ -117,6 +117,13 @@ le MK Score sont signalés comme non applicables. Les exercices déficitaires
 restent importables et leurs dénominateurs négatifs sont classés défavorables,
 sans transformer une perte en signal positif.
 
+L’écran d’analyse conserve néanmoins la même structure pour toutes les
+entreprises : douze fondamentaux du dernier exercice, sept tendances
+annualisées et un tableau annuel réordonnable. Les commandes gauche/droite
+permettent de personnaliser l’ordre des cartes et colonnes ; ce choix est
+conservé dans le navigateur. Une donnée non publiée reste visible sous la forme
+`N/A` afin de ne pas modifier la lecture selon le secteur.
+
 Pour arrêter :
 
 ```bash

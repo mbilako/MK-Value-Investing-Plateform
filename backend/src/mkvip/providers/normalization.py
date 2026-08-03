@@ -181,7 +181,11 @@ async def _load_historical_snapshots(
         income = income_by_year[fiscal_year]
         balance = balance_by_year[fiscal_year]
         cash_flow = cash_by_year.get(fiscal_year)
-        shares = income.weighted_average_shares or profile.shares_outstanding
+        shares = (
+            balance.shares_outstanding
+            or income.weighted_average_shares
+            or profile.shares_outstanding
+        )
         year_end_price = prices_by_year.get(fiscal_year)
         if shares is not None and shares > 0 and year_end_price is not None:
             market_cap = shares * year_end_price
@@ -201,6 +205,8 @@ async def _load_historical_snapshots(
                     balance,
                     cash_flow,
                     market_cap,
+                    shares,
+                    year_end_price,
                 )
             )
         except ValidationError as error:
@@ -228,6 +234,8 @@ def _build_snapshot(
     balance: ProviderBalanceSheet,
     cash_flow: ProviderCashFlow | None,
     market_cap: float,
+    shares_outstanding: float | None,
+    closing_price: float | None,
 ) -> FinancialSnapshotCreate:
     fiscal_year = income.fiscal_year
     depreciation = income.depreciation_amortization
@@ -262,11 +270,30 @@ def _build_snapshot(
         ),
         capex=(_to_millions(abs(cash_flow.capex)) if cash_flow is not None else None),
         net_income=_to_millions(income.net_income),
+        pretax_income=_optional_millions(income.pretax_income),
         market_cap=_to_millions(market_cap),
+        closing_price=(
+            round(closing_price, 6)
+            if closing_price is not None
+            else (
+                round(market_cap / shares_outstanding, 6)
+                if shares_outstanding is not None and shares_outstanding > 0
+                else None
+            )
+        ),
+        shares_outstanding=_optional_millions(shares_outstanding),
+        treasury_stock_value=_optional_millions(
+            abs(balance.treasury_stock_value) if balance.treasury_stock_value is not None else None
+        ),
         total_assets=_to_millions(balance.total_assets),
         current_assets=_optional_millions(balance.current_assets),
         current_liabilities=_optional_millions(balance.current_liabilities),
         financial_debt=_optional_millions(balance.financial_debt),
         cash=_optional_millions(balance.cash),
         total_equity=_to_millions(balance.total_equity),
+        investing_cash_flow=(
+            _to_millions(cash_flow.investing_cash_flow)
+            if cash_flow is not None and cash_flow.investing_cash_flow is not None
+            else None
+        ),
     )

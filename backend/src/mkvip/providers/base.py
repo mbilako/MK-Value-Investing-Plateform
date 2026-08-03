@@ -48,6 +48,7 @@ class ProviderIncomeStatement:
     ebit: float | None
     interest_expense: float | None
     net_income: float
+    pretax_income: float | None = None
     weighted_average_shares: float | None = None
 
 
@@ -60,6 +61,8 @@ class ProviderBalanceSheet:
     financial_debt: float | None
     cash: float | None
     total_equity: float
+    shares_outstanding: float | None = None
+    treasury_stock_value: float | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +70,7 @@ class ProviderCashFlow:
     fiscal_year: int
     operating_cash_flow: float
     capex: float
+    investing_cash_flow: float | None = None
 
 
 @dataclass(frozen=True)

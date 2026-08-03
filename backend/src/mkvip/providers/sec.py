@@ -95,6 +95,12 @@ class SecEdgarProvider:
             "InterestAndDebtExpense",
         )
         net_income = _annual_values(facts, "NetIncomeLoss", "ProfitLoss")
+        pretax_income = _annual_values(
+            facts,
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxes",
+        )
         shares = _annual_values(
             facts,
             "WeightedAverageNumberOfDilutedSharesOutstanding",
@@ -111,6 +117,7 @@ class SecEdgarProvider:
                 ebit=ebit[year],
                 interest_expense=abs(interest.get(year, 0.0)),
                 net_income=net_income[year],
+                pretax_income=pretax_income.get(year),
                 weighted_average_shares=shares.get(year),
             )
             for year in sorted(years, reverse=True)
@@ -144,6 +151,16 @@ class SecEdgarProvider:
             "StockholdersEquity",
             "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
         )
+        shares = _instant_values(
+            facts,
+            "CommonStockSharesOutstanding",
+            "EntityCommonStockSharesOutstanding",
+        )
+        treasury_stock = _instant_values(
+            facts,
+            "TreasuryStockValue",
+            "TreasuryStockCommonValue",
+        )
         years = (
             assets.keys()
             & current_assets.keys()
@@ -160,6 +177,8 @@ class SecEdgarProvider:
                 financial_debt=abs(debt.get(year, 0.0)) + abs(long_debt.get(year, 0.0)),
                 cash=abs(cash[year]),
                 total_equity=equity[year],
+                shares_outstanding=shares.get(year),
+                treasury_stock_value=abs(treasury_stock.get(year, 0.0)),
             )
             for year in sorted(years, reverse=True)
             if equity[year] > 0
@@ -178,12 +197,18 @@ class SecEdgarProvider:
             "PaymentsToAcquirePropertyPlantAndEquipment",
             "PaymentsForAdditionsToPropertyPlantAndEquipment",
         )
+        investing = _annual_values(
+            facts,
+            "NetCashProvidedByUsedInInvestingActivities",
+            "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations",
+        )
         years = operating.keys() & capex.keys()
         statements = [
             ProviderCashFlow(
                 fiscal_year=year,
                 operating_cash_flow=operating[year],
                 capex=abs(capex[year]),
+                investing_cash_flow=investing.get(year),
             )
             for year in sorted(years, reverse=True)
         ]

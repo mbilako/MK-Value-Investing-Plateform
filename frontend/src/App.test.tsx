@@ -1056,9 +1056,9 @@ describe("MK-VIP dashboard", () => {
       screen.getByRole("heading", { name: "Fondamentaux du dernier exercice" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Historique annuel" })).toBeInTheDocument();
-    expect(screen.getAllByText("Free Cash Flow").length).toBeGreaterThan(0);
-    expect(screen.getByText("260 M EUR")).toBeInTheDocument();
-    expect(screen.getByText("Historique insuffisant")).toBeInTheDocument();
+    expect(screen.getByText("Flux de trésorerie d’exploitation")).toBeInTheDocument();
+    expect(screen.getAllByText("300 M EUR").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Historique insuffisant").length).toBeGreaterThan(0);
   });
 
   it("creates an explainable valuation from the latest analysis", async () => {

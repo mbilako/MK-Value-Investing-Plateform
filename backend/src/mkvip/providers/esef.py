@@ -252,6 +252,12 @@ def _income_statement(report: ESEFReport) -> ProviderIncomeStatement:
         keywords=("netincome", "resultatnet"),
         duration=True,
     )
+    pretax_income = _optional_value(
+        report,
+        exact=("ProfitLossBeforeTax", "ProfitLossFromContinuingOperationsBeforeTax"),
+        keywords=("profitlossbeforetax", "resultatavantimpot"),
+        duration=True,
+    )
     shares = _optional_value(
         report,
         exact=(
@@ -271,6 +277,7 @@ def _income_statement(report: ESEFReport) -> ProviderIncomeStatement:
         ebit=ebit,
         interest_expense=interest,
         net_income=net_income,
+        pretax_income=pretax_income,
         weighted_average_shares=shares,
     )
 
@@ -331,6 +338,22 @@ def _balance_sheet(report: ESEFReport) -> ProviderBalanceSheet:
             exact=("Equity", "EquityAttributableToOwnersOfParent"),
             duration=False,
         ),
+        shares_outstanding=_optional_value(
+            report,
+            exact=(
+                "NumberOfSharesOutstanding",
+                "NumberOfOrdinarySharesOutstanding",
+            ),
+            keywords=("numberofsharesoutstanding",),
+            duration=False,
+            monetary=False,
+        ),
+        treasury_stock_value=_optional_value(
+            report,
+            exact=("TreasuryShares", "TreasuryStock"),
+            keywords=("treasuryshares", "actionsautodetenues"),
+            duration=False,
+        ),
     )
 
 
@@ -369,6 +392,15 @@ def _cash_flow(report: ESEFReport) -> ProviderCashFlow:
                 ),
                 duration=True,
             )
+        ),
+        investing_cash_flow=_optional_value(
+            report,
+            exact=(
+                "CashFlowsFromUsedInInvestingActivities",
+                "CashFlowsFromUsedInInvestingActivitiesContinuingOperations",
+            ),
+            keywords=("cashflowsfromusedininvesting",),
+            duration=True,
         ),
     )
 

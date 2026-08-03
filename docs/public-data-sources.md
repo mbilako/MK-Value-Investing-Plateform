@@ -21,7 +21,8 @@ même exercice n’est mélangée entre plusieurs normes ou plusieurs sources.
    La capitalisation de marché reste issue de Yahoo Finance.
 
 Les années issues de plusieurs fournisseurs sont fusionnées par exercice, selon
-l’ordre de priorité ci-dessus. Un exercice déjà présent n’est pas recréé. Si
+l’ordre de priorité ci-dessus. Un exercice déjà présent est actualisé lors d’un
+nouvel import afin de compléter les nouveaux champs sans créer de doublon. Si
 aucun fournisseur ne livre un exercice exploitable, l’import est refusé avec le
 détail des sources essayées.
 
@@ -40,6 +41,11 @@ applicables. Ces entreprises présentent souvent leur bilan par ordre de
 liquidité et ne publient pas les postes actif circulant, passif exigible ou
 EBITDA selon le modèle des sociétés industrielles. Remplacer ces postes par des
 zéros ou par le total du bilan produirait des ratios artificiels.
+
+L’affichage reste identique à celui des autres entreprises. Les cartes et
+colonnes non alimentées sont conservées avec la valeur `N/A`, ce qui garantit
+une lecture stable tout en distinguant clairement absence de publication et
+valeur nulle.
 
 Les pertes, EBIT ou EBITDA négatifs ne sont pas traités comme des données
 manquantes. Ils sont conservés ; une règle dont le dénominateur est nul ou

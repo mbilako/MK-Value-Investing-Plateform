@@ -254,7 +254,7 @@ def test_automatic_import_creates_latest_available_analysis(
     assert body["snapshots"][0]["mk_score"] == 100.0
 
 
-def test_automatic_import_builds_history_and_skips_existing_years(
+def test_automatic_import_builds_history_and_refreshes_existing_years(
     client: TestClient,
     company_id: str,
 ) -> None:
@@ -345,6 +345,8 @@ def test_automatic_import_builds_history_and_skips_existing_years(
     assert second.status_code == 201
     assert [snapshot["fiscal_year"] for snapshot in first.json()["snapshots"]] == [2025, 2024]
     assert len(second.json()["snapshots"]) == 2
+    assert second.json()["snapshots"][0]["closing_price"] == 45
+    assert second.json()["snapshots"][0]["shares_outstanding"] == 100
 
 
 def test_automatic_import_rejects_a_company_already_in_flight(
@@ -471,4 +473,9 @@ def test_financial_history_returns_snapshots_and_growth(
         "revenue_cagr": pytest.approx(0.10),
         "net_income_cagr": pytest.approx(0.10),
         "free_cash_flow_cagr": pytest.approx(0.20),
+        "operating_income_cagr": pytest.approx(0.0),
+        "pretax_income_cagr": None,
+        "pe_annual_change": pytest.approx(-3.904958),
+        "roe_annual_change": pytest.approx(0.0105),
+        "current_ratio_annual_change": pytest.approx(0.0),
     }

@@ -120,13 +120,18 @@ export interface FinancialPayload {
   operating_cash_flow: number | null;
   capex: number | null;
   net_income: number;
+  pretax_income?: number | null;
   market_cap: number;
+  closing_price?: number | null;
+  shares_outstanding?: number | null;
+  treasury_stock_value?: number | null;
   total_assets: number;
   current_assets: number | null;
   current_liabilities: number | null;
   financial_debt: number | null;
   cash: number | null;
   total_equity: number;
+  investing_cash_flow?: number | null;
 }
 
 export interface FinancialMetric {
@@ -163,6 +168,11 @@ export interface FinancialTrend {
   revenue_cagr: number | null;
   net_income_cagr: number | null;
   free_cash_flow_cagr: number | null;
+  operating_income_cagr?: number | null;
+  pretax_income_cagr?: number | null;
+  pe_annual_change?: number | null;
+  roe_annual_change?: number | null;
+  current_ratio_annual_change?: number | null;
 }
 
 export interface FinancialHistory {

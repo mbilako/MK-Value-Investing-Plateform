@@ -80,6 +80,11 @@ def test_financial_trend_uses_elapsed_years_for_cagr() -> None:
     assert trend.revenue_cagr == pytest.approx(0.10)
     assert trend.net_income_cagr == pytest.approx(0.10)
     assert trend.free_cash_flow_cagr == pytest.approx(0.20)
+    assert trend.operating_income_cagr == pytest.approx(0.0)
+    assert trend.pretax_income_cagr is None
+    assert trend.pe_annual_change == pytest.approx(-3.904958)
+    assert trend.roe_annual_change == pytest.approx(0.0105)
+    assert trend.current_ratio_annual_change == pytest.approx(0.0)
 
 
 def test_financial_trend_requires_two_periods() -> None:
@@ -95,6 +100,11 @@ def test_financial_trend_requires_two_periods() -> None:
     assert trend.revenue_cagr is None
     assert trend.net_income_cagr is None
     assert trend.free_cash_flow_cagr is None
+    assert trend.operating_income_cagr is None
+    assert trend.pretax_income_cagr is None
+    assert trend.pe_annual_change is None
+    assert trend.roe_annual_change is None
+    assert trend.current_ratio_annual_change is None
 
 
 def test_financial_institution_keeps_data_without_industrial_score() -> None:

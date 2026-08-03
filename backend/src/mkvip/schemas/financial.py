@@ -25,13 +25,18 @@ class FinancialSnapshotCreate(BaseModel):
     operating_cash_flow: float | None = None
     capex: float | None = Field(default=None, ge=0)
     net_income: float
+    pretax_income: float | None = None
     market_cap: float = Field(gt=0)
+    closing_price: float | None = Field(default=None, gt=0)
+    shares_outstanding: float | None = Field(default=None, gt=0)
+    treasury_stock_value: float | None = Field(default=None, ge=0)
     total_assets: float = Field(gt=0)
     current_assets: float | None = Field(default=None, ge=0)
     current_liabilities: float | None = Field(default=None, gt=0)
     financial_debt: float | None = Field(default=None, ge=0)
     cash: float | None = Field(default=None, ge=0)
     total_equity: float = Field(gt=0)
+    investing_cash_flow: float | None = None
 
     @field_validator("source")
     @classmethod
@@ -103,6 +108,11 @@ class FinancialTrendRead(BaseModel):
     revenue_cagr: float | None
     net_income_cagr: float | None
     free_cash_flow_cagr: float | None
+    operating_income_cagr: float | None
+    pretax_income_cagr: float | None
+    pe_annual_change: float | None
+    roe_annual_change: float | None
+    current_ratio_annual_change: float | None
 
     model_config = ConfigDict(from_attributes=True)
 

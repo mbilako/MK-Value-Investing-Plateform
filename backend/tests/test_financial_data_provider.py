@@ -106,13 +106,18 @@ async def test_latest_snapshot_uses_shared_year_and_converts_to_millions() -> No
         "operating_cash_flow": 3_000,
         "capex": 400,
         "net_income": 2_500,
+        "pretax_income": None,
         "market_cap": 50_000,
+        "closing_price": None,
+        "shares_outstanding": None,
+        "treasury_stock_value": None,
         "total_assets": 40_000,
         "current_assets": 6_000,
         "current_liabilities": 2_500,
         "financial_debt": 6_000,
         "cash": 1_000,
         "total_equity": 10_000,
+        "investing_cash_flow": None,
     }
 
 
@@ -140,6 +145,8 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
                     "EBIT": 4_000_000_000,
                     "InterestExpenseNonOperating": 400_000_000,
                     "NetIncome": 2_500_000_000,
+                    "PretaxIncome": 3_100_000_000,
+                    "DilutedAverageShares": 100_000_000,
                 }
             }
 
@@ -159,6 +166,8 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
                     "TotalDebt": 6_000_000_000,
                     "CashCashEquivalentsAndShortTermInvestments": 1_000_000_000,
                     "StockholdersEquity": 10_000_000_000,
+                    "OrdinarySharesNumber": 99_000_000,
+                    "TreasuryStock": -250_000_000,
                 }
             }
 
@@ -174,6 +183,7 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
                 "2024-12-31": {
                     "OperatingCashFlow": 3_000_000_000,
                     "CapitalExpenditure": -400_000_000,
+                    "InvestingCashFlow": -750_000_000,
                 }
             }
 
@@ -186,10 +196,15 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
     assert income[0].fiscal_year == 2024
     assert income[0].revenue == 10_000_000_000
     assert income[0].depreciation_amortization == 200_000_000
+    assert income[0].pretax_income == 3_100_000_000
+    assert income[0].weighted_average_shares == 100_000_000
     assert balance[0].financial_debt == 6_000_000_000
     assert balance[0].cash == 1_000_000_000
+    assert balance[0].shares_outstanding == 99_000_000
+    assert balance[0].treasury_stock_value == -250_000_000
     assert cash_flow[0].operating_cash_flow == 3_000_000_000
     assert cash_flow[0].capex == -400_000_000
+    assert cash_flow[0].investing_cash_flow == -750_000_000
 
 
 @pytest.mark.asyncio

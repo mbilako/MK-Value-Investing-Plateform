@@ -138,7 +138,6 @@ def _income_statement(
             values,
             "EBIT",
             "OperatingIncome",
-            "PretaxIncome",
         ),
         interest_expense=_optional(
             values,
@@ -151,6 +150,11 @@ def _income_statement(
             "net income",
             "NetIncome",
             "NetIncomeCommonStockholders",
+        ),
+        pretax_income=_optional(
+            values,
+            "PretaxIncome",
+            "IncomeBeforeTax",
         ),
         weighted_average_shares=_optional(
             values,
@@ -391,6 +395,16 @@ class YahooFinanceProvider:
                     "StockholdersEquity",
                     "TotalEquityGrossMinorityInterest",
                 ),
+                shares_outstanding=_optional(
+                    values,
+                    "OrdinarySharesNumber",
+                    "ShareIssued",
+                ),
+                treasury_stock_value=_optional(
+                    values,
+                    "TreasuryStock",
+                    "TreasuryStockCommonValue",
+                ),
             ),
         )
 
@@ -420,6 +434,11 @@ class YahooFinanceProvider:
                     "investissements",
                     "CapitalExpenditure",
                     "PurchaseOfPPE",
+                ),
+                investing_cash_flow=_optional(
+                    values,
+                    "InvestingCashFlow",
+                    "TotalCashflowsFromInvestingActivities",
                 ),
             ),
         )

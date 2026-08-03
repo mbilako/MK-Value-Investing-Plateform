@@ -150,16 +150,10 @@ async def import_financials_automatically(
                     detail=str(error),
                 ) from error
 
-            existing = await repository.list_financial_analyses(company_id)
-            existing_years = {snapshot.fiscal_year for snapshot in existing}
-            new_payloads = [
-                payload for payload in payloads if payload.fiscal_year not in existing_years
-            ]
-            if new_payloads:
-                await repository.create_financial_analyses(
-                    company_id,
-                    [(payload, analyse_financials(payload)) for payload in new_payloads],
-                )
+            await repository.create_financial_analyses(
+                company_id,
+                [(payload, analyse_financials(payload)) for payload in payloads],
+            )
             snapshots = await repository.list_financial_analyses(company_id)
             return FinancialHistoryRead(
                 company_id=company_id,

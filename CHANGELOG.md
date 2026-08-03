@@ -10,6 +10,14 @@
   sociétés industrielles, les banques et les assureurs.
 - Active les entrées de navigation Entreprises, Analyses, Règles et Journal ;
   le Journal présente les analyses récentes.
+- Étend l’historique avec le résultat avant impôt, le cours de clôture, les
+  actions en circulation, les actions autodétenues et le flux de trésorerie
+  d’investissement.
+- Uniformise les cartes et le tableau pour tous les secteurs ; les blocs et
+  colonnes peuvent être déplacés à gauche ou à droite et leur ordre est
+  mémorisé dans le navigateur.
+- Remplace le panneau de ratios détaillés par les fondamentaux, tendances et
+  ratios demandés directement visibles.
 
 - Corrige la couverture financière de BNP Paribas, Société Générale, Crédit
   Agricole, AXA, SCOR, Worldline et Maurel & Prom : profils financiers
