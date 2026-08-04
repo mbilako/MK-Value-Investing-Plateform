@@ -186,7 +186,7 @@ class ESEFFilingsProvider:
 
 
 def _income_statement(report: ESEFReport) -> ProviderIncomeStatement:
-    revenue = _value(
+    revenue = _optional_value(
         report,
         exact=(
             "RevenueFromContractsWithCustomers",
@@ -271,7 +271,7 @@ def _income_statement(report: ESEFReport) -> ProviderIncomeStatement:
     )
     return ProviderIncomeStatement(
         fiscal_year=report.fiscal_year,
-        revenue=revenue,
+        revenue=revenue if revenue is not None else 0.0,
         ebitda=(ebit + depreciation if ebit is not None and depreciation is not None else None),
         depreciation_amortization=depreciation,
         ebit=ebit,

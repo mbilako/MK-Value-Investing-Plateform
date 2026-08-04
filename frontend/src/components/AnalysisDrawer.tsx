@@ -35,7 +35,7 @@ type FundamentalKey =
   | "total_equity"
   | "operating_cash_flow"
   | "investing_cash_flow"
-  | "net_debt"
+  | "closing_price"
   | "pe_ratio"
   | "equity_value_per_share";
 
@@ -71,7 +71,7 @@ const FUNDAMENTAL_ORDER: FundamentalKey[] = [
   "total_equity",
   "operating_cash_flow",
   "investing_cash_flow",
-  "net_debt",
+  "closing_price",
   "pe_ratio",
   "equity_value_per_share",
 ];
@@ -110,9 +110,9 @@ const FUNDAMENTAL_LABELS: Record<FundamentalKey, string> = {
   total_equity: "Capitaux propres",
   operating_cash_flow: "Flux de trésorerie d’exploitation",
   investing_cash_flow: "Flux de trésorerie d’investissement",
-  net_debt: "Dette financière nette",
+  closing_price: "Dernier cours de bourse au 31 décembre",
   pe_ratio: "Cours / bénéfice (PER)",
-  equity_value_per_share: "Valeur des capitaux propres par action",
+  equity_value_per_share: "Valeur économique des capitaux propres par action",
 };
 
 const TREND_LABELS: Record<TrendKey, string> = {
@@ -274,13 +274,8 @@ function fundamentalValue(key: FundamentalKey, snapshot: FinancialAnalysis): str
       return formatAmount(snapshot.operating_cash_flow, currency);
     case "investing_cash_flow":
       return formatAmount(snapshot.investing_cash_flow, currency);
-    case "net_debt":
-      return formatAmount(
-        snapshot.financial_debt == null || snapshot.cash == null
-          ? null
-          : snapshot.financial_debt - snapshot.cash,
-        currency,
-      );
+    case "closing_price":
+      return formatPrice(snapshot.closing_price, currency);
     case "pe_ratio":
       return formatMultiple(ratio(snapshot.market_cap, snapshot.net_income));
     case "equity_value_per_share":
@@ -427,9 +422,6 @@ export function AnalysisDrawer({
                         />
                       </div>
                       <strong>{fundamentalValue(key, latest)}</strong>
-                      {key === "equity_value_per_share" && (
-                        <small>(Capitaux propres + actions autodétenues) / actions en circulation</small>
-                      )}
                     </article>
                   ))}
                 </div>

@@ -208,6 +208,62 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
 
 
 @pytest.mark.asyncio
+async def test_yahoo_provider_keeps_pre_revenue_year_and_derives_capex() -> None:
+    from mkvip.providers.yahoo import YahooFinanceProvider
+
+    class YahooTicker:
+        def get_income_stmt(self, **_options: object):
+            return {
+                "2025-12-31": {
+                    "EBITDA": -80_000_000,
+                    "EBIT": -85_000_000,
+                    "DepreciationAndAmortizationInIncomeStatement": 5_000_000,
+                    "NetIncome": -90_000_000,
+                }
+            }
+
+        def get_cash_flow(self, **_options: object):
+            return {
+                "2025-12-31": {
+                    "OperatingCashFlow": -60_000_000,
+                    "FreeCashFlow": -72_000_000,
+                    "InvestingCashFlow": -15_000_000,
+                }
+            }
+
+    provider = YahooFinanceProvider(ticker_factory=lambda _ticker: YahooTicker())
+
+    income = await provider.get_income_statements("BIO.PA")
+    cash_flow = await provider.get_cash_flow("BIO.PA")
+
+    assert income[0].revenue == 0
+    assert income[0].interest_expense == 0
+    assert cash_flow[0].capex == 12_000_000
+
+
+@pytest.mark.asyncio
+async def test_yahoo_profile_allows_missing_live_market_cap() -> None:
+    from mkvip.providers.yahoo import YahooFinanceProvider
+
+    class YahooTicker:
+        fast_info = {"currency": "EUR", "market_cap": None}
+
+        def get_info(self):
+            return {
+                "financialCurrency": "EUR",
+                "marketCap": 0,
+                "sharesOutstanding": 100_000_000,
+            }
+
+    provider = YahooFinanceProvider(ticker_factory=lambda _ticker: YahooTicker())
+
+    profile = await provider.get_profile("ML.PA")
+
+    assert profile.market_cap == 0
+    assert profile.shares_outstanding == 100_000_000
+
+
+@pytest.mark.asyncio
 async def test_yahoo_provider_builds_company_profile() -> None:
     from mkvip.providers.base import ProviderCompanyProfile
     from mkvip.providers.yahoo import YahooFinanceProvider

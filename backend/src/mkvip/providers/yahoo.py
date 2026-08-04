@@ -119,14 +119,14 @@ def _income_statement(
     period: object,
     values: Mapping[str, Any],
 ) -> ProviderIncomeStatement:
+    revenue = _optional(
+        values,
+        "TotalRevenue",
+        "OperatingRevenue",
+    )
     return ProviderIncomeStatement(
         fiscal_year=_year(period),
-        revenue=_required(
-            values,
-            "revenue",
-            "TotalRevenue",
-            "OperatingRevenue",
-        ),
+        revenue=revenue if revenue is not None else 0.0,
         ebitda=_optional(values, "EBITDA", "NormalizedEBITDA"),
         depreciation_amortization=_optional(
             values,
@@ -139,11 +139,14 @@ def _income_statement(
             "EBIT",
             "OperatingIncome",
         ),
-        interest_expense=_optional(
-            values,
-            "InterestExpenseNonOperating",
-            "InterestExpense",
-            "NetNonOperatingInterestIncomeExpense",
+        interest_expense=(
+            _optional(
+                values,
+                "InterestExpenseNonOperating",
+                "InterestExpense",
+                "NetNonOperatingInterestIncomeExpense",
+            )
+            or 0.0
         ),
         net_income=_required(
             values,
@@ -161,6 +164,43 @@ def _income_statement(
             "DilutedAverageShares",
             "BasicAverageShares",
             "AverageDilutionEarnings",
+        ),
+    )
+
+
+def _cash_flow_statement(
+    period: object,
+    values: Mapping[str, Any],
+) -> ProviderCashFlow:
+    operating_cash_flow = _required(
+        values,
+        "flux de trésorerie d'exploitation",
+        "OperatingCashFlow",
+        "TotalCashFromOperatingActivities",
+    )
+    capex = _optional(
+        values,
+        "CapitalExpenditure",
+        "PurchaseOfPPE",
+        "CapitalExpenditureReported",
+        "PurchaseOfInvestmentProperties",
+    )
+    if capex is None:
+        free_cash_flow = _optional(values, "FreeCashFlow")
+        if free_cash_flow is not None:
+            capex = operating_cash_flow - free_cash_flow
+    if capex is None:
+        raise ProviderDataIncompleteError(
+            "Champ Yahoo Finance manquant pour investissements."
+        )
+    return ProviderCashFlow(
+        fiscal_year=_year(period),
+        operating_cash_flow=operating_cash_flow,
+        capex=capex,
+        investing_cash_flow=_optional(
+            values,
+            "InvestingCashFlow",
+            "TotalCashflowsFromInvestingActivities",
         ),
     )
 
@@ -289,11 +329,10 @@ class YahooFinanceProvider:
             )
         normalized_currency = str(currency).upper()
         quote_currency = str(info.get("currency") or fast_info.get("currency") or currency).upper()
-        market_cap = _required(
-            fast_info,
-            "capitalisation boursière",
-            "market_cap",
-            "marketCap",
+        market_cap = (
+            _optional(fast_info, "market_cap", "marketCap")
+            or _optional(info, "marketCap")
+            or 0.0
         )
         if quote_currency != normalized_currency:
             pair = f"{quote_currency}{normalized_currency}=X"
@@ -322,12 +361,14 @@ class YahooFinanceProvider:
             country=str(info.get("country") or "Non renseigné"),
             currency=normalized_currency,
             market_cap=market_cap,
-            shares_outstanding=_optional(
-                info,
-                "sharesOutstanding",
-                "impliedSharesOutstanding",
-            )
-            or _optional(fast_info, "shares"),
+            shares_outstanding=(
+                _optional(
+                    info,
+                    "sharesOutstanding",
+                    "impliedSharesOutstanding",
+                )
+                or _optional(fast_info, "shares")
+            ),
             quote_currency=quote_currency,
             sector=(str(info["sector"]) if info.get("sector") else None),
             industry=(str(info["industry"]) if info.get("industry") else None),
@@ -419,29 +460,7 @@ class YahooFinanceProvider:
             as_dict=True,
             freq="yearly",
         )
-        return _map_complete_periods(
-            records,
-            lambda period, values: ProviderCashFlow(
-                fiscal_year=_year(period),
-                operating_cash_flow=_required(
-                    values,
-                    "flux de trésorerie d'exploitation",
-                    "OperatingCashFlow",
-                    "TotalCashFromOperatingActivities",
-                ),
-                capex=_required(
-                    values,
-                    "investissements",
-                    "CapitalExpenditure",
-                    "PurchaseOfPPE",
-                ),
-                investing_cash_flow=_optional(
-                    values,
-                    "InvestingCashFlow",
-                    "TotalCashflowsFromInvestingActivities",
-                ),
-            ),
-        )
+        return _map_complete_periods(records, _cash_flow_statement)
 
     async def get_price_history(
         self,

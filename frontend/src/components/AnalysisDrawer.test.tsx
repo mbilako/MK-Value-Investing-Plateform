@@ -110,7 +110,15 @@ describe("AnalysisDrawer financial institutions", () => {
     expect(screen.getAllByText("Résultat avant impôt")).toHaveLength(3);
     expect(screen.getByText("Actions en circulation")).toBeInTheDocument();
     expect(screen.getByText("Flux de trésorerie d’investissement")).toBeInTheDocument();
-    expect(screen.getByText("Valeur des capitaux propres par action")).toBeInTheDocument();
+    expect(screen.getByText("Dernier cours de bourse au 31 décembre")).toBeInTheDocument();
+    expect(
+      screen.getByText("Valeur économique des capitaux propres par action"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "(Capitaux propres + actions autodétenues) / actions en circulation",
+      ),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Voir les ratios détaillés du dernier exercice")).not.toBeInTheDocument();
 
     const cardsBefore = document.querySelectorAll(

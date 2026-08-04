@@ -15,6 +15,7 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
   Yahoo Finance, SEC EDGAR et ESEF européen ;
 - explorateur CAC 40, CAC Next 20 et SBF 120 avec ajout multiple sans saisie de
   ticker ;
+- audit reproductible de la couverture des composantes d’indices ;
 - modification, archivage ou suppression d’une entreprise dans les deux vues ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
 - valorisation par DCF, Owner Earnings, EPV, Graham et multiple de résultat ;
@@ -61,6 +62,13 @@ Le parcours applicatif commence par un compte personnel vérifié :
    les signaux et rouvrir un dossier prioritaire.
 10. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
    entreprises ou poser une question sur les analyses MK-VIP disponibles.
+
+La couverture publique des indices peut être contrôlée depuis la racine du
+projet avec :
+
+```bash
+backend/.venv/Scripts/python.exe backend/scripts/audit_index_coverage.py --indices SBF120
+```
 
 ### Tester la vérification et la réinitialisation
 

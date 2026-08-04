@@ -52,6 +52,13 @@ manquantes. Ils sont conservés ; une règle dont le dénominateur est nul ou
 négatif reçoit un statut défavorable au lieu de devenir artificiellement
 favorable.
 
+Une société précommerciale peut publier un revenu nul. Les capitaux propres
+négatifs restent également des données comptables valides : ils sont conservés
+et les ratios dont le dénominateur n’est pas positif sont affichés `N/A` ou
+évalués défavorablement. Lorsque le CapEx n’est pas exposé directement mais que
+le flux de trésorerie d’exploitation et le Free Cash Flow le sont, MK-VIP le
+reconstitue par différence.
+
 ## Référentiels d’entreprises et d’indices
 
 Les compositions du **CAC 40**, du **CAC Next 20** et du **SBF 120** sont lues
@@ -62,6 +69,11 @@ l’entreprise, ce qui évite toute saisie manuelle.
 
 L’ajout multiple est idempotent : une entreprise déjà connue par son ISIN ou
 son ticker n’est pas recréée, et ses appartenances aux indices sont fusionnées.
+
+Le script `backend/scripts/audit_index_coverage.py` contrôle la résolution du
+ticker et la disponibilité d’au moins un exercice normalisable pour chaque
+composante. Au 4 août 2026, le contrôle exhaustif du SBF 120 retourne
+**120 sociétés couvertes sur 120**, sans ticker ni historique manquant.
 
 ## Identifiants et traçabilité
 

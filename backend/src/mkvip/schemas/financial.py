@@ -17,7 +17,7 @@ class FinancialSnapshotCreate(BaseModel):
     source: str = Field(min_length=1, max_length=250)
     currency: str = Field(min_length=3, max_length=3)
     analysis_profile: FinancialProfile = FinancialProfile.STANDARD
-    revenue: float = Field(gt=0)
+    revenue: float = Field(ge=0)
     ebitda: float | None = None
     depreciation_amortization: float | None = Field(default=None, ge=0)
     ebit: float | None = None
@@ -35,7 +35,7 @@ class FinancialSnapshotCreate(BaseModel):
     current_liabilities: float | None = Field(default=None, gt=0)
     financial_debt: float | None = Field(default=None, ge=0)
     cash: float | None = Field(default=None, ge=0)
-    total_equity: float = Field(gt=0)
+    total_equity: float
     investing_cash_flow: float | None = None
 
     @field_validator("source")

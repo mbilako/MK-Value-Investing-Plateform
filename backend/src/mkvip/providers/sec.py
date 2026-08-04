@@ -181,7 +181,6 @@ class SecEdgarProvider:
                 treasury_stock_value=abs(treasury_stock.get(year, 0.0)),
             )
             for year in sorted(years, reverse=True)
-            if equity[year] > 0
         ]
         return _require_statements(statements, ticker, "bilan")
 

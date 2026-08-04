@@ -18,6 +18,14 @@
   mémorisé dans le navigateur.
 - Remplace le panneau de ratios détaillés par les fondamentaux, tendances et
   ratios demandés directement visibles.
+- Remplace la dette nette du panneau principal par le cours de clôture au
+  31 décembre et renomme la valeur économique des capitaux propres par action
+  sans afficher sa formule.
+- Accepte les exercices précommerciaux sans revenus, les capitaux propres
+  négatifs et les capitalisations temps réel indisponibles ; le CapEx peut
+  être reconstitué à partir du flux opérationnel et du Free Cash Flow publié.
+- Ajoute un audit reproductible des compositions d’indices et valide les
+  120 composantes actuelles du SBF 120 avec au moins un exercice exploitable.
 
 - Corrige la couverture financière de BNP Paribas, Société Générale, Crédit
   Agricole, AXA, SCOR, Worldline et Maurel & Prom : profils financiers
