@@ -41,6 +41,42 @@ export function createTestClient(
       status: "pending",
       ...payload,
     }),
+    updateCompany: async (id, payload) => ({
+      id,
+      name: "Entreprise test",
+      ticker: "TEST.PA",
+      exchange: "Euronext Paris",
+      country: "France",
+      currency: "EUR",
+      status: "pending",
+      ...payload,
+    }),
+    archiveCompany: async (id) => ({
+      id,
+      name: "Entreprise test",
+      ticker: "TEST.PA",
+      exchange: "Euronext Paris",
+      country: "France",
+      currency: "EUR",
+      status: "pending",
+      archived_at: new Date().toISOString(),
+    }),
+    restoreCompany: async (id) => ({
+      id,
+      name: "Entreprise test",
+      ticker: "TEST.PA",
+      exchange: "Euronext Paris",
+      country: "France",
+      currency: "EUR",
+      status: "pending",
+      archived_at: null,
+    }),
+    deleteCompany: async () => undefined,
+    listIndices: async () => [],
+    getIndex: async () => {
+      throw new Error("Indice non configuré dans ce test.");
+    },
+    addIndexCompanies: async () => ({ created: [], existing: [], errors: [] }),
     importFinancials: async () => {
       throw new Error("Import financier non configuré dans ce test.");
     },

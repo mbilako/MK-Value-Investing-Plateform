@@ -10,6 +10,7 @@ from mkvip.analysis.scoring import (
 )
 from mkvip.api.dependencies import get_company_repository
 from mkvip.repositories.company import CompanyRepository
+from mkvip.schemas.financial import FinancialProfile
 from mkvip.schemas.scoring import ScoringAnalysisRead, ScoringCreate
 
 router = APIRouter(
@@ -58,6 +59,18 @@ async def create_score(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Analyse financière {payload.fiscal_year} introuvable.",
         )
+    if (
+        snapshot.analysis_profile is FinancialProfile.FINANCIAL
+        or snapshot.quality_score is None
+        or snapshot.safety_score is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Le MK Global Score standard n'est pas applicable aux banques "
+                "et assureurs. Un modèle sectoriel est requis."
+            ),
+        )
     if payload.valuation_id is not None:
         valuation = await repository.get_valuation_analysis(
             company_id,
@@ -71,11 +84,7 @@ async def create_score(
     else:
         valuations = await repository.list_valuation_analyses(company_id)
         valuation = next(
-            (
-                item
-                for item in valuations
-                if item.fiscal_year == payload.fiscal_year
-            ),
+            (item for item in valuations if item.fiscal_year == payload.fiscal_year),
             None,
         )
     if (
@@ -85,22 +94,14 @@ async def create_score(
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Une valorisation calculable est requise pour cet exercice."
-            ),
+            detail=("Une valorisation calculable est requise pour cet exercice."),
         )
     analysis = analyse_scoring(
         ScoringFinancialInput(
             quality_score=snapshot.quality_score,
             safety_score=snapshot.safety_score,
-            metric_statuses={
-                metric.key: metric.status
-                for metric in snapshot.metrics
-            },
-            indicators={
-                indicator.key: indicator.value
-                for indicator in snapshot.indicators
-            },
+            metric_statuses={metric.key: metric.status for metric in snapshot.metrics},
+            indicators={indicator.key: indicator.value for indicator in snapshot.indicators},
         ),
         ScoringValuationInput(
             market_gap=valuation.market_gap,

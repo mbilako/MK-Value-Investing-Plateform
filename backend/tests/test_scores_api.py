@@ -79,10 +79,7 @@ def test_creates_and_lists_explainable_global_scores(client: TestClient) -> None
     assert response.status_code == 201
     body = response.json()
     assert body["valuation_analysis_id"] == valuation_id
-    assert {
-        component["key"]: component["score"]
-        for component in body["components"]
-    } == {
+    assert {component["key"]: component["score"] for component in body["components"]} == {
         "quality": 0,
         "safety": 75,
         "value": 7.77,
@@ -111,6 +108,46 @@ def test_requires_a_valuation_for_the_selected_year(client: TestClient) -> None:
     assert response.json()["detail"] == (
         "Une valorisation calculable est requise pour cet exercice."
     )
+
+
+def test_global_score_is_disabled_for_financial_institutions(
+    client: TestClient,
+) -> None:
+    company_id = create_company(client)
+    payload = {
+        "fiscal_year": 2025,
+        "source": "Rapport bancaire 2025",
+        "currency": "EUR",
+        "analysis_profile": "financial",
+        "revenue": 68_804,
+        "ebitda": None,
+        "depreciation_amortization": 2_367,
+        "ebit": 16_296,
+        "interest_expense": 50_329,
+        "operating_cash_flow": 46_571,
+        "capex": 2_875,
+        "net_income": 12_225,
+        "market_cap": 120_000,
+        "total_assets": 2_792_981,
+        "current_assets": None,
+        "current_liabilities": None,
+        "financial_debt": 398_488,
+        "cash": 326_959,
+        "total_equity": 132_173,
+    }
+    imported = client.post(
+        f"/api/v1/companies/{company_id}/financials",
+        json=payload,
+    )
+    assert imported.status_code == 201
+
+    response = client.post(
+        f"/api/v1/companies/{company_id}/scores",
+        json={"fiscal_year": 2025},
+    )
+
+    assert response.status_code == 422
+    assert "modèle sectoriel" in response.json()["detail"]
 
 
 def test_explicit_unknown_valuation_returns_not_found(

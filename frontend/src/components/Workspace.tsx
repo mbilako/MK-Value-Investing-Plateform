@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { Plus, Sparkles } from "lucide-react";
+import { Landmark, Sparkles } from "lucide-react";
 
 import {
   type Company,
   type CompanyClient,
   type Dashboard,
   type AIAnalysisPayload,
-  type FinancialAnalysis,
   type FinancialHistory,
+  type IndexBulkAddResult,
   type ScoringAnalysis,
   type ScoringPayload,
   type User,
@@ -18,9 +18,11 @@ import { AnalysisDrawer } from "./AnalysisDrawer";
 import { AIAnalystDrawer } from "./AIAnalystDrawer";
 import { AnalysisPipeline } from "./AnalysisPipeline";
 import { CompanyUniverse } from "./CompanyUniverse";
+import { CompanyManagementDrawer } from "./CompanyManagementDrawer";
 import { DecisionDashboard } from "./DecisionDashboard";
 import { FinancialDrawer } from "./FinancialDrawer";
-import { ImportDrawer } from "./ImportDrawer";
+import { IndexBrowserDrawer } from "./IndexBrowserDrawer";
+import { JournalSection } from "./JournalSection";
 import { Sidebar } from "./Sidebar";
 import { SummaryStrip } from "./SummaryStrip";
 import { UserMenu } from "./UserMenu";
@@ -41,7 +43,8 @@ export function Workspace({
 }: WorkspaceProps) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [isImportOpen, setImportOpen] = useState(false);
+  const [isIndexBrowserOpen, setIndexBrowserOpen] = useState(false);
+  const [managedCompany, setManagedCompany] = useState<Company | null>(null);
   const [isAIAnalystOpen, setAIAnalystOpen] = useState(false);
   const [financialCompany, setFinancialCompany] = useState<Company | null>(
     null,
@@ -68,28 +71,47 @@ export function Workspace({
     }
   };
 
+  const mergeIndexCompanies = (result: IndexBulkAddResult) => {
+    const incoming = [...result.created, ...result.existing];
+    setCompanies((current) => {
+      const byId = new Map(current.map((company) => [company.id, company]));
+      incoming.forEach((company) => byId.set(company.id, company));
+      return [...byId.values()].sort((left, right) =>
+        left.name.localeCompare(right.name, "fr"),
+      );
+    });
+    void refreshDashboard();
+  };
+
   const completeFinancialImport = (
-    companyId: string,
-    analysis: FinancialAnalysis,
+    company: Company,
+    history: FinancialHistory,
   ) => {
+    const analysis = history.snapshots[0];
+    if (!analysis) return;
+    const readyCompany = {
+      ...company,
+      status: "ready" as const,
+      latest_mk_score: analysis.mk_score,
+      latest_quality_score: analysis.quality_score,
+      latest_safety_score: analysis.safety_score,
+    };
     setCompanies((current) =>
-      current.map((company) =>
-        company.id === companyId
-          ? {
-              ...company,
-              status: "ready",
-              latest_mk_score: analysis.mk_score,
-              latest_quality_score: analysis.quality_score,
-              latest_safety_score: analysis.safety_score,
-            }
-          : company,
+      current.map((record) =>
+        record.id === company.id ? readyCompany : record,
       ),
     );
-    setScores((current) => ({
-      ...current,
-      [companyId]: analysis.mk_score,
-    }));
+    if (analysis.mk_score !== null) {
+      setScores((current) => ({
+        ...current,
+        [company.id]: analysis.mk_score as number,
+      }));
+    }
     setFinancialCompany(null);
+    setAnalysisCompany(readyCompany);
+    setFinancialHistory(history);
+    setValuations([]);
+    setScoringAnalyses([]);
     void refreshDashboard();
   };
 
@@ -148,7 +170,7 @@ export function Workspace({
   return (
     <div className="app-shell">
       <Sidebar />
-      <main className="main">
+      <main className="main" id="overview">
         <header className="topbar">
           <h1>Vue d’ensemble</h1>
           <div className="topbar__actions">
@@ -172,10 +194,10 @@ export function Workspace({
             )}
             <button
               className="button button--primary"
-              onClick={() => setImportOpen(true)}
+              onClick={() => setIndexBrowserOpen(true)}
             >
-              <Plus aria-hidden="true" size={19} />
-              Importer une entreprise
+              <Landmark aria-hidden="true" size={18} />
+              Explorer les indices
             </button>
           </div>
         </header>
@@ -192,31 +214,63 @@ export function Workspace({
               dashboard={dashboard}
               companies={companies}
               onAnalysis={openAnalysis}
+              onManage={setManagedCompany}
             />
           )}
           <CompanyUniverse
             companies={companies}
             scores={scores}
-            onImport={() => setImportOpen(true)}
+            onExploreIndices={() => setIndexBrowserOpen(true)}
             onFinancialImport={setFinancialCompany}
             onAnalysis={openAnalysis}
+            onManage={setManagedCompany}
           />
           <AnalysisPipeline />
+          <JournalSection
+            dashboard={dashboard}
+            companies={companies}
+            onAnalysis={openAnalysis}
+          />
         </div>
         <footer className="statusbar">
           <span className="status-dot" aria-hidden="true" />
           API opérationnelle · PostgreSQL connecté
         </footer>
       </main>
-      {isImportOpen && (
-        <ImportDrawer
-          onClose={() => setImportOpen(false)}
-          onSubmit={async (payload) => {
-            const company = await client.createCompany(payload);
-            setCompanies((current) => [...current, company]);
-            setImportOpen(false);
+      {isIndexBrowserOpen && (
+        <IndexBrowserDrawer
+          client={client}
+          onComplete={mergeIndexCompanies}
+          onClose={() => setIndexBrowserOpen(false)}
+        />
+      )}
+      {managedCompany && (
+        <CompanyManagementDrawer
+          company={managedCompany}
+          onUpdate={async (payload) => {
+            const updated = await client.updateCompany(managedCompany.id, payload);
+            setCompanies((current) =>
+              current.map((company) =>
+                company.id === updated.id ? updated : company,
+              ),
+            );
             void refreshDashboard();
           }}
+          onArchive={async () => {
+            await client.archiveCompany(managedCompany.id);
+            setCompanies((current) =>
+              current.filter((company) => company.id !== managedCompany.id),
+            );
+            void refreshDashboard();
+          }}
+          onDelete={async () => {
+            await client.deleteCompany(managedCompany.id);
+            setCompanies((current) =>
+              current.filter((company) => company.id !== managedCompany.id),
+            );
+            void refreshDashboard();
+          }}
+          onClose={() => setManagedCompany(null)}
         />
       )}
       {isAIAnalystOpen && client.analyzeWithAI && (
@@ -233,17 +287,10 @@ export function Workspace({
           company={financialCompany}
           onClose={() => setFinancialCompany(null)}
           onAutomaticSubmit={async () => {
-            const analysis = await client.importFinancialsAutomatically(
+            const history = await client.importFinancialsAutomatically(
               financialCompany.id,
             );
-            completeFinancialImport(financialCompany.id, analysis);
-          }}
-          onSubmit={async (payload) => {
-            const analysis = await client.importFinancials(
-              financialCompany.id,
-              payload,
-            );
-            completeFinancialImport(financialCompany.id, analysis);
+            completeFinancialImport(financialCompany, history);
           }}
         />
       )}

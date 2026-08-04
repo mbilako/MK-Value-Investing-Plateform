@@ -10,6 +10,10 @@ from mkvip.db.session import get_session
 from mkvip.providers.ai import AIAnalystProvider, AIProviderError, OpenAIAnalystProvider
 from mkvip.providers.base import FinancialDataProvider
 from mkvip.providers.email import EmailSender, SmtpEmailSender
+from mkvip.providers.esef import ESEFFilingsProvider
+from mkvip.providers.euronext import EuronextIndexProvider
+from mkvip.providers.fallback import FallbackFinancialDataProvider
+from mkvip.providers.sec import SecEdgarProvider
 from mkvip.providers.yahoo import YahooExecutionGuard, YahooFinanceProvider
 from mkvip.repositories.company import CompanyRepository
 from mkvip.repositories.sqlalchemy import SqlAlchemyCompanyRepository
@@ -78,12 +82,18 @@ def get_company_repository(
 def _get_financial_data_provider(
     max_concurrency: int,
     response_timeout_seconds: float,
+    sec_user_agent: str,
 ) -> FinancialDataProvider:
-    return YahooFinanceProvider(
+    yahoo = YahooFinanceProvider(
         execution_guard=YahooExecutionGuard(
             max_concurrency=max_concurrency,
             response_timeout_seconds=response_timeout_seconds,
         )
+    )
+    return FallbackFinancialDataProvider(
+        yahoo,
+        SecEdgarProvider(yahoo, user_agent=sec_user_agent),
+        ESEFFilingsProvider(yahoo, user_agent=sec_user_agent),
     )
 
 
@@ -93,7 +103,29 @@ def get_financial_data_provider(
     return _get_financial_data_provider(
         settings.yahoo_max_concurrency,
         settings.yahoo_response_timeout_seconds,
+        settings.sec_user_agent,
     )
+
+
+def get_company_discovery_provider(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> FinancialDataProvider:
+    provider = _get_financial_data_provider(
+        settings.yahoo_max_concurrency,
+        settings.yahoo_response_timeout_seconds,
+        settings.sec_user_agent,
+    )
+    return provider.providers[0]
+
+
+@lru_cache
+def _get_index_provider() -> EuronextIndexProvider:
+    return EuronextIndexProvider()
+
+
+def get_index_provider(request: Request) -> EuronextIndexProvider:
+    override = getattr(request.app.state, "index_provider", None)
+    return override or _get_index_provider()
 
 
 @lru_cache

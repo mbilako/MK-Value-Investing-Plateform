@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowUpRight, BarChart3 } from "lucide-react";
+import { ArrowUpRight, BarChart3, Settings2 } from "lucide-react";
 
 import type {
   Company,
@@ -11,6 +11,7 @@ interface DecisionDashboardProps {
   dashboard: Dashboard;
   companies: Company[];
   onAnalysis: (company: Company) => void;
+  onManage: (company: Company) => void;
 }
 
 type DashboardFilter = "all" | DashboardSignal;
@@ -35,6 +36,7 @@ export function DecisionDashboard({
   dashboard,
   companies,
   onAnalysis,
+  onManage,
 }: DecisionDashboardProps) {
   const [filter, setFilter] = useState<DashboardFilter>("all");
   const companyById = useMemo(
@@ -51,7 +53,11 @@ export function DecisionDashboard({
   const distributionTotal = Math.max(dashboard.summary.companies, 1);
 
   return (
-    <section className="section decision-dashboard" aria-labelledby="decision-title">
+    <section
+      className="section decision-dashboard"
+      id="analyses"
+      aria-labelledby="decision-title"
+    >
       <div className="decision-dashboard__head">
         <div>
           <p className="section-eyebrow">Lecture comparative</p>
@@ -174,17 +180,27 @@ export function DecisionDashboard({
                         "Scoring requis"
                       )}
                     </span>
-                    {company?.status === "ready" ? (
-                      <button
-                        className="portfolio-open"
-                        onClick={() => onAnalysis(company)}
-                        aria-label={`Ouvrir l’analyse de ${row.name}`}
-                      >
-                        <ArrowUpRight aria-hidden="true" size={17} />
-                      </button>
-                    ) : (
-                      <span aria-hidden="true" />
-                    )}
+                    <div className="portfolio-row-actions">
+                      {company?.status === "ready" && (
+                        <button
+                          className="portfolio-open"
+                          onClick={() => onAnalysis(company)}
+                          aria-label={`Ouvrir l’analyse de ${row.name}`}
+                        >
+                          <ArrowUpRight aria-hidden="true" size={17} />
+                        </button>
+                      )}
+                      {company && (
+                        <button
+                          className="portfolio-open"
+                          onClick={() => onManage(company)}
+                          aria-label={`Modifier ou retirer ${row.name}`}
+                          title="Modifier ou retirer"
+                        >
+                          <Settings2 aria-hidden="true" size={17} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

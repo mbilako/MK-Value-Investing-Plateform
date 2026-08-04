@@ -2,7 +2,50 @@
 
 ## Unreleased
 
+- Simplifie le parcours principal autour de l’explorateur d’indices et retire
+  l’import manuel d’entreprise de l’interface.
+- Charge jusqu’à dix exercices publics, complète les années manquantes sans
+  doublon et calcule un MK Score distinct pour chaque année applicable.
+- Uniformise l’analyse autour d’un tableau fondamental décennal pour les
+  sociétés industrielles, les banques et les assureurs.
+- Active les entrées de navigation Entreprises, Analyses, Règles et Journal ;
+  le Journal présente les analyses récentes.
+- Étend l’historique avec le résultat avant impôt, le cours de clôture, les
+  actions en circulation, les actions autodétenues et le flux de trésorerie
+  d’investissement.
+- Uniformise les cartes et le tableau pour tous les secteurs ; les blocs et
+  colonnes peuvent être déplacés à gauche ou à droite et leur ordre est
+  mémorisé dans le navigateur.
+- Remplace le panneau de ratios détaillés par les fondamentaux, tendances et
+  ratios demandés directement visibles.
+- Remplace la dette nette du panneau principal par le cours de clôture au
+  31 décembre et renomme la valeur économique des capitaux propres par action
+  sans afficher sa formule.
+- Accepte les exercices précommerciaux sans revenus, les capitaux propres
+  négatifs et les capitalisations temps réel indisponibles ; le CapEx peut
+  être reconstitué à partir du flux opérationnel et du Free Cash Flow publié.
+- Ajoute un audit reproductible des compositions d’indices et valide les
+  120 composantes actuelles du SBF 120 avec au moins un exercice exploitable.
+
+- Corrige la couverture financière de BNP Paribas, Société Générale, Crédit
+  Agricole, AXA, SCOR, Worldline et Maurel & Prom : profils financiers
+  sectoriels, pertes conservées, aliases Yahoo/ESEF étendus et conversion de
+  devise de la capitalisation.
+- Empêche les collisions entre tickers Euronext suffixés et homonymes SEC
+  américains, notamment `ACA.PA` et `ACA`.
+- Désactive explicitement le MK Score industriel et la valorisation standard
+  pour les banques et assureurs afin d'éviter des ratios artificiels.
+
 ### Added
+
+- Modification, archivage réversible et suppression définitive des entreprises
+  depuis le portefeuille de recherche et l’univers d’investissement.
+- Explorateur des compositions CAC 40, CAC Next 20 et SBF 120 avec sélection
+  multiple, résolution automatique du ticker et ajout idempotent à l’univers.
+- Identifiants stables ISIN, CIK et LEI, symboles par fournisseur et badges
+  d’appartenance aux indices.
+- Repli automatique par exercice annuel complet entre Yahoo Finance, SEC EDGAR
+  et les dépôts européens ESEF gratuits exposés par filings.xbrl.org et GLEIF.
 
 - Configuration Docker Compose dédiée à un VPS avec HTTPS automatique Caddy,
   réseaux privés et secrets montés comme fichiers.
@@ -12,6 +55,11 @@
   arrière pour l’exploitation sur une VM Linux.
 
 ### Changed
+
+- L’import public automatique n’est plus lié à Yahoo Finance : la provenance
+  de la source effectivement retenue est enregistrée dans chaque snapshot.
+- Les entreprises archivées sont masquées par défaut sans perdre leurs
+  analyses ; une suppression définitive conserve une confirmation explicite.
 
 - Le frontend de production applique des en-têtes HTTP de sécurité et une
   limitation périphérique des routes d’authentification.

@@ -851,7 +851,7 @@ a:focus-visible {
   display: grid;
   grid-template-columns:
     minmax(145px, 1.15fr) minmax(70px, 0.5fr) minmax(105px, 0.75fr)
-    minmax(90px, 0.6fr) minmax(145px, 1fr) 38px;
+    minmax(90px, 0.6fr) minmax(145px, 1fr) 72px;
   align-items: center;
   min-width: 650px;
 }
@@ -945,6 +945,32 @@ a:focus-visible {
   background: var(--emerald-tint);
 }
 
+.portfolio-row-actions,
+.company-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.row-manage {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: #fff;
+}
+
+.row-manage:hover {
+  border-color: var(--emerald);
+  color: var(--emerald-dark);
+  background: var(--emerald-tint);
+}
+
 .portfolio-table__empty,
 .company-filter-empty {
   padding: 24px;
@@ -1032,6 +1058,26 @@ a:focus-visible {
 
 .company-table__row strong {
   color: var(--navy);
+}
+
+.company-name-cell {
+  display: grid;
+  gap: 5px;
+}
+
+.index-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.index-badges small {
+  padding: 3px 6px;
+  border-radius: 99px;
+  color: var(--emerald-dark);
+  background: var(--emerald-tint);
+  font-size: 9px;
+  font-weight: 750;
 }
 
 .ticker {
@@ -1279,6 +1325,150 @@ a:focus-visible {
   font-weight: 450;
 }
 
+.management-drawer {
+  width: min(620px, 100%);
+}
+
+.management-fields {
+  grid-template-columns: 1fr 1fr;
+}
+
+.field--wide {
+  grid-column: 1 / -1;
+}
+
+.management-danger {
+  padding: 17px;
+  border: 1px solid rgba(180, 35, 24, 0.22);
+  border-radius: 9px;
+  background: #fff8f7;
+}
+
+.management-danger h3,
+.management-danger p {
+  margin: 0;
+}
+
+.management-danger h3 {
+  color: var(--navy);
+  font-size: 15px;
+}
+
+.management-danger p {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.management-danger > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.index-drawer {
+  width: min(780px, 100%);
+}
+
+.index-drawer__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 32px 0;
+}
+
+.index-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--subtle);
+}
+
+.index-tabs button {
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 700;
+}
+
+.index-tabs button[aria-selected="true"] {
+  border-color: rgba(8, 122, 87, 0.2);
+  color: var(--emerald-dark);
+  background: #fff;
+}
+
+.index-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.index-toolbar .search-field {
+  height: 44px;
+}
+
+.index-meta,
+.index-loading {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.index-list {
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 9px 9px 0 0;
+}
+
+.index-company {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 60px;
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.index-company:last-child {
+  border-bottom: 0;
+}
+
+.index-company:has(input:checked) {
+  background: var(--emerald-tint);
+}
+
+.index-company input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--emerald);
+}
+
+.index-company > span {
+  display: grid;
+  gap: 3px;
+}
+
+.index-company strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.index-drawer__actions {
+  grid-template-columns: 1fr 1.25fr;
+}
+
 .financial-context,
 .financial-grid {
   display: grid;
@@ -1397,6 +1587,32 @@ a:focus-visible {
   font-weight: 700;
 }
 
+.financial-profile-note {
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(180, 126, 20, 0.28);
+  border-radius: 10px;
+  color: var(--navy);
+  background: #fff8e8;
+}
+
+.financial-profile-note > svg {
+  flex: 0 0 auto;
+  color: #a86c00;
+}
+
+.financial-profile-note h3,
+.financial-profile-note p {
+  margin: 0;
+}
+
+.financial-profile-note p {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .score-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1473,7 +1689,9 @@ a:focus-visible {
 }
 
 .indicator-card > span,
-.growth-grid span {
+.indicator-card__head > span,
+.growth-grid article > span,
+.growth-grid .indicator-card__head > span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
@@ -1487,6 +1705,43 @@ a:focus-visible {
 
 .indicator-card small {
   line-height: 1.4;
+}
+
+.indicator-card__head,
+.history-column-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.move-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.move-controls button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--navy);
+  background: #fff;
+  cursor: pointer;
+}
+
+.move-controls button:hover:not(:disabled) {
+  border-color: rgba(8, 122, 87, 0.45);
+  color: var(--emerald);
+}
+
+.move-controls button:disabled {
+  opacity: 0.28;
+  cursor: default;
 }
 
 .growth-grid {
@@ -1503,6 +1758,157 @@ a:focus-visible {
   border: 1px solid rgba(8, 122, 87, 0.18);
   border-radius: 9px;
   background: var(--emerald-tint);
+}
+
+main[id],
+section[id] {
+  scroll-margin-top: 24px;
+}
+
+.section-intro {
+  max-width: 680px;
+  margin: -10px 0 22px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.automatic-import--simple {
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 22px;
+}
+
+.automatic-import--simple small {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.mk-score-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 20px;
+  padding: 18px;
+  border: 1px solid rgba(8, 122, 87, 0.25);
+  border-radius: 10px;
+  background: var(--emerald-tint);
+}
+
+.mk-score-summary div {
+  display: grid;
+  gap: 3px;
+}
+
+.mk-score-summary span,
+.mk-score-summary p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mk-score-summary strong {
+  color: var(--navy);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+}
+
+.mk-score-summary p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.indicator-grid--fundamentals {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.fundamental-history {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.fundamental-history__head,
+.fundamental-history__row {
+  display: grid;
+  grid-template-columns: 80px repeat(6, minmax(125px, 1fr));
+  min-width: 930px;
+  align-items: center;
+}
+
+.fundamental-history__head {
+  color: var(--muted);
+  background: var(--subtle);
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.fundamental-history__head > span,
+.fundamental-history__row > span,
+.fundamental-history__row > strong {
+  padding: 12px 14px;
+}
+
+.fundamental-history__row {
+  border-top: 1px solid var(--border);
+  color: var(--navy);
+  font-size: 12px;
+}
+
+.fundamental-history__row:nth-child(odd) {
+  background: #fbfcfd;
+}
+
+.history-column-head {
+  min-width: 0;
+}
+
+.history-column-head .move-controls {
+  margin-top: -6px;
+  margin-right: -8px;
+}
+
+.analysis-details {
+  padding: 16px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.analysis-details summary {
+  margin-bottom: 16px;
+  color: var(--navy);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.journal-list {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.journal-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.journal-entry:last-child {
+  border-bottom: 0;
+}
+
+.journal-entry div {
+  display: grid;
+  gap: 3px;
+}
+
+.journal-entry span,
+.journal-entry time {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .valuation-section {

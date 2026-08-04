@@ -22,7 +22,7 @@ class RuleDefinition:
 class RuleResult:
     key: str
     label: str
-    value: float
+    value: float | None
     status: RuleStatus
     source_note: str
 

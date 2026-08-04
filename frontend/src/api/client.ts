@@ -6,6 +6,11 @@ export interface CompanyPayload {
   exchange: string;
   country: string;
   currency: string;
+  isin?: string | null;
+  cik?: string | null;
+  lei?: string | null;
+  provider_symbols?: Record<string, string>;
+  index_memberships?: string[];
 }
 
 export interface Company extends CompanyPayload {
@@ -14,6 +19,39 @@ export interface Company extends CompanyPayload {
   latest_mk_score?: number | null;
   latest_quality_score?: number | null;
   latest_safety_score?: number | null;
+  archived_at?: string | null;
+}
+
+export interface IndexSummary {
+  code: string;
+  name: string;
+  isin: string;
+  market: string;
+  provider: string;
+}
+
+export interface IndexConstituent {
+  name: string;
+  isin: string;
+  mic: string;
+  trading_location: string;
+  country: string;
+}
+
+export interface IndexComposition extends IndexSummary {
+  as_of: string | null;
+  source_url: string;
+  constituents: IndexConstituent[];
+}
+
+export interface IndexCompanySelection extends IndexConstituent {
+  index_code: string;
+}
+
+export interface IndexBulkAddResult {
+  created: Company[];
+  existing: Company[];
+  errors: Array<{ name: string; isin: string; detail: string }>;
 }
 
 export interface User {
@@ -73,27 +111,33 @@ export interface FinancialPayload {
   fiscal_year: number;
   source: string;
   currency: string;
+  analysis_profile?: "standard" | "financial";
   revenue: number;
-  ebitda: number;
-  depreciation_amortization: number;
-  ebit: number;
-  interest_expense: number;
-  operating_cash_flow: number;
-  capex: number;
+  ebitda: number | null;
+  depreciation_amortization: number | null;
+  ebit: number | null;
+  interest_expense: number | null;
+  operating_cash_flow: number | null;
+  capex: number | null;
   net_income: number;
+  pretax_income?: number | null;
   market_cap: number;
+  closing_price?: number | null;
+  shares_outstanding?: number | null;
+  treasury_stock_value?: number | null;
   total_assets: number;
-  current_assets: number;
-  current_liabilities: number;
-  financial_debt: number;
-  cash: number;
+  current_assets: number | null;
+  current_liabilities: number | null;
+  financial_debt: number | null;
+  cash: number | null;
   total_equity: number;
+  investing_cash_flow?: number | null;
 }
 
 export interface FinancialMetric {
   key: string;
   label: string;
-  value: number;
+  value: number | null;
   status: "pass" | "review" | "fail";
   source_note: string;
 }
@@ -111,9 +155,9 @@ export interface FinancialAnalysis extends FinancialPayload {
   company_id: string;
   metrics: FinancialMetric[];
   indicators: FinancialIndicator[];
-  mk_score: number;
-  quality_score: number;
-  safety_score: number;
+  mk_score: number | null;
+  quality_score: number | null;
+  safety_score: number | null;
   created_at: string;
 }
 
@@ -124,6 +168,11 @@ export interface FinancialTrend {
   revenue_cagr: number | null;
   net_income_cagr: number | null;
   free_cash_flow_cagr: number | null;
+  operating_income_cagr?: number | null;
+  pretax_income_cagr?: number | null;
+  pe_annual_change?: number | null;
+  roe_annual_change?: number | null;
+  current_ratio_annual_change?: number | null;
 }
 
 export interface FinancialHistory {
@@ -317,11 +366,18 @@ export interface CompanyClient {
   getDashboard?(): Promise<Dashboard>;
   analyzeWithAI?(payload: AIAnalysisPayload): Promise<AIAnalysis>;
   createCompany(payload: CompanyPayload): Promise<Company>;
+  updateCompany(id: string, payload: Partial<CompanyPayload>): Promise<Company>;
+  archiveCompany(id: string): Promise<Company>;
+  restoreCompany(id: string): Promise<Company>;
+  deleteCompany(id: string): Promise<void>;
+  listIndices(): Promise<IndexSummary[]>;
+  getIndex(code: string): Promise<IndexComposition>;
+  addIndexCompanies(companies: IndexCompanySelection[]): Promise<IndexBulkAddResult>;
   importFinancials(
     companyId: string,
     payload: FinancialPayload,
   ): Promise<FinancialAnalysis>;
-  importFinancialsAutomatically(companyId: string): Promise<FinancialAnalysis>;
+  importFinancialsAutomatically(companyId: string): Promise<FinancialHistory>;
   getFinancialHistory(companyId: string): Promise<FinancialHistory>;
   listValuations(companyId: string): Promise<ValuationAnalysis[]>;
   createValuation(
@@ -481,13 +537,31 @@ export function createApiClient(): CompanyClient {
         method: "POST",
         body: JSON.stringify(payload),
       }),
+    updateCompany: (id, payload) =>
+      request<Company>(`/companies/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    archiveCompany: (id) =>
+      request<Company>(`/companies/${id}/archive`, { method: "POST" }),
+    restoreCompany: (id) =>
+      request<Company>(`/companies/${id}/restore`, { method: "POST" }),
+    deleteCompany: (id) =>
+      request<void>(`/companies/${id}`, { method: "DELETE" }),
+    listIndices: () => request<IndexSummary[]>("/indices"),
+    getIndex: (code) => request<IndexComposition>(`/indices/${code}`),
+    addIndexCompanies: (companies) =>
+      request<IndexBulkAddResult>("/indices/companies/bulk", {
+        method: "POST",
+        body: JSON.stringify({ companies }),
+      }),
     importFinancials: (companyId, payload) =>
       request<FinancialAnalysis>(`/companies/${companyId}/financials`, {
         method: "POST",
         body: JSON.stringify(payload),
       }),
     importFinancialsAutomatically: (companyId) =>
-      request<FinancialAnalysis>(
+      request<FinancialHistory>(
         `/companies/${companyId}/financials/automatic`,
         { method: "POST" },
       ),

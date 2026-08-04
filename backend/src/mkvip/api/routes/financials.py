@@ -18,7 +18,7 @@ from mkvip.providers.base import (
     ProviderDataError,
     ProviderTimeoutError,
 )
-from mkvip.providers.normalization import load_latest_snapshot
+from mkvip.providers.normalization import load_historical_snapshots
 from mkvip.repositories.company import CompanyRepository
 from mkvip.schemas.financial import (
     FinancialAnalysisRead,
@@ -90,9 +90,7 @@ async def import_financials(
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Les données financières {payload.fiscal_year} existent déjà."
-            ),
+            detail=(f"Les données financières {payload.fiscal_year} existent déjà."),
         )
 
     analysis = analyse_financials(payload)
@@ -105,7 +103,7 @@ async def import_financials(
 
 @router.post(
     "/automatic",
-    response_model=FinancialAnalysisRead,
+    response_model=FinancialHistoryRead,
     status_code=status.HTTP_201_CREATED,
 )
 async def import_financials_automatically(
@@ -115,7 +113,7 @@ async def import_financials_automatically(
     current_user: CurrentUser,
     admission: Admission,
     settings: Configuration,
-) -> FinancialAnalysisRead:
+) -> FinancialHistoryRead:
     company = await repository.get_by_id(company_id)
     if company is None:
         raise HTTPException(
@@ -126,12 +124,14 @@ async def import_financials_automatically(
     try:
         with admission.admit(current_user.id, company_id):
             try:
-                async with asyncio.timeout(
-                    settings.yahoo_import_timeout_seconds
-                ):
-                    payload = await load_latest_snapshot(
+                async with asyncio.timeout(settings.yahoo_import_timeout_seconds):
+                    payloads = await load_historical_snapshots(
                         provider,
                         company.ticker,
+                        isin=company.isin,
+                        cik=company.cik,
+                        lei=company.lei,
+                        limit=10,
                     )
             except ProviderBusyError as error:
                 raise HTTPException(
@@ -142,9 +142,7 @@ async def import_financials_automatically(
             except (ProviderTimeoutError, TimeoutError) as error:
                 raise HTTPException(
                     status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                    detail=(
-                        "L’import Yahoo Finance a dépassé le délai autorisé."
-                    ),
+                    detail=("L’import automatique a dépassé le délai autorisé."),
                 ) from error
             except ProviderDataError as error:
                 raise HTTPException(
@@ -152,37 +150,24 @@ async def import_financials_automatically(
                     detail=str(error),
                 ) from error
 
-            existing = await repository.get_financial_analysis(
+            await repository.create_financial_analyses(
                 company_id,
-                payload.fiscal_year,
+                [(payload, analyse_financials(payload)) for payload in payloads],
             )
-            if existing is not None:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        f"Les données financières {payload.fiscal_year} "
-                        "existent déjà."
-                    ),
-                )
-
-            analysis = analyse_financials(payload)
-            return await repository.create_financial_analysis(
-                company_id,
-                payload,
-                analysis,
+            snapshots = await repository.list_financial_analyses(company_id)
+            return FinancialHistoryRead(
+                company_id=company_id,
+                snapshots=snapshots,
+                trend=calculate_financial_trend(snapshots),
             )
     except YahooImportInProgressError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Un import automatique est déjà en cours pour cette entreprise."
-            ),
+            detail=("Un import automatique est déjà en cours pour cette entreprise."),
         ) from error
     except YahooImportLimitError as error:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=(
-                "La limite d’imports Yahoo Finance simultanés est atteinte."
-            ),
+            detail=("La limite d’imports automatiques simultanés est atteinte."),
             headers={"Retry-After": "1"},
         ) from error

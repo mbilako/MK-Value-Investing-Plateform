@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     yahoo_response_timeout_seconds: PositiveFloat = 10
     yahoo_import_timeout_seconds: PositiveFloat = 30
     yahoo_imports_per_user: PositiveInt = 1
+    sec_user_agent: str = "MK-VIP/0.12 contact=dev@mkvip.local"
 
     model_config = SettingsConfigDict(
         env_file=("../.env.local", ".env.local", ".env"),

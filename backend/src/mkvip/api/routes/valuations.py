@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from mkvip.analysis.valuation import analyse_valuation
 from mkvip.api.dependencies import get_company_repository
 from mkvip.repositories.company import CompanyRepository
+from mkvip.schemas.financial import FinancialProfile
 from mkvip.schemas.valuation import ValuationAnalysisRead, ValuationCreate
 
 router = APIRouter(
@@ -52,8 +53,14 @@ async def create_valuation(
     if snapshot is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=(f"Analyse financière {payload.fiscal_year} introuvable."),
+        )
+    if snapshot.analysis_profile is FinancialProfile.FINANCIAL:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                f"Analyse financière {payload.fiscal_year} introuvable."
+                "La valorisation standard n'est pas applicable aux banques "
+                "et assureurs. Un modèle sectoriel est requis."
             ),
         )
     assumptions = payload.assumptions.to_domain()

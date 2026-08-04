@@ -46,9 +46,7 @@ class YahooExecutionGuard:
         **kwargs: object,
     ) -> Any:
         if not self._slots.acquire(blocking=False):
-            raise ProviderBusyError(
-                "Yahoo Finance est occupé. Réessayez dans quelques instants."
-            )
+            raise ProviderBusyError("Yahoo Finance est occupé. Réessayez dans quelques instants.")
 
         try:
             future = self._executor.submit(
@@ -100,8 +98,110 @@ def _required(
         number = float(value)
         if math.isfinite(number):
             return number
-    raise ProviderDataIncompleteError(
-        f"Champ Yahoo Finance manquant pour {label}."
+    raise ProviderDataIncompleteError(f"Champ Yahoo Finance manquant pour {label}.")
+
+
+def _optional(
+    record: Mapping[str, Any],
+    *aliases: str,
+) -> float | None:
+    for alias in aliases:
+        value = record.get(alias)
+        if value is None:
+            continue
+        number = float(value)
+        if math.isfinite(number):
+            return number
+    return None
+
+
+def _income_statement(
+    period: object,
+    values: Mapping[str, Any],
+) -> ProviderIncomeStatement:
+    revenue = _optional(
+        values,
+        "TotalRevenue",
+        "OperatingRevenue",
+    )
+    return ProviderIncomeStatement(
+        fiscal_year=_year(period),
+        revenue=revenue if revenue is not None else 0.0,
+        ebitda=_optional(values, "EBITDA", "NormalizedEBITDA"),
+        depreciation_amortization=_optional(
+            values,
+            "DepreciationAndAmortizationInIncomeStatement",
+            "DepreciationAndAmortization",
+            "ReconciledDepreciation",
+        ),
+        ebit=_optional(
+            values,
+            "EBIT",
+            "OperatingIncome",
+        ),
+        interest_expense=(
+            _optional(
+                values,
+                "InterestExpenseNonOperating",
+                "InterestExpense",
+                "NetNonOperatingInterestIncomeExpense",
+            )
+            or 0.0
+        ),
+        net_income=_required(
+            values,
+            "net income",
+            "NetIncome",
+            "NetIncomeCommonStockholders",
+        ),
+        pretax_income=_optional(
+            values,
+            "PretaxIncome",
+            "IncomeBeforeTax",
+        ),
+        weighted_average_shares=_optional(
+            values,
+            "DilutedAverageShares",
+            "BasicAverageShares",
+            "AverageDilutionEarnings",
+        ),
+    )
+
+
+def _cash_flow_statement(
+    period: object,
+    values: Mapping[str, Any],
+) -> ProviderCashFlow:
+    operating_cash_flow = _required(
+        values,
+        "flux de trésorerie d'exploitation",
+        "OperatingCashFlow",
+        "TotalCashFromOperatingActivities",
+    )
+    capex = _optional(
+        values,
+        "CapitalExpenditure",
+        "PurchaseOfPPE",
+        "CapitalExpenditureReported",
+        "PurchaseOfInvestmentProperties",
+    )
+    if capex is None:
+        free_cash_flow = _optional(values, "FreeCashFlow")
+        if free_cash_flow is not None:
+            capex = operating_cash_flow - free_cash_flow
+    if capex is None:
+        raise ProviderDataIncompleteError(
+            "Champ Yahoo Finance manquant pour investissements."
+        )
+    return ProviderCashFlow(
+        fiscal_year=_year(period),
+        operating_cash_flow=operating_cash_flow,
+        capex=capex,
+        investing_cash_flow=_optional(
+            values,
+            "InvestingCashFlow",
+            "TotalCashflowsFromInvestingActivities",
+        ),
     )
 
 
@@ -116,9 +216,7 @@ def _map_complete_periods[Statement](
         except ProviderDataIncompleteError:
             continue
     if not statements:
-        raise ProviderDataIncompleteError(
-            "Aucun exercice Yahoo Finance complet n'est disponible."
-        )
+        raise ProviderDataIncompleteError("Aucun exercice Yahoo Finance complet n'est disponible.")
     return statements
 
 
@@ -128,11 +226,15 @@ def _fetch_profile(ticker: Any) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
 
 def _fetch_price_history(ticker: Any) -> Mapping[object, Mapping[str, Any]]:
     history = ticker.history(
-        period="1y",
+        period="10y",
         interval="1d",
         auto_adjust=False,
     )
     return history.to_dict(orient="index")
+
+
+def _fetch_last_price(ticker: Any) -> float:
+    return float(ticker.fast_info["last_price"])
 
 
 async def _run_yahoo(
@@ -152,9 +254,7 @@ async def _run_yahoo(
     except ProviderDataError:
         raise
     except Exception as error:
-        raise ProviderDataError(
-            f"Yahoo Finance est indisponible pour {ticker.upper()}."
-        ) from error
+        raise ProviderDataError(f"Yahoo Finance est indisponible pour {ticker.upper()}.") from error
 
 
 class YahooFinanceProvider:
@@ -170,6 +270,7 @@ class YahooFinanceProvider:
         self._search_factory = search_factory
         self._execution_guard = execution_guard or _YAHOO_EXECUTION_GUARD
         self._tickers: dict[str, Any] = {}
+        self._profile_currencies: dict[str, tuple[str, str]] = {}
 
     def _ticker(self, ticker: str) -> Any:
         normalized_ticker = ticker.upper()
@@ -178,9 +279,7 @@ class YahooFinanceProvider:
                 import yfinance
 
                 self._ticker_factory = yfinance.Ticker
-            self._tickers[normalized_ticker] = self._ticker_factory(
-                normalized_ticker
-            )
+            self._tickers[normalized_ticker] = self._ticker_factory(normalized_ticker)
         return self._tickers[normalized_ticker]
 
     async def search_company(
@@ -205,15 +304,9 @@ class YahooFinanceProvider:
             results.append(
                 ProviderCompanySearchResult(
                     ticker=ticker,
-                    name=str(
-                        quote.get("longname")
-                        or quote.get("shortname")
-                        or ticker
-                    ),
+                    name=str(quote.get("longname") or quote.get("shortname") or ticker),
                     exchange=str(
-                        quote.get("exchDisp")
-                        or quote.get("exchange")
-                        or "Non renseignée"
+                        quote.get("exchDisp") or quote.get("exchange") or "Non renseignée"
                     ),
                 )
             )
@@ -228,21 +321,37 @@ class YahooFinanceProvider:
             self._ticker(normalized_ticker),
         )
         currency = (
-            info.get("financialCurrency")
-            or info.get("currency")
-            or fast_info.get("currency")
+            info.get("financialCurrency") or info.get("currency") or fast_info.get("currency")
         )
         if not currency:
             raise ProviderDataIncompleteError(
                 f"Devise Yahoo Finance manquante pour {normalized_ticker}."
             )
+        normalized_currency = str(currency).upper()
+        quote_currency = str(info.get("currency") or fast_info.get("currency") or currency).upper()
+        market_cap = (
+            _optional(fast_info, "market_cap", "marketCap")
+            or _optional(info, "marketCap")
+            or 0.0
+        )
+        if quote_currency != normalized_currency:
+            pair = f"{quote_currency}{normalized_currency}=X"
+            rate = await _run_yahoo(
+                self._execution_guard,
+                pair,
+                _fetch_last_price,
+                self._ticker(pair),
+            )
+            if not math.isfinite(rate) or rate <= 0:
+                raise ProviderDataIncompleteError(f"Taux de change {pair} indisponible.")
+            market_cap *= rate
+        self._profile_currencies[normalized_ticker] = (
+            quote_currency,
+            normalized_currency,
+        )
         return ProviderCompanyProfile(
             ticker=normalized_ticker,
-            name=str(
-                info.get("longName")
-                or info.get("shortName")
-                or normalized_ticker
-            ),
+            name=str(info.get("longName") or info.get("shortName") or normalized_ticker),
             exchange=str(
                 info.get("fullExchangeName")
                 or info.get("exchange")
@@ -250,13 +359,19 @@ class YahooFinanceProvider:
                 or "Non renseignée"
             ),
             country=str(info.get("country") or "Non renseigné"),
-            currency=str(currency).upper(),
-            market_cap=_required(
-                fast_info,
-                "capitalisation boursière",
-                "market_cap",
-                "marketCap",
+            currency=normalized_currency,
+            market_cap=market_cap,
+            shares_outstanding=(
+                _optional(
+                    info,
+                    "sharesOutstanding",
+                    "impliedSharesOutstanding",
+                )
+                or _optional(fast_info, "shares")
             ),
+            quote_currency=quote_currency,
+            sector=(str(info["sector"]) if info.get("sector") else None),
+            industry=(str(info["industry"]) if info.get("industry") else None),
         )
 
     async def get_income_statements(
@@ -272,46 +387,7 @@ class YahooFinanceProvider:
         )
         return _map_complete_periods(
             records,
-            lambda period, values: ProviderIncomeStatement(
-                fiscal_year=_year(period),
-                revenue=_required(
-                    values,
-                    "chiffre d'affaires",
-                    "TotalRevenue",
-                    "OperatingRevenue",
-                ),
-                ebitda=_required(
-                    values,
-                    "EBITDA",
-                    "EBITDA",
-                    "NormalizedEBITDA",
-                ),
-                depreciation_amortization=_required(
-                    values,
-                    "dotations aux amortissements",
-                    "DepreciationAndAmortizationInIncomeStatement",
-                    "DepreciationAndAmortization",
-                ),
-                ebit=_required(
-                    values,
-                    "EBIT",
-                    "EBIT",
-                    "OperatingIncome",
-                ),
-                interest_expense=_required(
-                    values,
-                    "charges d'intérêts",
-                    "InterestExpenseNonOperating",
-                    "InterestExpense",
-                    "NetNonOperatingInterestIncomeExpense",
-                ),
-                net_income=_required(
-                    values,
-                    "résultat net",
-                    "NetIncome",
-                    "NetIncomeCommonStockholders",
-                ),
-            ),
+            _income_statement,
         )
 
     async def get_balance_sheet(
@@ -334,34 +410,41 @@ class YahooFinanceProvider:
                     "total actif",
                     "TotalAssets",
                 ),
-                current_assets=_required(
+                current_assets=_optional(
                     values,
-                    "actif circulant",
                     "CurrentAssets",
                     "TotalCurrentAssets",
                 ),
-                current_liabilities=_required(
+                current_liabilities=_optional(
                     values,
-                    "passif exigible",
                     "CurrentLiabilities",
                     "TotalCurrentLiabilities",
                 ),
-                financial_debt=_required(
+                financial_debt=_optional(
                     values,
-                    "dette financière",
                     "TotalDebt",
                 ),
-                cash=_required(
+                cash=_optional(
                     values,
-                    "trésorerie",
                     "CashCashEquivalentsAndShortTermInvestments",
                     "CashAndCashEquivalents",
+                    "CashCashEquivalentsAndFederalFundsSold",
                 ),
                 total_equity=_required(
                     values,
                     "capitaux propres",
                     "StockholdersEquity",
                     "TotalEquityGrossMinorityInterest",
+                ),
+                shares_outstanding=_optional(
+                    values,
+                    "OrdinarySharesNumber",
+                    "ShareIssued",
+                ),
+                treasury_stock_value=_optional(
+                    values,
+                    "TreasuryStock",
+                    "TreasuryStockCommonValue",
                 ),
             ),
         )
@@ -377,24 +460,7 @@ class YahooFinanceProvider:
             as_dict=True,
             freq="yearly",
         )
-        return _map_complete_periods(
-            records,
-            lambda period, values: ProviderCashFlow(
-                fiscal_year=_year(period),
-                operating_cash_flow=_required(
-                    values,
-                    "flux de trésorerie d'exploitation",
-                    "OperatingCashFlow",
-                    "TotalCashFromOperatingActivities",
-                ),
-                capex=_required(
-                    values,
-                    "investissements",
-                    "CapitalExpenditure",
-                    "PurchaseOfPPE",
-                ),
-            ),
-        )
+        return _map_complete_periods(records, _cash_flow_statement)
 
     async def get_price_history(
         self,
@@ -406,20 +472,46 @@ class YahooFinanceProvider:
             _fetch_price_history,
             self._ticker(ticker),
         )
+        normalized_ticker = ticker.upper()
+        quote_currency, financial_currency = self._profile_currencies.get(
+            normalized_ticker,
+            ("", ""),
+        )
+        fx_by_date: dict[str, float] = {}
+        if quote_currency and financial_currency and quote_currency != financial_currency:
+            pair = f"{quote_currency}{financial_currency}=X"
+            fx_records = await _run_yahoo(
+                self._execution_guard,
+                pair,
+                _fetch_price_history,
+                self._ticker(pair),
+            )
+            for timestamp, values in fx_records.items():
+                close = values.get("Close")
+                if close is None or not math.isfinite(float(close)):
+                    continue
+                date = (
+                    timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
+                )[:10]
+                fx_by_date[date] = float(close)
         prices = []
         for timestamp, values in records.items():
             close = values.get("Close")
             if close is None or not math.isfinite(float(close)):
                 continue
             iso_timestamp = (
-                timestamp.isoformat()
-                if hasattr(timestamp, "isoformat")
-                else str(timestamp)
+                timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
             )
+            normalized_close = float(close)
+            if fx_by_date:
+                rate = fx_by_date.get(iso_timestamp[:10])
+                if rate is None:
+                    continue
+                normalized_close *= rate
             prices.append(
                 ProviderPricePoint(
                     timestamp=iso_timestamp,
-                    close=float(close),
+                    close=normalized_close,
                 )
             )
         return sorted(prices, key=lambda point: point.timestamp)

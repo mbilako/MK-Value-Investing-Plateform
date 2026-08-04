@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   BarChart3,
   BookOpen,
@@ -7,29 +8,31 @@ import {
 } from "lucide-react";
 
 const navigation = [
-  { label: "Vue d’ensemble", icon: Home, current: true },
-  { label: "Entreprises", icon: Building2 },
-  { label: "Analyses", icon: BarChart3 },
-  { label: "Règles", icon: SlidersHorizontal },
-  { label: "Journal", icon: BookOpen },
+  { label: "Vue d’ensemble", icon: Home, href: "#overview" },
+  { label: "Entreprises", icon: Building2, href: "#companies" },
+  { label: "Analyses", icon: BarChart3, href: "#analyses" },
+  { label: "Règles", icon: SlidersHorizontal, href: "#rules" },
+  { label: "Journal", icon: BookOpen, href: "#journal" },
 ];
 
 export function Sidebar() {
+  const [activeHref, setActiveHref] = useState("#overview");
   return (
     <aside className="sidebar">
-      <a className="brand" href="/" aria-label="MK-VIP — Accueil">
+      <a className="brand" href="#overview" aria-label="MK-VIP — Accueil">
         <span className="brand__name">MK-VIP</span>
         <span className="brand__description">MK Value Investing Platform</span>
       </a>
       <nav aria-label="Navigation principale">
         <ul className="sidebar__nav">
-          {navigation.map(({ label, icon: Icon, current }) => (
+          {navigation.map(({ label, icon: Icon, href }) => (
             <li key={label}>
               <a
                 className="nav-item"
-                data-current={current || undefined}
-                href={current ? "/" : "#"}
-                aria-current={current ? "page" : undefined}
+                data-current={activeHref === href || undefined}
+                href={href}
+                aria-current={activeHref === href ? "location" : undefined}
+                onClick={() => setActiveHref(href)}
               >
                 <Icon aria-hidden="true" size={20} strokeWidth={1.75} />
                 <span>{label}</span>

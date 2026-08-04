@@ -141,12 +141,10 @@ def test_import_financials_rejects_duplicate_fiscal_year(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": "Les données financières 2025 existent déjà."
-    }
+    assert response.json() == {"detail": "Les données financières 2025 existent déjà."}
 
 
-def test_import_financials_rejects_zero_denominator(
+def test_import_financials_marks_zero_denominator_rules_as_failed(
     client: TestClient,
     company_id: str,
 ) -> None:
@@ -158,7 +156,11 @@ def test_import_financials_rejects_zero_denominator(
         json=payload,
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 201
+    metrics = {metric["key"]: metric for metric in response.json()["metrics"]}
+    assert metrics["depreciation_to_ebit"]["status"] == "fail"
+    assert metrics["depreciation_to_ebit"]["value"] is None
+    assert metrics["interest_to_ebit"]["status"] == "fail"
 
 
 def test_automatic_import_creates_latest_available_analysis(
@@ -246,9 +248,105 @@ def test_automatic_import_creates_latest_available_analysis(
         app.dependency_overrides.pop(provider_dependency, None)
 
     assert response.status_code == 201
-    assert response.json()["company_id"] == company_id
-    assert response.json()["source"] == "Public Test Data · AI.PA · exercice 2025"
-    assert response.json()["mk_score"] == 100.0
+    body = response.json()
+    assert body["company_id"] == company_id
+    assert body["snapshots"][0]["source"] == ("Public Test Data · AI.PA · exercice 2025")
+    assert body["snapshots"][0]["mk_score"] == 100.0
+
+
+def test_automatic_import_builds_history_and_refreshes_existing_years(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    from mkvip.providers.base import (
+        ProviderBalanceSheet,
+        ProviderCashFlow,
+        ProviderCompanyProfile,
+        ProviderIncomeStatement,
+        ProviderPricePoint,
+    )
+
+    years = (2025, 2024)
+
+    class HistoricalProvider:
+        name = "Historical public test"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="Air Liquide",
+                exchange="Paris",
+                country="France",
+                currency="EUR",
+                market_cap=4_500_000_000,
+                shares_outstanding=100_000_000,
+            )
+
+        async def get_income_statements(self, ticker: str):
+            return [
+                ProviderIncomeStatement(
+                    fiscal_year=year,
+                    revenue=1_000_000_000,
+                    ebitda=450_000_000,
+                    depreciation_amortization=20_000_000,
+                    ebit=400_000_000,
+                    interest_expense=40_000_000,
+                    net_income=250_000_000,
+                    weighted_average_shares=100_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_balance_sheet(self, ticker: str):
+            return [
+                ProviderBalanceSheet(
+                    fiscal_year=year,
+                    total_assets=4_000_000_000,
+                    current_assets=600_000_000,
+                    current_liabilities=250_000_000,
+                    financial_debt=600_000_000,
+                    cash=100_000_000,
+                    total_equity=1_000_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_cash_flow(self, ticker: str):
+            return [
+                ProviderCashFlow(
+                    fiscal_year=year,
+                    operating_cash_flow=300_000_000,
+                    capex=40_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_price_history(self, ticker: str):
+            return [
+                ProviderPricePoint(
+                    timestamp=f"{year}-12-31T00:00:00",
+                    close=45 if year == 2025 else 40,
+                )
+                for year in years
+            ]
+
+    app.dependency_overrides[get_financial_data_provider] = HistoricalProvider
+    try:
+        first = client.post(
+            f"/api/v1/companies/{company_id}/financials/automatic",
+        )
+        second = client.post(
+            f"/api/v1/companies/{company_id}/financials/automatic",
+        )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert [snapshot["fiscal_year"] for snapshot in first.json()["snapshots"]] == [2025, 2024]
+    assert len(second.json()["snapshots"]) == 2
+    assert second.json()["snapshots"][0]["closing_price"] == 45
+    assert second.json()["snapshots"][0]["shares_outstanding"] == 100
 
 
 def test_automatic_import_rejects_a_company_already_in_flight(
@@ -301,9 +399,7 @@ def test_automatic_import_reports_exhausted_yahoo_capacity(
     client: TestClient,
     company_id: str,
 ) -> None:
-    provider = UnavailableProvider(
-        ProviderBusyError("Yahoo Finance est occupé.")
-    )
+    provider = UnavailableProvider(ProviderBusyError("Yahoo Finance est occupé."))
     app.dependency_overrides[get_financial_data_provider] = lambda: provider
     try:
         response = client.post(
@@ -334,9 +430,7 @@ def test_automatic_import_has_one_end_to_end_deadline(
         app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 504
-    assert response.json()["detail"] == (
-        "L’import Yahoo Finance a dépassé le délai autorisé."
-    )
+    assert response.json()["detail"] == ("L’import automatique a dépassé le délai autorisé.")
 
 
 def test_financial_history_returns_snapshots_and_growth(
@@ -379,4 +473,9 @@ def test_financial_history_returns_snapshots_and_growth(
         "revenue_cagr": pytest.approx(0.10),
         "net_income_cagr": pytest.approx(0.10),
         "free_cash_flow_cagr": pytest.approx(0.20),
+        "operating_income_cagr": pytest.approx(0.0),
+        "pretax_income_cagr": None,
+        "pe_annual_change": pytest.approx(-3.904958),
+        "roe_annual_change": pytest.approx(0.0105),
+        "current_ratio_annual_change": pytest.approx(0.0),
     }

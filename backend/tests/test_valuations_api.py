@@ -93,3 +93,31 @@ def test_create_and_list_persisted_valuation_scenarios(
     )
     assert history.status_code == 200
     assert history.json() == [body]
+
+
+def test_standard_valuation_is_disabled_for_financial_institutions(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    payload: dict[str, object] = financial_payload()
+    payload.update(
+        {
+            "analysis_profile": "financial",
+            "ebitda": None,
+            "current_assets": None,
+            "current_liabilities": None,
+        }
+    )
+    imported = client.post(
+        f"/api/v1/companies/{company_id}/financials",
+        json=payload,
+    )
+    assert imported.status_code == 201
+
+    response = client.post(
+        f"/api/v1/companies/{company_id}/valuations",
+        json=valuation_payload(),
+    )
+
+    assert response.status_code == 422
+    assert "modèle sectoriel" in response.json()["detail"]

@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mkvip.db.base import Base
@@ -21,6 +22,18 @@ class CompanyOrm(Base):
     exchange: Mapped[str] = mapped_column(String(100), nullable=False)
     country: Mapped[str] = mapped_column(String(100), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    isin: Mapped[str | None] = mapped_column(String(12), nullable=True, index=True)
+    cik: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
+    lei: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    provider_symbols: Mapped[dict[str, str]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    index_memberships: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(20), default="pending")
     latest_mk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     latest_quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)

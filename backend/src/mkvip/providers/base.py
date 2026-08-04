@@ -33,28 +33,36 @@ class ProviderCompanyProfile:
     country: str
     currency: str
     market_cap: float
+    shares_outstanding: float | None = None
+    quote_currency: str | None = None
+    sector: str | None = None
+    industry: str | None = None
 
 
 @dataclass(frozen=True)
 class ProviderIncomeStatement:
     fiscal_year: int
     revenue: float
-    ebitda: float
-    depreciation_amortization: float
-    ebit: float
-    interest_expense: float
+    ebitda: float | None
+    depreciation_amortization: float | None
+    ebit: float | None
+    interest_expense: float | None
     net_income: float
+    pretax_income: float | None = None
+    weighted_average_shares: float | None = None
 
 
 @dataclass(frozen=True)
 class ProviderBalanceSheet:
     fiscal_year: int
     total_assets: float
-    current_assets: float
-    current_liabilities: float
-    financial_debt: float
-    cash: float
+    current_assets: float | None
+    current_liabilities: float | None
+    financial_debt: float | None
+    cash: float | None
     total_equity: float
+    shares_outstanding: float | None = None
+    treasury_stock_value: float | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +70,7 @@ class ProviderCashFlow:
     fiscal_year: int
     operating_cash_flow: float
     capex: float
+    investing_cash_flow: float | None = None
 
 
 @dataclass(frozen=True)

@@ -97,6 +97,7 @@ async def test_latest_snapshot_uses_shared_year_and_converts_to_millions() -> No
         "fiscal_year": 2024,
         "source": "Public Test Data · AI.PA · exercice 2024",
         "currency": "EUR",
+        "analysis_profile": "standard",
         "revenue": 10_000,
         "ebitda": 4_500,
         "depreciation_amortization": 200,
@@ -105,13 +106,18 @@ async def test_latest_snapshot_uses_shared_year_and_converts_to_millions() -> No
         "operating_cash_flow": 3_000,
         "capex": 400,
         "net_income": 2_500,
+        "pretax_income": None,
         "market_cap": 50_000,
+        "closing_price": None,
+        "shares_outstanding": None,
+        "treasury_stock_value": None,
         "total_assets": 40_000,
         "current_assets": 6_000,
         "current_liabilities": 2_500,
         "financial_debt": 6_000,
         "cash": 1_000,
         "total_equity": 10_000,
+        "investing_cash_flow": None,
     }
 
 
@@ -139,6 +145,8 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
                     "EBIT": 4_000_000_000,
                     "InterestExpenseNonOperating": 400_000_000,
                     "NetIncome": 2_500_000_000,
+                    "PretaxIncome": 3_100_000_000,
+                    "DilutedAverageShares": 100_000_000,
                 }
             }
 
@@ -158,6 +166,8 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
                     "TotalDebt": 6_000_000_000,
                     "CashCashEquivalentsAndShortTermInvestments": 1_000_000_000,
                     "StockholdersEquity": 10_000_000_000,
+                    "OrdinarySharesNumber": 99_000_000,
+                    "TreasuryStock": -250_000_000,
                 }
             }
 
@@ -173,6 +183,7 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
                 "2024-12-31": {
                     "OperatingCashFlow": 3_000_000_000,
                     "CapitalExpenditure": -400_000_000,
+                    "InvestingCashFlow": -750_000_000,
                 }
             }
 
@@ -185,10 +196,71 @@ async def test_yahoo_provider_maps_annual_financial_statements() -> None:
     assert income[0].fiscal_year == 2024
     assert income[0].revenue == 10_000_000_000
     assert income[0].depreciation_amortization == 200_000_000
+    assert income[0].pretax_income == 3_100_000_000
+    assert income[0].weighted_average_shares == 100_000_000
     assert balance[0].financial_debt == 6_000_000_000
     assert balance[0].cash == 1_000_000_000
+    assert balance[0].shares_outstanding == 99_000_000
+    assert balance[0].treasury_stock_value == -250_000_000
     assert cash_flow[0].operating_cash_flow == 3_000_000_000
     assert cash_flow[0].capex == -400_000_000
+    assert cash_flow[0].investing_cash_flow == -750_000_000
+
+
+@pytest.mark.asyncio
+async def test_yahoo_provider_keeps_pre_revenue_year_and_derives_capex() -> None:
+    from mkvip.providers.yahoo import YahooFinanceProvider
+
+    class YahooTicker:
+        def get_income_stmt(self, **_options: object):
+            return {
+                "2025-12-31": {
+                    "EBITDA": -80_000_000,
+                    "EBIT": -85_000_000,
+                    "DepreciationAndAmortizationInIncomeStatement": 5_000_000,
+                    "NetIncome": -90_000_000,
+                }
+            }
+
+        def get_cash_flow(self, **_options: object):
+            return {
+                "2025-12-31": {
+                    "OperatingCashFlow": -60_000_000,
+                    "FreeCashFlow": -72_000_000,
+                    "InvestingCashFlow": -15_000_000,
+                }
+            }
+
+    provider = YahooFinanceProvider(ticker_factory=lambda _ticker: YahooTicker())
+
+    income = await provider.get_income_statements("BIO.PA")
+    cash_flow = await provider.get_cash_flow("BIO.PA")
+
+    assert income[0].revenue == 0
+    assert income[0].interest_expense == 0
+    assert cash_flow[0].capex == 12_000_000
+
+
+@pytest.mark.asyncio
+async def test_yahoo_profile_allows_missing_live_market_cap() -> None:
+    from mkvip.providers.yahoo import YahooFinanceProvider
+
+    class YahooTicker:
+        fast_info = {"currency": "EUR", "market_cap": None}
+
+        def get_info(self):
+            return {
+                "financialCurrency": "EUR",
+                "marketCap": 0,
+                "sharesOutstanding": 100_000_000,
+            }
+
+    provider = YahooFinanceProvider(ticker_factory=lambda _ticker: YahooTicker())
+
+    profile = await provider.get_profile("ML.PA")
+
+    assert profile.market_cap == 0
+    assert profile.shares_outstanding == 100_000_000
 
 
 @pytest.mark.asyncio
@@ -222,6 +294,7 @@ async def test_yahoo_provider_builds_company_profile() -> None:
         country="France",
         currency="EUR",
         market_cap=50_000_000_000,
+        quote_currency="EUR",
     )
 
 
@@ -297,7 +370,7 @@ async def test_yahoo_provider_maps_daily_closing_prices() -> None:
             interval: str,
             auto_adjust: bool,
         ) -> PriceHistory:
-            assert period == "1y"
+            assert period == "10y"
             assert interval == "1d"
             assert auto_adjust is False
             return PriceHistory()
@@ -337,12 +410,11 @@ async def test_yahoo_provider_wraps_upstream_failures() -> None:
 
 
 @pytest.mark.asyncio
-async def test_latest_snapshot_rejects_values_the_analysis_cannot_use() -> None:
+async def test_latest_snapshot_keeps_zero_profit_for_an_explicit_fail() -> None:
     from mkvip.providers.base import (
         ProviderBalanceSheet,
         ProviderCashFlow,
         ProviderCompanyProfile,
-        ProviderDataIncompleteError,
         ProviderIncomeStatement,
     )
     from mkvip.providers.normalization import load_latest_snapshot
@@ -404,11 +476,9 @@ async def test_latest_snapshot_rejects_values_the_analysis_cannot_use() -> None:
                 )
             ]
 
-    with pytest.raises(
-        ProviderDataIncompleteError,
-        match="ne peuvent pas être normalisées",
-    ):
-        await load_latest_snapshot(LossMakingProvider(), "LOSS.PA")
+    snapshot = await load_latest_snapshot(LossMakingProvider(), "LOSS.PA")
+
+    assert snapshot.net_income == 0
 
 
 @pytest.mark.asyncio
@@ -440,6 +510,91 @@ async def test_yahoo_provider_skips_incomplete_historical_periods() -> None:
     cash_flows = await provider.get_cash_flow("AI.PA")
 
     assert [cash_flow.fiscal_year for cash_flow in cash_flows] == [2025]
+
+
+@pytest.mark.asyncio
+async def test_historical_snapshots_use_year_end_market_cap_and_limit() -> None:
+    from mkvip.providers.base import (
+        ProviderBalanceSheet,
+        ProviderCashFlow,
+        ProviderCompanyProfile,
+        ProviderIncomeStatement,
+        ProviderPricePoint,
+    )
+    from mkvip.providers.normalization import load_historical_snapshots
+
+    years = [2025, 2024, 2023]
+
+    class HistoricalProvider:
+        name = "Historical test"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="History SA",
+                exchange="Paris",
+                country="France",
+                currency="EUR",
+                market_cap=1_300_000_000,
+                shares_outstanding=100_000_000,
+            )
+
+        async def get_income_statements(self, ticker: str):
+            return [
+                ProviderIncomeStatement(
+                    fiscal_year=year,
+                    revenue=1_000_000_000,
+                    ebitda=300_000_000,
+                    depreciation_amortization=50_000_000,
+                    ebit=250_000_000,
+                    interest_expense=20_000_000,
+                    net_income=150_000_000,
+                    weighted_average_shares=100_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_balance_sheet(self, ticker: str):
+            return [
+                ProviderBalanceSheet(
+                    fiscal_year=year,
+                    total_assets=2_000_000_000,
+                    current_assets=600_000_000,
+                    current_liabilities=300_000_000,
+                    financial_debt=400_000_000,
+                    cash=100_000_000,
+                    total_equity=900_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_cash_flow(self, ticker: str):
+            return [
+                ProviderCashFlow(
+                    fiscal_year=year,
+                    operating_cash_flow=220_000_000,
+                    capex=80_000_000,
+                )
+                for year in years
+            ]
+
+        async def get_price_history(self, ticker: str):
+            return [
+                ProviderPricePoint(
+                    timestamp=f"{year}-12-31T00:00:00",
+                    close=price,
+                )
+                for year, price in zip(years, [12.0, 11.0, 10.0], strict=True)
+            ]
+
+    snapshots = await load_historical_snapshots(
+        HistoricalProvider(),
+        "HIST.PA",
+        limit=2,
+    )
+
+    assert [snapshot.fiscal_year for snapshot in snapshots] == [2025, 2024]
+    assert [snapshot.market_cap for snapshot in snapshots] == [1_200, 1_100]
 
 
 @pytest.mark.asyncio
