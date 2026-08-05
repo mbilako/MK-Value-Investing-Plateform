@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Search, X } from "lucide-react";
+import { Building2, ChevronDown, Search, X } from "lucide-react";
 
 import type {
   CompanyClient,
@@ -30,6 +30,7 @@ export function IndexBrowserDrawer({
   const [indices, setIndices] = useState<IndexSummary[]>([]);
   const [composition, setComposition] = useState<IndexComposition | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expandedRegion, setExpandedRegion] = useState("Europe");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -39,6 +40,7 @@ export function IndexBrowserDrawer({
     setLoading(true);
     setError(null);
     setSelected(new Set());
+    setQuery("");
     try {
       setComposition(await client.getIndex(code));
     } catch (caughtError) {
@@ -60,7 +62,12 @@ export function IndexBrowserDrawer({
       .then((items) => {
         if (!active) return;
         setIndices(items);
-        if (items[0]) void loadComposition(items[0].code);
+        const initialIndex =
+          items.find((item) => (item.region ?? "Europe") === "Europe") ?? items[0];
+        if (initialIndex) {
+          setExpandedRegion(initialIndex.region ?? "Europe");
+          void loadComposition(initialIndex.code);
+        }
       })
       .catch((caughtError) => {
         if (!active) return;
@@ -155,34 +162,44 @@ export function IndexBrowserDrawer({
                   return groups;
                 }, new Map<string, IndexSummary[]>()),
               ).sort(([left], [right]) => byFrenchName(left, right));
+              const isExpanded = expandedRegion === region;
               return (
                 <section key={region} aria-label={`Indices ${region}`}>
-                  <strong>{region}</strong>
-                  <div className="index-countries">
-                    {countries.map(([country, countryIndices]) => (
-                      <div className="index-country" key={country}>
-                        <span>{country}</span>
-                        <div
-                          className="index-tabs"
-                          role="tablist"
-                          aria-label={`Indices ${country}`}
-                        >
-                          {[...countryIndices]
-                            .sort((left, right) => byFrenchName(left.name, right.name))
-                            .map((index) => (
-                              <button
-                                key={index.code}
-                                role="tab"
-                                aria-selected={composition?.code === index.code}
-                                onClick={() => void loadComposition(index.code)}
-                              >
-                                {index.name}
-                              </button>
-                            ))}
+                  <button
+                    className="index-region-toggle"
+                    aria-expanded={isExpanded}
+                    onClick={() => setExpandedRegion(isExpanded ? "" : region)}
+                  >
+                    <span>{region}</span>
+                    <ChevronDown aria-hidden="true" size={18} />
+                  </button>
+                  {isExpanded && (
+                    <div className="index-countries">
+                      {countries.map(([country, countryIndices]) => (
+                        <div className="index-country" key={country}>
+                          <span>{country}</span>
+                          <div
+                            className="index-tabs"
+                            role="tablist"
+                            aria-label={`Indices ${country}`}
+                          >
+                            {[...countryIndices]
+                              .sort((left, right) => byFrenchName(left.name, right.name))
+                              .map((index) => (
+                                <button
+                                  key={index.code}
+                                  role="tab"
+                                  aria-selected={composition?.code === index.code}
+                                  onClick={() => void loadComposition(index.code)}
+                                >
+                                  {index.name}
+                                </button>
+                              ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
               );
             })}
@@ -230,6 +247,11 @@ export function IndexBrowserDrawer({
             <p className="index-loading">Chargement de la composition…</p>
           ) : (
             <div className="index-list">
+              {visible.length === 0 && composition && (
+                <p className="index-empty">
+                  {"Aucune entreprise ne correspond \\u00e0 cette recherche."}
+                </p>
+              )}
               {visible.map((company) => (
                 <label className="index-company" key={constituentKey(company)}>
                   <input

@@ -724,6 +724,75 @@ describe("MK-VIP authentication", () => {
     ]);
     expect(await screen.findByText("AAPL")).toBeInTheDocument();
   });
+
+  it("shows the selected index constituents and expands one zone at a time", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "CAC40",
+              name: "CAC 40",
+              isin: null,
+              market: "XPAR",
+              provider: "Euronext",
+              region: "Europe",
+              country: "France",
+            },
+            {
+              code: "SP500",
+              name: "S&P 500",
+              isin: null,
+              market: "XNYS",
+              provider: "S&P Dow Jones Indices",
+              region: "\u00c9tats-Unis",
+              country: "\u00c9tats-Unis",
+            },
+          ],
+          getIndex: async (code) => ({
+            code,
+            name: code === "CAC40" ? "CAC 40" : "S&P 500",
+            isin: null,
+            market: code === "CAC40" ? "XPAR" : "XNYS",
+            provider: "Test",
+            as_of: "05/08/2026",
+            source_url: "https://example.test",
+            constituents: code === "CAC40"
+              ? [{
+                  name: "Airbus",
+                  ticker: "AIR.PA",
+                  mic: "XPAR",
+                  trading_location: "Euronext Paris",
+                  country: "France",
+                }]
+              : [{
+                  name: "Apple Inc.",
+                  ticker: "AAPL",
+                  mic: "XNAS",
+                  trading_location: "Nasdaq",
+                  country: "\u00c9tats-Unis",
+                }],
+          }),
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    expect(await screen.findByRole("checkbox", { name: /Airbus/ })).toBeInTheDocument();
+
+    const europe = screen.getByRole("button", { name: "Europe" });
+    const unitedStates = screen.getByRole("button", { name: "\u00c9tats-Unis" });
+    await user.click(unitedStates);
+    expect(europe).toHaveAttribute("aria-expanded", "false");
+    expect(unitedStates).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(screen.getByRole("tab", { name: "S&P 500" }));
+    expect(await screen.findByRole("checkbox", { name: /Apple Inc./ })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Airbus/ })).not.toBeInTheDocument();
+  });
 });
 
 describe("MK-VIP dashboard", () => {
