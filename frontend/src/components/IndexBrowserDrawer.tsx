@@ -14,6 +14,14 @@ interface IndexBrowserDrawerProps {
   onClose(): void;
 }
 
+const constituentKey = (company: IndexComposition["constituents"][number]) =>
+  company.isin ?? company.ticker ?? company.name;
+
+const regionOrder = ["Europe", "États-Unis"];
+
+const byFrenchName = (left: string, right: string) =>
+  left.localeCompare(right, "fr", { sensitivity: "base" });
+
 export function IndexBrowserDrawer({
   client,
   onComplete,
@@ -68,7 +76,9 @@ export function IndexBrowserDrawer({
     const normalized = query.trim().toLocaleLowerCase("fr");
     if (!normalized) return composition?.constituents ?? [];
     return (composition?.constituents ?? []).filter((item) =>
-      `${item.name} ${item.isin}`.toLocaleLowerCase("fr").includes(normalized),
+      `${item.name} ${item.isin ?? ""} ${item.ticker ?? ""}`
+        .toLocaleLowerCase("fr")
+        .includes(normalized),
     );
   }, [composition, query]);
 
@@ -88,13 +98,19 @@ export function IndexBrowserDrawer({
     try {
       const result = await client.addIndexCompanies(
         composition.constituents
-          .filter((item) => selected.has(item.isin))
+          .filter((item) => selected.has(constituentKey(item)))
           .map((item) => ({ ...item, index_code: composition.code })),
       );
       onComplete(result);
       if (result.errors.length === 0) onClose();
       else {
-        setSelected(new Set(result.errors.map((item) => item.isin)));
+        setSelected(
+          new Set(
+            result.errors.map(
+              (item) => item.isin ?? item.ticker ?? item.name,
+            ),
+          ),
+        );
         setError(
           `${result.created.length + result.existing.length} entreprise(s) ajoutée(s). ` +
             `${result.errors.length} ticker(s) n’ont pas pu être résolus.`,
@@ -126,17 +142,50 @@ export function IndexBrowserDrawer({
           </button>
         </header>
         <div className="index-drawer__body">
-          <div className="index-tabs" role="tablist" aria-label="Indices disponibles">
-            {indices.map((index) => (
-              <button
-                key={index.code}
-                role="tab"
-                aria-selected={composition?.code === index.code}
-                onClick={() => void loadComposition(index.code)}
-              >
-                {index.name}
-              </button>
-            ))}
+          <div className="index-catalog">
+            {regionOrder.map((region) => {
+              const regionalIndices = indices.filter(
+                (index) => (index.region ?? "Europe") === region,
+              );
+              if (!regionalIndices.length) return null;
+              const countries = Array.from(
+                regionalIndices.reduce((groups, index) => {
+                  const country = index.country ?? "Non renseigné";
+                  groups.set(country, [...(groups.get(country) ?? []), index]);
+                  return groups;
+                }, new Map<string, IndexSummary[]>()),
+              ).sort(([left], [right]) => byFrenchName(left, right));
+              return (
+                <section key={region} aria-label={`Indices ${region}`}>
+                  <strong>{region}</strong>
+                  <div className="index-countries">
+                    {countries.map(([country, countryIndices]) => (
+                      <div className="index-country" key={country}>
+                        <span>{country}</span>
+                        <div
+                          className="index-tabs"
+                          role="tablist"
+                          aria-label={`Indices ${country}`}
+                        >
+                          {[...countryIndices]
+                            .sort((left, right) => byFrenchName(left.name, right.name))
+                            .map((index) => (
+                              <button
+                                key={index.code}
+                                role="tab"
+                                aria-selected={composition?.code === index.code}
+                                onClick={() => void loadComposition(index.code)}
+                              >
+                                {index.name}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </div>
           <div className="index-toolbar">
             <label className="search-field">
@@ -153,16 +202,20 @@ export function IndexBrowserDrawer({
               disabled={visible.length === 0}
               onClick={() =>
                 setSelected((current) => {
-                  const allVisible = visible.every((item) => current.has(item.isin));
-                  const next = new Set(current);
-                  visible.forEach((item) =>
-                    allVisible ? next.delete(item.isin) : next.add(item.isin),
+                  const allVisible = visible.every((item) =>
+                    current.has(constituentKey(item)),
                   );
+                  const next = new Set(current);
+                  visible.forEach((item) => {
+                    const key = constituentKey(item);
+                    if (allVisible) next.delete(key);
+                    else next.add(key);
+                  });
                   return next;
                 })
               }
             >
-              {visible.every((item) => selected.has(item.isin)) && visible.length
+              {visible.every((item) => selected.has(constituentKey(item))) && visible.length
                 ? "Désélectionner"
                 : "Tout sélectionner"}
             </button>
@@ -178,16 +231,18 @@ export function IndexBrowserDrawer({
           ) : (
             <div className="index-list">
               {visible.map((company) => (
-                <label className="index-company" key={company.isin}>
+                <label className="index-company" key={constituentKey(company)}>
                   <input
                     type="checkbox"
-                    checked={selected.has(company.isin)}
-                    onChange={() => toggle(company.isin)}
+                    checked={selected.has(constituentKey(company))}
+                    onChange={() => toggle(constituentKey(company))}
                   />
                   <Building2 aria-hidden="true" size={18} />
                   <span>
                     <strong>{company.name}</strong>
-                    <small>{company.isin} · {company.trading_location}</small>
+                    <small>
+                      {company.ticker ?? company.isin} · {company.trading_location}
+                    </small>
                   </span>
                   <small>{company.country}</small>
                 </label>

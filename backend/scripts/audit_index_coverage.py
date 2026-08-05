@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from mkvip.core.config import get_settings
 from mkvip.providers.base import ProviderDataError
 from mkvip.providers.esef import ESEFFilingsProvider
-from mkvip.providers.euronext import EuronextIndexProvider
 from mkvip.providers.fallback import FallbackFinancialDataProvider
+from mkvip.providers.index_catalog import IndexCatalogProvider
 from mkvip.providers.normalization import load_historical_snapshots
 from mkvip.providers.sec import SecEdgarProvider
 from mkvip.providers.yahoo import YahooExecutionGuard, YahooFinanceProvider
@@ -19,20 +19,33 @@ MARKET_SUFFIXES = {
     "XAMS": (".AS",),
     "XBRU": (".BR",),
     "XLIS": (".LS",),
+    "XDUB": (".IR",),
+    "XETR": (".DE",),
+    "XLON": (".L",),
+    "XMAD": (".MC",),
+    "XMIL": (".MI",),
+    "XSWX": (".SW",),
 }
 
 
 @dataclass
 class AuditCompany:
     name: str
-    isin: str
+    isin: str | None
+    ticker: str | None
     mic: str
     indices: set[str] = field(default_factory=set)
 
+    @property
+    def identifier(self) -> str:
+        return self.isin or self.ticker or self.name
+
 
 async def resolve_ticker(yahoo: YahooFinanceProvider, company: AuditCompany) -> str | None:
+    if company.ticker and company.mic in {"XNAS", "XNYS", "ARCX"}:
+        return company.ticker
     suffixes = MARKET_SUFFIXES.get(company.mic, ())
-    for query in (company.isin, company.name):
+    for query in tuple(value for value in (company.isin, company.name) if value):
         try:
             matches = await yahoo.search_company(query)
         except ProviderDataError:
@@ -100,12 +113,17 @@ async def main() -> None:
     parser.add_argument(
         "--indices",
         nargs="+",
-        default=["CAC40", "CACNEXT20", "SBF120"],
+        default=None,
     )
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--timeout", type=float, default=75)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--isins", nargs="+")
+    parser.add_argument(
+        "--composition-only",
+        action="store_true",
+        help="Contrôle uniquement la disponibilité et le volume des compositions.",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -120,29 +138,55 @@ async def main() -> None:
         SecEdgarProvider(yahoo, user_agent=settings.sec_user_agent),
         ESEFFilingsProvider(yahoo, user_agent=settings.sec_user_agent),
     )
-    index_provider = EuronextIndexProvider()
+    index_provider = IndexCatalogProvider()
+    index_codes = args.indices or [
+        index.code for index in index_provider.list_indices()
+    ]
     companies: dict[str, AuditCompany] = {}
-    index_isins: dict[str, set[str]] = {}
-    for index_code in args.indices:
+    index_identifiers: dict[str, set[str]] = {}
+    for index_code in index_codes:
         composition = await index_provider.get_composition(index_code)
-        index_isins[composition.code] = {
-            constituent.isin for constituent in composition.constituents
+        index_identifiers[composition.code] = {
+            constituent.isin or constituent.ticker or constituent.name
+            for constituent in composition.constituents
         }
         for constituent in composition.constituents:
+            identifier = constituent.isin or constituent.ticker or constituent.name
             company = companies.setdefault(
-                constituent.isin,
+                identifier,
                 AuditCompany(
                     name=constituent.name,
                     isin=constituent.isin,
+                    ticker=constituent.ticker,
                     mic=constituent.mic,
                 ),
             )
             company.indices.add(composition.code)
 
+    if args.composition_only:
+        print(
+            json.dumps(
+                {
+                    "summary": {
+                        "index_components": {
+                            code: len(identifiers)
+                            for code, identifiers in index_identifiers.items()
+                        },
+                        "unique_components": len(companies),
+                    }
+                },
+                ensure_ascii=False,
+            )
+        )
+        return
+
     selected = list(companies.values())
     if args.isins:
         requested_isins = {isin.upper() for isin in args.isins}
-        selected = [company for company in selected if company.isin in requested_isins]
+        selected = [
+            company for company in selected
+            if company.identifier in requested_isins
+        ]
     if args.limit is not None:
         selected = selected[: args.limit]
     semaphore = asyncio.Semaphore(args.concurrency)
@@ -166,13 +210,20 @@ async def main() -> None:
             result["status"] == "data_missing" for result in results
         ),
         "index_components": {
-            code: len(isins) for code, isins in index_isins.items()
+            code: len(identifiers)
+            for code, identifiers in index_identifiers.items()
         },
         "unique_components": len(companies),
-        "cac40_in_sbf120": index_isins.get("CAC40", set())
-        <= index_isins.get("SBF120", set()),
-        "cacnext20_in_sbf120": index_isins.get("CACNEXT20", set())
-        <= index_isins.get("SBF120", set()),
+        "cac40_in_sbf120": (
+            index_identifiers["CAC40"] <= index_identifiers["SBF120"]
+            if {"CAC40", "SBF120"} <= index_identifiers.keys()
+            else None
+        ),
+        "cacnext20_in_sbf120": (
+            index_identifiers["CACNEXT20"] <= index_identifiers["SBF120"]
+            if {"CACNEXT20", "SBF120"} <= index_identifiers.keys()
+            else None
+        ),
     }
     print(json.dumps({"summary": summary}, ensure_ascii=False), flush=True)
 

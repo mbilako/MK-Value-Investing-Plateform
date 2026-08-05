@@ -12,6 +12,21 @@ interface CompanyUniverseProps {
   onManage: (company: Company) => void;
 }
 
+const INDEX_LABELS: Record<string, string> = {
+  CAC40: "CAC 40",
+  CACNEXT20: "CAC Next 20",
+  SBF120: "SBF 120",
+  BEL20: "BEL 20",
+  ISEQ20: "ISEQ 20",
+  DAX40: "DAX 40",
+  FTSE100: "FTSE 100",
+  IBEX35: "IBEX 35",
+  FTSEMIB: "FTSE MIB",
+  DOWJONES: "Dow Jones",
+  SP500: "S&P 500",
+  NASDAQ100: "Nasdaq-100",
+};
+
 export function CompanyUniverse({
   companies,
   scores,
@@ -66,7 +81,7 @@ export function CompanyUniverse({
                   {company.index_memberships?.length ? (
                     <span className="index-badges">
                       {company.index_memberships.map((index) => (
-                        <small key={index}>{index.replace("CACNEXT20", "CAC Next 20")}</small>
+                        <small key={index}>{INDEX_LABELS[index] ?? index}</small>
                       ))}
                     </span>
                   ) : null}

@@ -25,17 +25,21 @@ export interface Company extends CompanyPayload {
 export interface IndexSummary {
   code: string;
   name: string;
-  isin: string;
+  isin: string | null;
   market: string;
   provider: string;
+  region?: string;
+  country?: string;
 }
 
 export interface IndexConstituent {
   name: string;
-  isin: string;
+  isin?: string | null;
+  ticker?: string | null;
   mic: string;
   trading_location: string;
   country: string;
+  currency?: string;
 }
 
 export interface IndexComposition extends IndexSummary {
@@ -51,7 +55,12 @@ export interface IndexCompanySelection extends IndexConstituent {
 export interface IndexBulkAddResult {
   created: Company[];
   existing: Company[];
-  errors: Array<{ name: string; isin: string; detail: string }>;
+  errors: Array<{
+    name: string;
+    isin?: string | null;
+    ticker?: string | null;
+    detail: string;
+  }>;
 }
 
 export interface User {

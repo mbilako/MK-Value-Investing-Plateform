@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Sprint 1H — indices européens et américains, tranche 1
+
+- Livre la tranche 2 ciblée : DAX 40, FTSE 100, IBEX 35, FTSE MIB, SMI et
+  Dow Jones, sans Euro Stoxx 50, STOXX Europe 600 ni famille Russell.
+- Classe le catalogue par zone, puis par pays, et trie les pays et indices par
+  ordre alphabétique français.
+- Lit les positions publiques iShares/BlackRock pour l’Allemagne, le
+  Royaume-Uni, l’Italie et la Suisse, le fichier quotidien State Street pour le
+  Dow Jones et le référentiel BME pour l’IBEX 35.
+- Résout les tickers européens sur leur place primaire (`.DE`, `.L`, `.MC`,
+  `.MI`, `.SW`) avant l’ajout à l’univers.
+
+- Organise l’explorateur en catalogue multi-fournisseurs par région.
+- Ajoute les indices européens AEX, BEL 20, PSI et ISEQ 20 depuis les
+  compositions publiques Euronext.
+- Ajoute le S&P 500 depuis les positions publiques de l’iShares Core S&P 500
+  ETF et le Nasdaq-100 depuis l’API publique Nasdaq.
+- Accepte les composantes identifiées directement par ticker lorsque l’ISIN
+  n’est pas publié, avec devise USD et place de cotation américaine.
+- Porte l’ajout multiple à 600 titres et étend l’audit aux neuf indices, soit
+  721 lignes de cotation uniques au contrôle du 5 août 2026.
+
 - Simplifie le parcours principal autour de l’explorateur d’indices et retire
   l’import manuel d’entreprise de l’interface.
 - Charge jusqu’à dix exercices publics, complète les années manquantes sans

@@ -75,6 +75,39 @@ ticker et la disponibilité d’au moins un exercice normalisable pour chaque
 composante. Au 4 août 2026, le contrôle exhaustif du SBF 120 retourne
 **120 sociétés couvertes sur 120**, sans ticker ni historique manquant.
 
+### Extension européenne et américaine
+
+Depuis la version 0.12, le même flux Euronext couvre également l’**AEX**, le
+**BEL 20**, le **PSI** et l’**ISEQ 20**. Les composantes conservent leur ISIN,
+leur marché MIC, leur place de cotation et leur pays d’émission.
+
+Le **S&P 500** est construit à partir du fichier de positions public de
+l’iShares Core S&P 500 ETF. Le fichier fournit le ticker, le nom, la place de
+cotation, le pays et la devise ; les lignes de trésorerie et de dérivés sont
+écartées automatiquement.
+
+Le **Nasdaq-100** est lu depuis l’API publique Nasdaq. Le ticker officiel est
+utilisé directement afin de ne pas dépendre d’une saisie ou d’une résolution
+approximative par nom.
+
+La deuxième tranche ajoute exclusivement les indices nationaux demandés :
+
+- **DAX 40**, **FTSE 100** et **FTSE MIB** depuis l’API publique de positions
+  iShares/BlackRock, après exclusion de la trésorerie et des dérivés ;
+- **SMI** depuis le flux public des positions de l’iShares SMI ETF suisse ;
+- **Dow Jones Industrial Average** depuis le fichier quotidien des positions
+  du State Street SPDR DIA ;
+- **IBEX 35** depuis le référentiel BME, dont la dernière revue de juin 2026 ne
+  comportait ni inclusion ni exclusion.
+
+Les indices sont présentés par zone puis par pays. Euro Stoxx 50, STOXX Europe
+600 et les familles Russell restent volontairement hors périmètre.
+
+Au 5 août 2026, l’audit de composition retourne : AEX 30, BEL 20 20, PSI 16,
+ISEQ 20 20, S&P 500 504 lignes de titres et Nasdaq-100 102 titres. Les écarts
+entre le nom commercial d’un indice et le nombre de lignes proviennent
+notamment des différentes classes d’actions d’un même émetteur.
+
 ## Identifiants et traçabilité
 
 Chaque entreprise peut conserver :

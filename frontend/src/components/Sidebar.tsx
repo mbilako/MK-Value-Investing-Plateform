@@ -43,7 +43,7 @@ export function Sidebar() {
       </nav>
       <div className="sidebar__foot">
         <span className="status-dot" aria-hidden="true" />
-        Version 0.11 Sécurité renforcée
+        Version 0.12 Indices internationaux
       </div>
     </aside>
   );

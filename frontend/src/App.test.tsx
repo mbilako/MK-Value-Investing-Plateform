@@ -642,6 +642,88 @@ describe("MK-VIP authentication", () => {
     ]);
     expect(await screen.findByText("ABVX.PA")).toBeInTheDocument();
   });
+
+  it("groups US indices and adds a company from its official ticker", async () => {
+    const user = userEvent.setup();
+    const addIndexCompanies = vi.fn().mockResolvedValue({
+      created: [
+        {
+          id: "company-apple",
+          name: "Apple Inc.",
+          ticker: "AAPL",
+          exchange: "Nasdaq",
+          country: "États-Unis",
+          currency: "USD",
+          status: "pending",
+          index_memberships: ["NASDAQ100"],
+        },
+      ],
+      existing: [],
+      errors: [],
+    });
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "NASDAQ100",
+              name: "Nasdaq-100",
+              isin: null,
+              market: "XNAS",
+              provider: "Nasdaq",
+              region: "États-Unis",
+              country: "États-Unis",
+            },
+          ],
+          getIndex: async () => ({
+            code: "NASDAQ100",
+            name: "Nasdaq-100",
+            isin: null,
+            market: "XNAS",
+            provider: "Nasdaq",
+            region: "États-Unis",
+            country: "États-Unis",
+            as_of: "Aug 4, 2026",
+            source_url: "https://api.nasdaq.com/example",
+            constituents: [
+              {
+                name: "Apple Inc.",
+                ticker: "AAPL",
+                mic: "XNAS",
+                trading_location: "Nasdaq",
+                country: "États-Unis",
+                currency: "USD",
+              },
+            ],
+          }),
+          addIndexCompanies,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    expect(
+      await screen.findByRole("region", { name: "Indices États-Unis" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tablist", { name: "Indices États-Unis" }),
+    ).toBeInTheDocument();
+    await user.click(await screen.findByRole("checkbox", { name: /Apple Inc./ }));
+    await user.click(
+      screen.getByRole("button", { name: "Ajouter 1 à l’univers" }),
+    );
+
+    expect(addIndexCompanies).toHaveBeenCalledWith([
+      expect.objectContaining({
+        ticker: "AAPL",
+        currency: "USD",
+        index_code: "NASDAQ100",
+      }),
+    ]);
+    expect(await screen.findByText("AAPL")).toBeInTheDocument();
+  });
 });
 
 describe("MK-VIP dashboard", () => {
@@ -655,7 +737,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
     expect(
-      screen.getByText("Version 0.11 Sécurité renforcée"),
+      screen.getByText("Version 0.12 Indices internationaux"),
     ).toBeInTheDocument();
   });
 

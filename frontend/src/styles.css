@@ -1381,14 +1381,53 @@ a:focus-visible {
   padding: 24px 32px 0;
 }
 
+.index-catalog {
+  display: grid;
+  gap: 12px;
+}
+
+.index-catalog > section {
+  display: grid;
+  gap: 6px;
+}
+
+.index-catalog > section > strong {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.index-countries {
+  display: grid;
+  gap: 8px;
+}
+
+.index-country {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.index-country > span {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .index-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
   gap: 6px;
   padding: 5px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--subtle);
+}
+
+.index-country .index-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
 }
 
 .index-tabs button {
@@ -2645,6 +2684,10 @@ section[id] {
 @media (max-width: 700px) {
   .auth-shell {
     padding: 18px 12px;
+  }
+
+  .index-country {
+    grid-template-columns: 1fr;
   }
 
   .auth-card {

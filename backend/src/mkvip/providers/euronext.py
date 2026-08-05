@@ -31,6 +31,7 @@ class EuronextIndex:
     name: str
     isin: str
     market: str = "XPAR"
+    country: str = "France"
 
     @property
     def instrument(self) -> str:
@@ -41,6 +42,10 @@ INDEXES = (
     EuronextIndex("CAC40", "CAC 40", "FR0003500008"),
     EuronextIndex("CACNEXT20", "CAC Next 20", "QS0010989109"),
     EuronextIndex("SBF120", "SBF 120", "FR0003999481"),
+    EuronextIndex("AEX", "AEX", "NL0000000107", "XAMS", "Pays-Bas"),
+    EuronextIndex("BEL20", "BEL 20", "BE0389555039", "XBRU", "Belgique"),
+    EuronextIndex("PSI", "PSI", "PTING0200002", "XLIS", "Portugal"),
+    EuronextIndex("ISEQ20", "ISEQ 20", "IE00B0500264", "XDUB", "Irlande"),
 )
 
 
@@ -68,6 +73,8 @@ class EuronextIndexProvider:
                 isin=index.isin,
                 market=index.market,
                 provider=self.name,
+                region="Europe",
+                country=index.country,
             )
             for index in INDEXES
         ]
@@ -183,6 +190,7 @@ def _parse_composition(
                 mic=link.group("mic").upper(),
                 trading_location=trading_location,
                 country=country,
+                currency="EUR",
             )
         )
         seen.add(isin)
@@ -196,6 +204,8 @@ def _parse_composition(
         isin=index.isin,
         market=index.market,
         provider="Euronext",
+        region="Europe",
+        country=index.country,
         as_of=date_match.group(1).strip() if date_match else None,
         source_url=source_url,
         constituents=constituents,

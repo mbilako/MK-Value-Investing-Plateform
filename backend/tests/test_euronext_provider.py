@@ -1,9 +1,24 @@
 from mkvip.providers.euronext import EuronextIndex, EuronextIndexProvider, _parse_composition
 
 
-def test_supported_indices_include_cac_next_20() -> None:
-    names = [index.name for index in EuronextIndexProvider(fetch_json=lambda _: {}).list_indices()]
-    assert names == ["CAC 40", "CAC Next 20", "SBF 120"]
+def test_supported_indices_include_major_euronext_markets() -> None:
+    indices = EuronextIndexProvider(fetch_json=lambda _: {}).list_indices()
+    names = [index.name for index in indices]
+    assert names == [
+        "CAC 40",
+        "CAC Next 20",
+        "SBF 120",
+        "AEX",
+        "BEL 20",
+        "PSI",
+        "ISEQ 20",
+    ]
+    assert [(index.name, index.country) for index in indices[-4:]] == [
+        ("AEX", "Pays-Bas"),
+        ("BEL 20", "Belgique"),
+        ("PSI", "Portugal"),
+        ("ISEQ 20", "Irlande"),
+    ]
 
 
 def test_parses_euronext_composition_rows() -> None:
@@ -25,7 +40,9 @@ def test_parses_euronext_composition_rows() -> None:
     assert result.constituents[0].model_dump() == {
         "name": "AIR LIQUIDE",
         "isin": "FR0000120073",
+        "ticker": None,
         "mic": "XPAR",
         "trading_location": "Euronext Paris",
         "country": "France",
+        "currency": "EUR",
     }

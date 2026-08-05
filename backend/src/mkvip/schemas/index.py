@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from mkvip.schemas.company import CompanyRead
 
@@ -6,17 +6,27 @@ from mkvip.schemas.company import CompanyRead
 class IndexSummaryRead(BaseModel):
     code: str
     name: str
-    isin: str
+    isin: str | None = None
     market: str
     provider: str
+    region: str = "Europe"
+    country: str = "Non renseigné"
 
 
 class IndexConstituentRead(BaseModel):
     name: str
-    isin: str
+    isin: str | None = None
+    ticker: str | None = None
     mic: str
     trading_location: str
     country: str
+    currency: str = "EUR"
+
+    @model_validator(mode="after")
+    def require_security_identifier(self):
+        if not self.isin and not self.ticker:
+            raise ValueError("Un ISIN ou un ticker est requis.")
+        return self
 
 
 class IndexCompositionRead(IndexSummaryRead):
@@ -35,12 +45,13 @@ class IndexCompanySelection(IndexConstituentRead):
 
 
 class IndexBulkAddCreate(BaseModel):
-    companies: list[IndexCompanySelection] = Field(min_length=1, max_length=120)
+    companies: list[IndexCompanySelection] = Field(min_length=1, max_length=600)
 
 
 class IndexBulkAddError(BaseModel):
     name: str
-    isin: str
+    isin: str | None = None
+    ticker: str | None = None
     detail: str
 
 

@@ -74,6 +74,17 @@ class IsinAwareDiscoveryProvider:
         ]
 
 
+class SpanishDiscoveryProvider:
+    async def search_company(self, query: str):
+        return [
+            ProviderCompanySearchResult(
+                ticker="SAN.MC",
+                name="Banco Santander",
+                exchange="Bolsa de Madrid",
+            )
+        ]
+
+
 def test_lists_cac_next_20_and_its_constituents(client: TestClient) -> None:
     app.dependency_overrides[get_index_provider] = FakeIndexProvider
     try:
@@ -144,6 +155,58 @@ def test_bulk_add_resolves_the_primary_market_from_isin(client: TestClient) -> N
     assert response.status_code == 200
     assert response.json()["created"][0]["ticker"] == "SCR.PA"
     assert response.json()["created"][0]["exchange"] == "Paris"
+
+
+def test_bulk_add_uses_official_us_ticker_and_currency(client: TestClient) -> None:
+    payload = {
+        "companies": [
+            {
+                "name": "Apple Inc.",
+                "ticker": "AAPL",
+                "mic": "XNAS",
+                "trading_location": "Nasdaq",
+                "country": "États-Unis",
+                "currency": "USD",
+                "index_code": "NASDAQ100",
+            }
+        ]
+    }
+
+    response = client.post("/api/v1/indices/companies/bulk", json=payload)
+
+    assert response.status_code == 200
+    company = response.json()["created"][0]
+    assert company["ticker"] == "AAPL"
+    assert company["currency"] == "USD"
+    assert company["index_memberships"] == ["NASDAQ100"]
+
+
+def test_bulk_add_resolves_a_european_index_ticker_to_yahoo_market(
+    client: TestClient,
+) -> None:
+    app.dependency_overrides[get_company_discovery_provider] = SpanishDiscoveryProvider
+    payload = {
+        "companies": [
+            {
+                "name": "Banco Santander",
+                "ticker": "SAN",
+                "mic": "XMAD",
+                "trading_location": "Bolsa de Madrid",
+                "country": "Espagne",
+                "currency": "EUR",
+                "index_code": "IBEX35",
+            }
+        ]
+    }
+    try:
+        response = client.post("/api/v1/indices/companies/bulk", json=payload)
+    finally:
+        app.dependency_overrides.pop(get_company_discovery_provider, None)
+
+    assert response.status_code == 200
+    company = response.json()["created"][0]
+    assert company["ticker"] == "SAN.MC"
+    assert company["index_memberships"] == ["IBEX35"]
 
 
 def test_bulk_add_repairs_an_existing_secondary_market_ticker(

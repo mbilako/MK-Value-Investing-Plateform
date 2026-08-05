@@ -11,8 +11,8 @@ from mkvip.providers.ai import AIAnalystProvider, AIProviderError, OpenAIAnalyst
 from mkvip.providers.base import FinancialDataProvider
 from mkvip.providers.email import EmailSender, SmtpEmailSender
 from mkvip.providers.esef import ESEFFilingsProvider
-from mkvip.providers.euronext import EuronextIndexProvider
 from mkvip.providers.fallback import FallbackFinancialDataProvider
+from mkvip.providers.index_catalog import IndexCatalogProvider
 from mkvip.providers.sec import SecEdgarProvider
 from mkvip.providers.yahoo import YahooExecutionGuard, YahooFinanceProvider
 from mkvip.repositories.company import CompanyRepository
@@ -119,11 +119,11 @@ def get_company_discovery_provider(
 
 
 @lru_cache
-def _get_index_provider() -> EuronextIndexProvider:
-    return EuronextIndexProvider()
+def _get_index_provider() -> IndexCatalogProvider:
+    return IndexCatalogProvider()
 
 
-def get_index_provider(request: Request) -> EuronextIndexProvider:
+def get_index_provider(request: Request) -> IndexCatalogProvider:
     override = getattr(request.app.state, "index_provider", None)
     return override or _get_index_provider()
 
