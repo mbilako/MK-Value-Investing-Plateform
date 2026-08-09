@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FileUp, Inbox, Landmark, Search, Settings2 } from "lucide-react";
+import { FileUp, Inbox, Landmark, Search, Settings2, Star } from "lucide-react";
 
 import type { Company } from "../api/client";
 
@@ -10,6 +10,7 @@ interface CompanyUniverseProps {
   onFinancialImport: (company: Company) => void;
   onAnalysis: (company: Company) => void;
   onManage: (company: Company) => void;
+  onToggleFavorite: (company: Company, isFavorite: boolean) => void;
 }
 
 const INDEX_LABELS: Record<string, string> = {
@@ -25,6 +26,7 @@ const INDEX_LABELS: Record<string, string> = {
   DOWJONES: "Dow Jones",
   SP500: "S&P 500",
   NASDAQ100: "Nasdaq-100",
+  ATHEXCOMP: "ATHEX Composite",
 };
 
 export function CompanyUniverse({
@@ -34,6 +36,7 @@ export function CompanyUniverse({
   onFinancialImport,
   onAnalysis,
   onManage,
+  onToggleFavorite,
 }: CompanyUniverseProps) {
   const [query, setQuery] = useState("");
   const scoreFor = (company: Company) =>
@@ -110,6 +113,31 @@ export function CompanyUniverse({
                       {scoreFor(company) != null && (
                         <strong>MK Score {scoreFor(company)}</strong>
                       )}
+                    </button>
+                  )}
+                  {scoreFor(company) != null && (
+                    <button
+                      className="row-favorite"
+                      data-favorite={company.is_favorite || undefined}
+                      onClick={() =>
+                        onToggleFavorite(company, !company.is_favorite)
+                      }
+                      aria-label={
+                        company.is_favorite
+                          ? `Retirer ${company.name} des favoris`
+                          : `Ajouter ${company.name} aux favoris`
+                      }
+                      title={
+                        company.is_favorite
+                          ? "Retirer des favoris"
+                          : "Ajouter aux favoris"
+                      }
+                    >
+                      <Star
+                        aria-hidden="true"
+                        size={17}
+                        fill={company.is_favorite ? "currentColor" : "none"}
+                      />
                     </button>
                   )}
                   <button

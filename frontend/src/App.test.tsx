@@ -575,6 +575,94 @@ describe("MK-VIP authentication", () => {
     expect(await screen.findByText("Air Liquide SA")).toBeInTheDocument();
   });
 
+  it("deletes a Greek company with an inline confirmation", async () => {
+    const user = userEvent.setup();
+    const deleteCompany = vi.fn().mockResolvedValue(undefined);
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => [
+            {
+              id: "company-greek",
+              name: "ALPHA SERVICES AND HOLDINGS",
+              ticker: "ALPHA.AT",
+              exchange: "Euronext Athens",
+              country: "Grèce",
+              currency: "EUR",
+              status: "pending",
+              index_memberships: ["ATHEXCOMP"],
+            },
+          ],
+          deleteCompany,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Modifier ou retirer ALPHA SERVICES AND HOLDINGS",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Supprimer définitivement" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Confirmer la suppression définitive de ALPHA SERVICES AND HOLDINGS",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirmer la suppression" }),
+    );
+
+    expect(deleteCompany).toHaveBeenCalledWith("company-greek");
+    expect(
+      screen.queryByText("ALPHA SERVICES AND HOLDINGS"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a scored company in the persistent favorites space", async () => {
+    const user = userEvent.setup();
+    const company = {
+      id: "company-favorite",
+      name: "AEGEAN AIRLINES",
+      ticker: "AEGN.AT",
+      exchange: "Euronext Athens",
+      country: "Grèce",
+      currency: "EUR",
+      status: "ready" as const,
+      latest_mk_score: 70,
+      is_favorite: false,
+    };
+    const updateCompany = vi.fn().mockImplementation(async (_id, payload) => ({
+      ...company,
+      ...payload,
+    }));
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => [company],
+          updateCompany,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Ajouter AEGEAN AIRLINES aux favoris",
+      }),
+    );
+
+    expect(updateCompany).toHaveBeenCalledWith("company-favorite", {
+      is_favorite: true,
+    });
+    const favorites = screen.getByRole("region", { name: "Favoris" });
+    expect(within(favorites).getByText("AEGEAN AIRLINES")).toBeInTheDocument();
+    expect(
+      within(favorites).getByRole("button", {
+        name: "Retirer AEGEAN AIRLINES des favoris",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("adds selected CAC Next 20 constituents without entering a ticker", async () => {
     const user = userEvent.setup();
     const addIndexCompanies = vi.fn().mockResolvedValue({

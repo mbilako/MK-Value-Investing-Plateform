@@ -11,6 +11,7 @@ export interface CompanyPayload {
   lei?: string | null;
   provider_symbols?: Record<string, string>;
   index_memberships?: string[];
+  is_favorite?: boolean;
 }
 
 export interface Company extends CompanyPayload {

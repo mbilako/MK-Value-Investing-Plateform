@@ -55,9 +55,15 @@ async def test_parses_all_athex_composite_pages() -> None:
             return second_page
         return first_page
 
-    composition = await PublicIndexProvider(fetch_text=fetch_text).get_composition(
-        "ATHEXCOMP"
-    )
+    composition = await PublicIndexProvider(
+        fetch_text=fetch_text,
+        fetch_json=lambda _: {
+            "data": [
+                {"Symbol": "EEE", "ISIN": "CH0198251305"},
+                {"Symbol": "TPEIR", "ISIN": "GRS014003032"},
+            ]
+        },
+    ).get_composition("ATHEXCOMP")
 
     assert composition.name == "ATHEX Composite"
     assert composition.isin == "GRI99117A004"
@@ -67,6 +73,7 @@ async def test_parses_all_athex_composite_pages() -> None:
         "TPEIR.AT",
     ]
     assert composition.constituents[0].name == "COCA-COLA HBC AG"
+    assert composition.constituents[0].isin == "CH0198251305"
     assert all(company.mic == "XATH" for company in composition.constituents)
 
 
@@ -181,8 +188,7 @@ def _state_street_workbook() -> bytes:
         + "</sst>"
     )
     sheet_xml = (
-        f'<worksheet xmlns="{namespace}"><sheetData>'
-        f'{"".join(xml_rows)}</sheetData></worksheet>'
+        f'<worksheet xmlns="{namespace}"><sheetData>{"".join(xml_rows)}</sheetData></worksheet>'
     )
     output = BytesIO()
     with ZipFile(output, "w") as archive:
@@ -205,9 +211,21 @@ async def test_parses_state_street_dow_workbook() -> None:
 @pytest.mark.asyncio
 async def test_parses_ishares_sp500_holdings() -> None:
     header = [
-        "Ticker", "Name", "Sector", "Asset Class", "Market Value", "Weight (%)",
-        "Notional Value", "Quantity", "Price", "Location", "Exchange", "Currency",
-        "FX Rate", "Market Currency", "Accrual Date",
+        "Ticker",
+        "Name",
+        "Sector",
+        "Asset Class",
+        "Market Value",
+        "Weight (%)",
+        "Notional Value",
+        "Quantity",
+        "Price",
+        "Location",
+        "Exchange",
+        "Currency",
+        "FX Rate",
+        "Market Currency",
+        "Accrual Date",
     ]
     payload = "\n".join(
         [

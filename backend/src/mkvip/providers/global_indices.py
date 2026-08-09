@@ -82,8 +82,7 @@ INDEXES = (
         market="XMAD",
         provider="BME",
         source_url=(
-            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/"
-            "constituents.html"
+            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/constituents.html"
         ),
         region="Europe",
         country="Espagne",
@@ -96,9 +95,7 @@ INDEXES = (
         isin="GRI99117A004",
         market="XATH",
         provider="Euronext Athens",
-        source_url=(
-            "https://athens.euronext.com/en/market-data/instruments/indices/GD"
-        ),
+        source_url=("https://athens.euronext.com/en/market-data/instruments/indices/GD"),
         region="Europe",
         country="Grèce",
         source_kind="athex",
@@ -296,9 +293,25 @@ class PublicIndexProvider:
         self,
         index: PublicIndex,
     ) -> IndexCompositionRead:
-        overview_html = await asyncio.to_thread(self._fetch_text, index.source_url)
         fragment_url = f"{index.source_url}/fragment-index-composition"
-        first_page = await asyncio.to_thread(self._fetch_text, fragment_url)
+        stocks_url = (
+            "https://athens.euronext.com/sites/default/files/json_data_files/stocks_en.json"
+        )
+        overview_html, first_page = await asyncio.gather(
+            asyncio.to_thread(self._fetch_text, index.source_url),
+            asyncio.to_thread(self._fetch_text, fragment_url),
+        )
+        try:
+            stocks_payload = await asyncio.to_thread(self._fetch_json, stocks_url)
+        except Exception:
+            stocks_payload = {}
+        isins_by_symbol = {
+            str(row.get("Symbol") or "").strip().upper().replace(" ", ""): (
+                str(row.get("ISIN") or "").strip().upper() or None
+            )
+            for row in stocks_payload.get("data") or []
+            if isinstance(row, dict)
+        }
         page_numbers = [int(value) for value in re.findall(r"[?&]page=(\d+)", first_page)]
         last_page = max(page_numbers, default=0)
         remaining_pages = await asyncio.gather(
@@ -310,7 +323,7 @@ class PublicIndexProvider:
         constituents: list[IndexConstituentRead] = []
         seen: set[str] = set()
         for fragment in (first_page, *remaining_pages):
-            for constituent in _parse_athex_rows(index, fragment):
+            for constituent in _parse_athex_rows(index, fragment, isins_by_symbol):
                 if constituent.ticker in seen:
                     continue
                 constituents.append(constituent)
@@ -424,6 +437,7 @@ def _parse_ishares_json_composition(
 def _parse_athex_rows(
     index: PublicIndex,
     payload: str,
+    isins_by_symbol: dict[str, str | None] | None = None,
 ) -> list[IndexConstituentRead]:
     rows = re.findall(r"<tr[^>]*>(.*?)</tr>", payload, re.I | re.S)
     constituents: list[IndexConstituentRead] = []
@@ -453,6 +467,7 @@ def _parse_athex_rows(
             IndexConstituentRead(
                 name=name,
                 ticker=f"{symbol}.AT",
+                isin=(isins_by_symbol or {}).get(symbol),
                 mic=index.market,
                 trading_location=index.trading_location or "Euronext Athens",
                 country=index.country,
@@ -546,9 +561,7 @@ def _parse_ishares_composition(
         raise ProviderDataError(f"La composition {index.name} reçue est illisible.")
     reader = csv.DictReader(
         StringIO(
-            "\n".join(
-                ",".join(_csv_value(value) for value in row) for row in rows[header_index:]
-            )
+            "\n".join(",".join(_csv_value(value) for value in row) for row in rows[header_index:])
         )
     )
     constituents: list[IndexConstituentRead] = []
@@ -591,7 +604,7 @@ def _parse_nasdaq_composition(
     payload: dict[str, Any],
 ) -> IndexCompositionRead:
     data = payload.get("data") or {}
-    rows = ((data.get("data") or {}).get("rows") or [])
+    rows = (data.get("data") or {}).get("rows") or []
     constituents: list[IndexConstituentRead] = []
     seen: set[str] = set()
     for row in rows:

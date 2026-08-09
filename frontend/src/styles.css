@@ -952,7 +952,8 @@ a:focus-visible {
   gap: 6px;
 }
 
-.row-manage {
+.row-manage,
+.row-favorite {
   display: grid;
   width: 32px;
   height: 32px;
@@ -965,10 +966,17 @@ a:focus-visible {
   background: #fff;
 }
 
-.row-manage:hover {
+.row-manage:hover,
+.row-favorite:hover {
   border-color: var(--emerald);
   color: var(--emerald-dark);
   background: var(--emerald-tint);
+}
+
+.row-favorite[data-favorite="true"] {
+  border-color: #d9a928;
+  color: #a97100;
+  background: #fff8df;
 }
 
 .portfolio-table__empty,
@@ -1384,6 +1392,117 @@ a:focus-visible {
 .index-catalog {
   display: grid;
   gap: 12px;
+}
+
+.management-danger > div > p {
+  width: 100%;
+  margin: 0;
+  color: #9f241c;
+  font-weight: 700;
+}
+
+.favorites-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.favorites-heading h2,
+.favorites-heading p {
+  margin: 0;
+}
+
+.favorites-heading > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.favorites-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.favorite-card {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.favorite-card > div {
+  display: grid;
+  gap: 4px;
+  padding-right: 30px;
+}
+
+.favorite-card > div span,
+.favorite-card > p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.favorite-card > p {
+  margin: 0;
+}
+
+.favorite-card > p strong {
+  margin-left: 5px;
+  color: var(--emerald-dark);
+  font-size: 17px;
+}
+
+.favorite-card__star {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  color: #a97100;
+  background: transparent;
+}
+
+.favorite-card__open {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  color: var(--emerald-dark);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.favorites-empty {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 82px;
+  padding: 18px;
+  margin-top: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--subtle);
+}
+
+.favorites-empty p {
+  max-width: 660px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .index-catalog > section {

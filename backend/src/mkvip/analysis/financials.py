@@ -143,6 +143,21 @@ def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
     if snapshot.analysis_profile is FinancialProfile.FINANCIAL:
         return _financial_institution_analysis(snapshot)
 
+    required = (
+        snapshot.ebitda,
+        snapshot.depreciation_amortization,
+        snapshot.ebit,
+        snapshot.interest_expense,
+        snapshot.operating_cash_flow,
+        snapshot.capex,
+        snapshot.current_assets,
+        snapshot.current_liabilities,
+        snapshot.financial_debt,
+        snapshot.cash,
+    )
+    if any(value is None for value in required):
+        return _partial_standard_analysis(snapshot)
+
     assert snapshot.ebitda is not None
     assert snapshot.depreciation_amortization is not None
     assert snapshot.ebit is not None
@@ -153,9 +168,7 @@ def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
     assert snapshot.financial_debt is not None
     assert snapshot.cash is not None
     ratios = {
-        "ebitda_margin": (
-            snapshot.ebitda / snapshot.revenue if snapshot.revenue > 0 else None
-        ),
+        "ebitda_margin": (snapshot.ebitda / snapshot.revenue if snapshot.revenue > 0 else None),
         "depreciation_to_ebit": (
             snapshot.depreciation_amortization / snapshot.ebit if snapshot.ebit > 0 else None
         ),
@@ -168,13 +181,9 @@ def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
         "pe_ratio": (
             snapshot.market_cap / snapshot.net_income if snapshot.net_income > 0 else None
         ),
-        "net_margin": (
-            snapshot.net_income / snapshot.revenue if snapshot.revenue > 0 else None
-        ),
+        "net_margin": (snapshot.net_income / snapshot.revenue if snapshot.revenue > 0 else None),
         "financial_leverage": (
-            snapshot.financial_debt / snapshot.total_equity
-            if snapshot.total_equity > 0
-            else None
+            snapshot.financial_debt / snapshot.total_equity if snapshot.total_equity > 0 else None
         ),
         "current_ratio": snapshot.current_assets / snapshot.current_liabilities,
         "market_cap_to_assets": snapshot.market_cap / snapshot.total_assets,
@@ -244,6 +253,68 @@ def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
         mk_score=round(passing / len(metrics) * 100, 2),
         quality_score=_score(metrics, QUALITY_RULE_KEYS),
         safety_score=_score(metrics, SAFETY_RULE_KEYS),
+    )
+
+
+def _partial_standard_analysis(
+    snapshot: FinancialSnapshotCreate,
+) -> FinancialAnalysis:
+    indicators = [
+        FinancialIndicator(
+            key="reported_revenue",
+            label="Chiffre d’affaires publié",
+            value=round(snapshot.revenue, 6),
+            unit=snapshot.currency,
+            formula="Chiffre d’affaires publié par l’émetteur",
+        ),
+        FinancialIndicator(
+            key="reported_net_income",
+            label="Résultat net",
+            value=round(snapshot.net_income, 6),
+            unit=snapshot.currency,
+            formula="Résultat net publié",
+        ),
+        FinancialIndicator(
+            key="return_on_equity",
+            label="Rendement des capitaux propres (ROE)",
+            value=_rounded_ratio(snapshot.net_income, snapshot.total_equity),
+            unit="ratio",
+            formula="Résultat net / capitaux propres",
+        ),
+        FinancialIndicator(
+            key="equity_to_assets",
+            label="Capitaux propres / total actif",
+            value=_rounded_ratio(snapshot.total_equity, snapshot.total_assets),
+            unit="ratio",
+            formula="Capitaux propres / total actif",
+        ),
+    ]
+    if snapshot.ebitda is not None:
+        indicators.append(
+            FinancialIndicator(
+                key="reported_ebitda",
+                label="EBITDA publié",
+                value=round(snapshot.ebitda, 6),
+                unit=snapshot.currency,
+                formula="EBITDA publié par l’émetteur",
+            )
+        )
+    if snapshot.operating_cash_flow is not None:
+        indicators.append(
+            FinancialIndicator(
+                key="operating_cash_flow",
+                label="Cash-flow d’exploitation publié",
+                value=round(snapshot.operating_cash_flow, 6),
+                unit=snapshot.currency,
+                formula="Flux de trésorerie d’exploitation publié",
+            )
+        )
+    return FinancialAnalysis(
+        metrics=[],
+        indicators=indicators,
+        mk_score=None,
+        quality_score=None,
+        safety_score=None,
     )
 
 

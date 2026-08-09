@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { Archive, Save, Trash2, X } from "lucide-react";
+import { Save, Trash2, X } from "lucide-react";
 
 import type { Company, CompanyPayload } from "../api/client";
 
 interface CompanyManagementDrawerProps {
   company: Company;
   onUpdate(payload: Partial<CompanyPayload>): Promise<void>;
-  onArchive(): Promise<void>;
   onDelete(): Promise<void>;
   onClose(): void;
 }
@@ -14,7 +13,6 @@ interface CompanyManagementDrawerProps {
 export function CompanyManagementDrawer({
   company,
   onUpdate,
-  onArchive,
   onDelete,
   onClose,
 }: CompanyManagementDrawerProps) {
@@ -30,6 +28,7 @@ export function CompanyManagementDrawer({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -153,36 +152,44 @@ export function CompanyManagementDrawer({
             <section className="management-danger field--wide">
               <h3>Retirer de l’univers</h3>
               <p>
-                L’archivage est réversible et conserve les analyses. La suppression
-                définitive efface aussi l’historique associé.
+                La suppression définitive efface aussi l’historique et les analyses
+                associées.
               </p>
               <div>
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  disabled={busy}
-                  onClick={() => void run(onArchive)}
-                >
-                  <Archive aria-hidden="true" size={17} />
-                  Archiver
-                </button>
-                <button
-                  type="button"
-                  className="button button--danger"
-                  disabled={busy}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `Supprimer définitivement ${company.name} et toutes ses analyses ?`,
-                      )
-                    ) {
-                      void run(onDelete);
-                    }
-                  }}
-                >
-                  <Trash2 aria-hidden="true" size={17} />
-                  Supprimer définitivement
-                </button>
+                {confirmingDelete ? (
+                  <>
+                    <p role="alert">
+                      Confirmer la suppression définitive de {company.name} ?
+                    </p>
+                    <button
+                      type="button"
+                      className="button button--ghost"
+                      disabled={busy}
+                      onClick={() => setConfirmingDelete(false)}
+                    >
+                      Conserver
+                    </button>
+                    <button
+                      type="button"
+                      className="button button--danger"
+                      disabled={busy}
+                      onClick={() => void run(onDelete)}
+                    >
+                      <Trash2 aria-hidden="true" size={17} />
+                      Confirmer la suppression
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="button button--danger"
+                    disabled={busy}
+                    onClick={() => setConfirmingDelete(true)}
+                  >
+                    <Trash2 aria-hidden="true" size={17} />
+                    Supprimer définitivement
+                  </button>
+                )}
               </div>
             </section>
           </div>

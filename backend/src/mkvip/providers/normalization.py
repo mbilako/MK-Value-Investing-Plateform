@@ -145,8 +145,6 @@ async def _load_historical_snapshots(
     try:
         cash_flows = await provider.get_cash_flow(ticker)
     except ProviderDataError:
-        if analysis_profile is FinancialProfile.STANDARD:
-            raise
         cash_flows = []
     price_points = []
     price_loader = getattr(provider, "get_price_history", None)
@@ -166,8 +164,6 @@ async def _load_historical_snapshots(
         statement.fiscal_year: statement for statement in cash_flows
     }
     shared_years = income_by_year.keys() & balance_by_year.keys()
-    if analysis_profile is FinancialProfile.STANDARD:
-        shared_years &= cash_by_year.keys()
     if not shared_years:
         raise ProviderDataIncompleteError(
             f"Aucun exercice annuel complet n'est disponible pour {ticker}."
