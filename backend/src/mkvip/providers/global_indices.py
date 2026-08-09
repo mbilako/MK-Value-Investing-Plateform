@@ -65,11 +65,60 @@ INDEXES = (
         trading_location="Xetra",
     ),
     PublicIndex(
+        code="MDAX",
+        name="MDAX",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251845),
+        region="Europe",
+        country="Allemagne",
+        source_kind="blackrock",
+        trading_location="Xetra",
+    ),
+    PublicIndex(
+        code="TECDAX",
+        name="TecDAX",
+        market="XETR",
+        provider="iShares",
+        source_url=(
+            "https://www.ishares.com/ch/professionals/en/products/251975/fund/"
+            "1495092304805.ajax?tab=all&fileType=json"
+        ),
+        region="Europe",
+        country="Allemagne",
+        source_kind="ishares_json",
+        trading_location="Xetra",
+    ),
+    PublicIndex(
         code="FTSE100",
         name="FTSE 100",
         market="XLON",
         provider="iShares",
         source_url=_blackrock_url(251795),
+        region="Europe",
+        country="Royaume-Uni",
+        source_kind="blackrock",
+        trading_location="London Stock Exchange",
+        currency="GBP",
+    ),
+    PublicIndex(
+        code="FTSE250",
+        name="FTSE 250",
+        market="XLON",
+        provider="iShares",
+        source_url=_blackrock_url(251796),
+        region="Europe",
+        country="Royaume-Uni",
+        source_kind="blackrock",
+        trading_location="London Stock Exchange",
+        currency="GBP",
+    ),
+    PublicIndex(
+        code="MSCIUKSC",
+        name="MSCI UK Small Cap",
+        market="XLON",
+        provider="iShares",
+        source_url=_blackrock_url(253474),
         region="Europe",
         country="Royaume-Uni",
         source_kind="blackrock",
@@ -90,12 +139,66 @@ INDEXES = (
         trading_location="Bolsa de Madrid",
     ),
     PublicIndex(
+        code="IBEXMEDIUM",
+        name="IBEX Medium Cap",
+        isin="ES0SI0000013",
+        market="XMAD",
+        provider="BME",
+        source_url=(
+            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/"
+            "constituents.html"
+        ),
+        region="Europe",
+        country="Espagne",
+        source_kind="static_bme",
+        trading_location="Bolsa de Madrid",
+    ),
+    PublicIndex(
+        code="IBEXSMALL",
+        name="IBEX Small Cap",
+        isin="ES0SI0000021",
+        market="XMAD",
+        provider="BME",
+        source_url=(
+            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/"
+            "constituents.html"
+        ),
+        region="Europe",
+        country="Espagne",
+        source_kind="static_bme",
+        trading_location="Bolsa de Madrid",
+    ),
+    PublicIndex(
         code="ATHEXCOMP",
         name="ATHEX Composite",
         isin="GRI99117A004",
         market="XATH",
         provider="Euronext Athens",
         source_url=("https://athens.euronext.com/en/market-data/instruments/indices/GD"),
+        region="Europe",
+        country="Grèce",
+        source_kind="athex",
+        trading_location="Euronext Athens",
+    ),
+    PublicIndex(
+        code="ATHEXLARGE",
+        name="FTSE/ATHEX Large Cap",
+        isin="GRI99201A006",
+        market="XATH",
+        provider="Euronext Athens",
+        source_url=("https://athens.euronext.com/en/market-data/instruments/indices/FTSE"),
+        region="Europe",
+        country="Grèce",
+        source_kind="athex",
+        trading_location="Euronext Athens",
+    ),
+    PublicIndex(
+        code="ATHEXMID",
+        name="FTSE/ATHEX Mid Cap",
+        isin="GRI99202A004",
+        market="XATH",
+        provider="Euronext Athens",
+        source_url=("https://athens.euronext.com/en/market-data/instruments/indices/FTSEM"),
         region="Europe",
         country="Grèce",
         source_kind="athex",
@@ -113,6 +216,32 @@ INDEXES = (
         trading_location="Borsa Italiana",
     ),
     PublicIndex(
+        code="FTSEITMID",
+        name="FTSE Italia Mid Cap",
+        market="XMIL",
+        provider="Borsa Italiana",
+        source_url=(
+            "https://www.borsaitaliana.it/borsa/azioni/mid-cap/lista.html?lang=en"
+        ),
+        region="Europe",
+        country="Italie",
+        source_kind="borsa_italiana",
+        trading_location="Borsa Italiana",
+    ),
+    PublicIndex(
+        code="FTSEITSMALL",
+        name="FTSE Italia Small Cap",
+        market="XMIL",
+        provider="Borsa Italiana",
+        source_url=(
+            "https://www.borsaitaliana.it/borsa/azioni/small-cap/lista.html?lang=en"
+        ),
+        region="Europe",
+        country="Italie",
+        source_kind="borsa_italiana",
+        trading_location="Borsa Italiana",
+    ),
+    PublicIndex(
         code="SMI",
         name="SMI",
         market="XSWX",
@@ -120,6 +249,36 @@ INDEXES = (
         source_url=(
             "https://www.ishares.com/ch/individual/en/products/261154/"
             "ishares-smi-ch-fund/1495092304805.ajax?tab=all&fileType=json"
+        ),
+        region="Europe",
+        country="Suisse",
+        source_kind="ishares_json",
+        trading_location="SIX Swiss Exchange",
+        currency="CHF",
+    ),
+    PublicIndex(
+        code="SMIM",
+        name="SMIM",
+        market="XSWX",
+        provider="iShares",
+        source_url=(
+            "https://www.ishares.com/ch/individual/en/products/261155/fund/"
+            "1495092304805.ajax?tab=all&fileType=json"
+        ),
+        region="Europe",
+        country="Suisse",
+        source_kind="ishares_json",
+        trading_location="SIX Swiss Exchange",
+        currency="CHF",
+    ),
+    PublicIndex(
+        code="SPI",
+        name="SPI",
+        market="XSWX",
+        provider="iShares",
+        source_url=(
+            "https://www.ishares.com/ch/individual/en/products/264107/fund/"
+            "1495092304805.ajax?tab=all&fileType=json"
         ),
         region="Europe",
         country="Suisse",
@@ -232,6 +391,67 @@ _IBEX35_CONSTITUENTS = (
     ("UNI", "Unicaja Banco"),
 )
 
+_IBEX_MEDIUM_CONSTITUENTS = (
+    ("A3M", "Atresmedia"),
+    ("ALM", "Almirall"),
+    ("AMP", "Amper"),
+    ("CAF", "Construcciones y Auxiliar de Ferrocarriles"),
+    ("CIE", "CIE Automotive"),
+    ("CIRSA", "Cirsa Enterprises"),
+    ("DIA", "Distribuidora Internacional de Alimentación"),
+    ("EBRO", "Ebro Foods"),
+    ("ENO", "Elecnor"),
+    ("FAE", "Faes Farma"),
+    ("GRE", "Grenergy Renovables"),
+    ("HBX", "HBX Group"),
+    ("HOME", "Neinor Homes"),
+    ("LDA", "Línea Directa Aseguradora"),
+    ("MEL", "Meliá Hotels International"),
+    ("OHLA", "OHLA"),
+    ("PHM", "Pharma Mar"),
+    ("TRE", "Técnicas Reunidas"),
+    ("VID", "Vidrala"),
+    ("VIS", "Viscofan"),
+)
+
+_IBEX_SMALL_CONSTITUENTS = (
+    ("PSG", "Prosegur"),
+    ("GEST", "Gestamp Automoción"),
+    ("CASH", "Prosegur Cash"),
+    ("AEDAS", "Aedas Homes"),
+    ("CBAV", "Clínica Baviera"),
+    ("TSK", "TSK Electrónica y Electricidad"),
+    ("ENC", "Ence Energía y Celulosa"),
+    ("ADX", "Audax Renovables"),
+    ("EDR", "eDreams Odigeo"),
+    ("GSJ", "Grupo Empresarial San José"),
+    ("EAT", "AmRest Holdings"),
+    ("NXT", "Nueva Expresión Textil"),
+    ("DOM", "Global Dominion Access"),
+    ("ALNT", "Alantra Partners"),
+    ("TUB", "Tubacex"),
+    ("TLGO", "Talgo"),
+    ("AZK", "Azkoyen"),
+    ("ENER", "Ecoener"),
+    ("ORY", "Oryzon Genomics"),
+    ("PRM", "Prim"),
+    ("RJF", "Laboratorio Reig Jofre"),
+    ("ATRY", "Atrys Health"),
+    ("OLE", "Deoleo"),
+    ("AI", "Airtificial Intelligence Structures"),
+    ("BKY", "Berkeley Energia"),
+    ("NEA", "Nicolás Correa"),
+    ("VOC", "Vocento"),
+    ("LGT", "Lingotes Especiales"),
+    ("EZE", "Grupo Ezentis"),
+)
+
+_BME_CONSTITUENTS = {
+    "IBEX35": _IBEX35_CONSTITUENTS,
+    "IBEXMEDIUM": _IBEX_MEDIUM_CONSTITUENTS,
+    "IBEXSMALL": _IBEX_SMALL_CONSTITUENTS,
+}
+
 
 class PublicIndexProvider:
     def __init__(
@@ -276,6 +496,8 @@ class PublicIndexProvider:
             return await self._load_athex_composition(index)
         if index.source_kind == "static_bme":
             return _build_ibex_composition(index)
+        if index.source_kind == "borsa_italiana":
+            return await self._load_borsa_italiana_composition(index)
         if index.source_kind == "state_street":
             payload = await asyncio.to_thread(self._fetch_bytes, index.source_url)
             return _parse_state_street_composition(index, payload)
@@ -338,6 +560,33 @@ class PublicIndexProvider:
             constituents,
             _plain_html_text(adjustment.group(1)) if adjustment else None,
         )
+
+    async def _load_borsa_italiana_composition(
+        self,
+        index: PublicIndex,
+    ) -> IndexCompositionRead:
+        first_page = await asyncio.to_thread(self._fetch_text, index.source_url)
+        page_numbers = [int(value) for value in re.findall(r"[?&]page=(\d+)", first_page)]
+        last_page = max(page_numbers, default=1)
+        separator = "&" if "?" in index.source_url else "?"
+        remaining_pages = await asyncio.gather(
+            *(
+                asyncio.to_thread(
+                    self._fetch_text,
+                    f"{index.source_url}{separator}page={page}",
+                )
+                for page in range(2, last_page + 1)
+            )
+        )
+        constituents: list[IndexConstituentRead] = []
+        seen: set[str] = set()
+        for payload in (first_page, *remaining_pages):
+            for constituent in _parse_borsa_italiana_rows(index, payload):
+                if constituent.isin in seen:
+                    continue
+                constituents.append(constituent)
+                seen.add(constituent.isin or "")
+        return _composition(index, constituents, None)
 
 
 def _request(url: str) -> Request:
@@ -477,6 +726,38 @@ def _parse_athex_rows(
     return constituents
 
 
+def _parse_borsa_italiana_rows(
+    index: PublicIndex,
+    payload: str,
+) -> list[IndexConstituentRead]:
+    link_pattern = re.compile(
+        r'<a[^>]+href="/borsa/azioni/scheda/(?P<isin>[A-Z0-9]{12})-[A-Z]+\.html'
+        r'\?lang=en"[^>]*>(?P<name>.*?)</a>',
+        re.I | re.S,
+    )
+    constituents: list[IndexConstituentRead] = []
+    seen: set[str] = set()
+    for match in link_pattern.finditer(payload):
+        isin = match.group("isin").upper()
+        if isin in seen:
+            continue
+        name = _plain_html_text(match.group("name"))
+        if not name:
+            continue
+        constituents.append(
+            IndexConstituentRead(
+                name=name,
+                isin=isin,
+                mic=index.market,
+                trading_location=index.trading_location or "Borsa Italiana",
+                country=index.country,
+                currency=index.currency,
+            )
+        )
+        seen.add(isin)
+    return constituents
+
+
 def _plain_html_text(value: str) -> str:
     from html import unescape
 
@@ -543,7 +824,7 @@ def _build_ibex_composition(index: PublicIndex) -> IndexCompositionRead:
             country=index.country,
             currency=index.currency,
         )
-        for ticker, name in _IBEX35_CONSTITUENTS
+        for ticker, name in _BME_CONSTITUENTS[index.code]
     ]
     return _composition(index, constituents, "Juin 2026")
 

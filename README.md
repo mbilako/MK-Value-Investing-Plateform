@@ -13,9 +13,9 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - import des entreprises et de leurs données financières annuelles ;
 - import automatique de jusqu’à dix exercices publics avec fusion annuelle
   Yahoo Finance, SEC EDGAR et ESEF européen ;
-- explorateur classé par zone et par pays avec CAC 40, CAC Next 20, SBF 120,
-  AEX, BEL 20, PSI, ISEQ 20, DAX 40, FTSE 100, IBEX 35, FTSE MIB, SMI,
-  Dow Jones, S&P 500 et Nasdaq-100, sans saisie manuelle de ticker ;
+- explorateur classé par zone et par pays avec trois indices pour chacun des
+  onze pays européens couverts, plus Dow Jones, S&P 500 et Nasdaq-100, sans
+  saisie manuelle de ticker ;
 - audit reproductible de la couverture des composantes d’indices ;
 - modification, archivage ou suppression d’une entreprise dans les deux vues ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;

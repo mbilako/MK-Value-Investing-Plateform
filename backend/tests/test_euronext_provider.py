@@ -9,16 +9,28 @@ def test_supported_indices_include_major_euronext_markets() -> None:
         "CAC Next 20",
         "SBF 120",
         "AEX",
+        "AMX",
+        "AEX Small Cap",
         "BEL 20",
+        "BEL Mid",
+        "BEL Small",
         "PSI",
+        "PSI All-Share",
+        "PSI Industrials",
         "ISEQ 20",
+        "ISEQ All Share",
+        "ISEQ Financial",
     ]
-    assert [(index.name, index.country) for index in indices[-4:]] == [
-        ("AEX", "Pays-Bas"),
-        ("BEL 20", "Belgique"),
-        ("PSI", "Portugal"),
-        ("ISEQ 20", "Irlande"),
-    ]
+    assert {
+        country: len([index for index in indices if index.country == country])
+        for country in {index.country for index in indices}
+    } == {
+        "France": 3,
+        "Pays-Bas": 3,
+        "Belgique": 3,
+        "Portugal": 3,
+        "Irlande": 3,
+    }
 
 
 def test_parses_euronext_composition_rows() -> None:

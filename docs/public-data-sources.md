@@ -77,9 +77,11 @@ composante. Au 4 août 2026, le contrôle exhaustif du SBF 120 retourne
 
 ### Extension européenne et américaine
 
-Depuis la version 0.12, le même flux Euronext couvre également l’**AEX**, le
-**BEL 20**, le **PSI** et l’**ISEQ 20**. Les composantes conservent leur ISIN,
-leur marché MIC, leur place de cotation et leur pays d’émission.
+Depuis la version 0.12, le même flux Euronext couvre également trois indices
+pour chacun des marchés d’Amsterdam, Bruxelles, Lisbonne et Dublin. Une
+seconde route officielle en anglais est interrogée automatiquement si la route
+française est temporairement indisponible. Les composantes conservent leur
+ISIN, leur marché MIC, leur place de cotation et leur pays d’émission.
 
 Le **S&P 500** est construit à partir du fichier de positions public de
 l’iShares Core S&P 500 ETF. Le fichier fournit le ticker, le nom, la place de
@@ -90,26 +92,41 @@ Le **Nasdaq-100** est lu depuis l’API publique Nasdaq. Le ticker officiel est
 utilisé directement afin de ne pas dépendre d’une saisie ou d’une résolution
 approximative par nom.
 
-La deuxième tranche ajoute exclusivement les indices nationaux demandés :
+La couverture européenne expose désormais trois paniers par pays :
 
-- **DAX 40**, **FTSE 100** et **FTSE MIB** depuis l’API publique de positions
-  iShares/BlackRock, après exclusion de la trésorerie et des dérivés ;
-- **SMI** depuis le flux public des positions de l’iShares SMI ETF suisse ;
+- France : **CAC 40**, **CAC Next 20**, **SBF 120** ;
+- Allemagne : **DAX 40**, **MDAX**, **TecDAX** ;
+- Royaume-Uni : **FTSE 100**, **FTSE 250**, **MSCI UK Small Cap** ;
+- Espagne : **IBEX 35**, **IBEX Medium Cap**, **IBEX Small Cap** ;
+- Grèce : **ATHEX Composite**, **FTSE/ATHEX Large Cap**, **FTSE/ATHEX Mid Cap** ;
+- Italie : **FTSE MIB**, **FTSE Italia Mid Cap**, **FTSE Italia Small Cap** ;
+- Suisse : **SMI**, **SMIM**, **SPI** ;
+- Pays-Bas : **AEX**, **AMX**, **AEX Small Cap** ;
+- Belgique : **BEL 20**, **BEL Mid**, **BEL Small** ;
+- Portugal : **PSI**, **PSI All-Share**, **PSI Industrials** ;
+- Irlande : **ISEQ 20**, **ISEQ All Share**, **ISEQ Financial**.
+
+Les paniers iShares/BlackRock excluent la trésorerie et les dérivés. Les
+compositions italiennes sont lues et paginées directement sur Borsa Italiana ;
+les trois paniers espagnols suivent la revue BME de juin 2026. La Grèce utilise
+les compositions paginées d’Euronext Athens et normalise les symboles avec le
+suffixe Yahoo `.AT` et le MIC `XATH`.
+
+Pour les États-Unis :
+
 - **Dow Jones Industrial Average** depuis le fichier quotidien des positions
   du State Street SPDR DIA ;
-- **IBEX 35** depuis le référentiel BME, dont la dernière revue de juin 2026 ne
-  comportait ni inclusion ni exclusion.
-- **ATHEX Composite**, indice de référence grec, depuis la composition publique
-  paginée d’Euronext Athens. Le symbole officiel est normalisé avec le suffixe
-  Yahoo `.AT` et rattaché au MIC `XATH`.
+- **S&P 500** depuis le fichier public iShares ;
+- **Nasdaq-100** depuis l’API publique Nasdaq.
 
 Les indices sont présentés par zone puis par pays. Euro Stoxx 50, STOXX Europe
 600 et les familles Russell restent volontairement hors périmètre.
 
-Au 5 août 2026, l’audit de composition retourne : AEX 30, BEL 20 20, PSI 16,
-ISEQ 20 20, S&P 500 504 lignes de titres et Nasdaq-100 102 titres. Les écarts
-entre le nom commercial d’un indice et le nombre de lignes proviennent
-notamment des différentes classes d’actions d’un même émetteur.
+Au 9 août 2026, l’audit des douze nouveaux paniers hors Euronext retourne
+786 composantes uniques et celui des huit nouveaux paniers Euronext 142. Les
+écarts entre le nom commercial d’un indice et le nombre de lignes proviennent
+notamment des différentes classes d’actions et des méthodes de réplication des
+fonds publics utilisés comme source.
 
 ## Identifiants et traçabilité
 

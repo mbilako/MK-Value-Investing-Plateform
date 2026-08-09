@@ -4,6 +4,33 @@ from zipfile import ZipFile
 import pytest
 
 from mkvip.providers.global_indices import PublicIndexProvider
+from mkvip.providers.index_catalog import IndexCatalogProvider
+
+
+def test_catalog_exposes_three_indices_for_every_european_country() -> None:
+    indices = [
+        index
+        for index in IndexCatalogProvider().list_indices()
+        if index.region == "Europe"
+    ]
+    counts = {
+        country: len([index for index in indices if index.country == country])
+        for country in {index.country for index in indices}
+    }
+
+    assert counts == {
+        "Allemagne": 3,
+        "Belgique": 3,
+        "Espagne": 3,
+        "France": 3,
+        "Grèce": 3,
+        "Irlande": 3,
+        "Italie": 3,
+        "Pays-Bas": 3,
+        "Portugal": 3,
+        "Royaume-Uni": 3,
+        "Suisse": 3,
+    }
 
 
 def test_lists_public_indices_by_country() -> None:
@@ -14,11 +41,23 @@ def test_lists_public_indices_by_country() -> None:
 
     assert [(index.code, index.country) for index in indices] == [
         ("DAX40", "Allemagne"),
+        ("MDAX", "Allemagne"),
+        ("TECDAX", "Allemagne"),
         ("FTSE100", "Royaume-Uni"),
+        ("FTSE250", "Royaume-Uni"),
+        ("MSCIUKSC", "Royaume-Uni"),
         ("IBEX35", "Espagne"),
+        ("IBEXMEDIUM", "Espagne"),
+        ("IBEXSMALL", "Espagne"),
         ("ATHEXCOMP", "Grèce"),
+        ("ATHEXLARGE", "Grèce"),
+        ("ATHEXMID", "Grèce"),
         ("FTSEMIB", "Italie"),
+        ("FTSEITMID", "Italie"),
+        ("FTSEITSMALL", "Italie"),
         ("SMI", "Suisse"),
+        ("SMIM", "Suisse"),
+        ("SPI", "Suisse"),
         ("DOWJONES", "États-Unis"),
         ("SP500", "États-Unis"),
         ("NASDAQ100", "États-Unis"),
@@ -124,6 +163,47 @@ async def test_builds_ibex_35_official_snapshot() -> None:
         "IBE",
         "SAN",
     }
+
+
+@pytest.mark.asyncio
+async def test_builds_ibex_medium_and_small_official_snapshots() -> None:
+    provider = PublicIndexProvider()
+
+    medium = await provider.get_composition("IBEXMEDIUM")
+    small = await provider.get_composition("IBEXSMALL")
+
+    assert medium.as_of == "Juin 2026"
+    assert len(medium.constituents) == 20
+    assert {company.ticker for company in medium.constituents} >= {"AMP", "CIRSA", "OHLA"}
+    assert len(small.constituents) >= 29
+    assert {company.ticker for company in small.constituents} >= {"GEST", "TSK", "TUB"}
+
+
+@pytest.mark.asyncio
+async def test_parses_all_borsa_italiana_pages() -> None:
+    first_page = """
+    <a href="/borsa/azioni/scheda/IT0001207098-MTAA.html?lang=en">Acea</a>
+    <a href="?page=2">2</a>
+    """
+    second_page = """
+    <a href="/borsa/azioni/scheda/IT0000062072-MTAA.html?lang=en">
+      Generali
+    </a>
+    """
+
+    def fetch_text(url: str) -> str:
+        return second_page if "page=2" in url else first_page
+
+    composition = await PublicIndexProvider(fetch_text=fetch_text).get_composition(
+        "FTSEITMID"
+    )
+
+    assert [company.name for company in composition.constituents] == ["Acea", "Generali"]
+    assert [company.isin for company in composition.constituents] == [
+        "IT0001207098",
+        "IT0000062072",
+    ]
+    assert all(company.mic == "XMIL" for company in composition.constituents)
 
 
 @pytest.mark.asyncio
