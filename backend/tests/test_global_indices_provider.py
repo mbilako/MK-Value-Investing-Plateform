@@ -16,12 +16,58 @@ def test_lists_public_indices_by_country() -> None:
         ("DAX40", "Allemagne"),
         ("FTSE100", "Royaume-Uni"),
         ("IBEX35", "Espagne"),
+        ("ATHEXCOMP", "Grèce"),
         ("FTSEMIB", "Italie"),
         ("SMI", "Suisse"),
         ("DOWJONES", "États-Unis"),
         ("SP500", "États-Unis"),
         ("NASDAQ100", "États-Unis"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_parses_all_athex_composite_pages() -> None:
+    overview = """
+    <table><tr><th>Date Of Last Adjustement</th><td>2026.08.07</td></tr></table>
+    """
+    first_page = """
+    <table><tbody>
+      <tr>
+        <td class="field--symbol">EEE</td>
+        <td class="field--security mobile-hidden">COCA-COLA HBC AG (CR)</td>
+      </tr>
+    </tbody></table>
+    <a href="?page=1">2</a>
+    """
+    second_page = """
+    <table><tbody>
+      <tr>
+        <td class="field--symbol">TPEIR</td>
+        <td class="field--security mobile-hidden">PIRAEUS BANK S.A. (CR)</td>
+      </tr>
+    </tbody></table>
+    """
+
+    def fetch_text(url: str) -> str:
+        if url.endswith("/GD"):
+            return overview
+        if url.endswith("?page=1"):
+            return second_page
+        return first_page
+
+    composition = await PublicIndexProvider(fetch_text=fetch_text).get_composition(
+        "ATHEXCOMP"
+    )
+
+    assert composition.name == "ATHEX Composite"
+    assert composition.isin == "GRI99117A004"
+    assert composition.as_of == "2026.08.07"
+    assert [company.ticker for company in composition.constituents] == [
+        "EEE.AT",
+        "TPEIR.AT",
+    ]
+    assert composition.constituents[0].name == "COCA-COLA HBC AG"
+    assert all(company.mic == "XATH" for company in composition.constituents)
 
 
 @pytest.mark.asyncio

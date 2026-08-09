@@ -78,6 +78,7 @@ async def add_index_companies(
                         selection.isin,
                         selection.name,
                         selection.mic,
+                        selection.ticker,
                     )
                 except ProviderDataError:
                     repaired_match = None
@@ -117,6 +118,7 @@ async def add_index_companies(
                     selection.isin,
                     selection.name,
                     selection.mic,
+                    selection.ticker,
                 )
             except ProviderDataError as error:
                 errors.append(
@@ -211,6 +213,7 @@ def _market_suffixes(mic: str) -> tuple[str, ...]:
         "XMAD": (".MC",),
         "XMIL": (".MI",),
         "XSWX": (".SW",),
+        "XATH": (".AT",),
     }.get(mic.upper(), ())
 
 
@@ -224,10 +227,11 @@ async def _discover_market_match(
     isin: str | None,
     name: str,
     mic: str,
+    ticker: str | None = None,
 ):
     last_error: ProviderDataError | None = None
     completed_search = False
-    for query in tuple(value for value in (isin, name) if value):
+    for query in tuple(value for value in (isin, ticker, name) if value):
         try:
             results = await discovery.search_company(query)
         except ProviderDataError as error:

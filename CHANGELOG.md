@@ -4,6 +4,9 @@
 
 ### Sprint 1H — indices européens et américains, tranche 1
 
+- Ajoute l’ATHEX Composite, indice de référence grec à 60 composantes, depuis
+  la composition publique paginée d’Euronext Athens et résout ses symboles sur
+  leur cotation athénienne `.AT`.
 - Livre la tranche 2 ciblée : DAX 40, FTSE 100, IBEX 35, FTSE MIB, SMI et
   Dow Jones, sans Euro Stoxx 50, STOXX Europe 600 ni famille Russell.
 - Classe le catalogue par zone, puis par pays, et trie les pays et indices par

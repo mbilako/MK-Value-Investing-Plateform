@@ -99,6 +99,9 @@ La deuxième tranche ajoute exclusivement les indices nationaux demandés :
   du State Street SPDR DIA ;
 - **IBEX 35** depuis le référentiel BME, dont la dernière revue de juin 2026 ne
   comportait ni inclusion ni exclusion.
+- **ATHEX Composite**, indice de référence grec, depuis la composition publique
+  paginée d’Euronext Athens. Le symbole officiel est normalisé avec le suffixe
+  Yahoo `.AT` et rattaché au MIC `XATH`.
 
 Les indices sont présentés par zone puis par pays. Euro Stoxx 50, STOXX Europe
 600 et les familles Russell restent volontairement hors périmètre.

@@ -91,6 +91,20 @@ INDEXES = (
         trading_location="Bolsa de Madrid",
     ),
     PublicIndex(
+        code="ATHEXCOMP",
+        name="ATHEX Composite",
+        isin="GRI99117A004",
+        market="XATH",
+        provider="Euronext Athens",
+        source_url=(
+            "https://athens.euronext.com/en/market-data/instruments/indices/GD"
+        ),
+        region="Europe",
+        country="Grèce",
+        source_kind="athex",
+        trading_location="Euronext Athens",
+    ),
+    PublicIndex(
         code="FTSEMIB",
         name="FTSE MIB",
         market="XMIL",
@@ -261,6 +275,8 @@ class PublicIndexProvider:
         return composition
 
     async def _load_composition(self, index: PublicIndex) -> IndexCompositionRead:
+        if index.source_kind == "athex":
+            return await self._load_athex_composition(index)
         if index.source_kind == "static_bme":
             return _build_ibex_composition(index)
         if index.source_kind == "state_street":
@@ -275,6 +291,40 @@ class PublicIndexProvider:
             return _parse_nasdaq_composition(index, payload)
         payload = await asyncio.to_thread(self._fetch_text, index.source_url)
         return _parse_ishares_composition(index, payload)
+
+    async def _load_athex_composition(
+        self,
+        index: PublicIndex,
+    ) -> IndexCompositionRead:
+        overview_html = await asyncio.to_thread(self._fetch_text, index.source_url)
+        fragment_url = f"{index.source_url}/fragment-index-composition"
+        first_page = await asyncio.to_thread(self._fetch_text, fragment_url)
+        page_numbers = [int(value) for value in re.findall(r"[?&]page=(\d+)", first_page)]
+        last_page = max(page_numbers, default=0)
+        remaining_pages = await asyncio.gather(
+            *(
+                asyncio.to_thread(self._fetch_text, f"{fragment_url}?page={page}")
+                for page in range(1, last_page + 1)
+            )
+        )
+        constituents: list[IndexConstituentRead] = []
+        seen: set[str] = set()
+        for fragment in (first_page, *remaining_pages):
+            for constituent in _parse_athex_rows(index, fragment):
+                if constituent.ticker in seen:
+                    continue
+                constituents.append(constituent)
+                seen.add(constituent.ticker or "")
+        adjustment = re.search(
+            r"Date Of Last Adjustement</th>\s*<td[^>]*>(.*?)</td>",
+            overview_html,
+            re.I | re.S,
+        )
+        return _composition(
+            index,
+            constituents,
+            _plain_html_text(adjustment.group(1)) if adjustment else None,
+        )
 
 
 def _request(url: str) -> Request:
@@ -369,6 +419,53 @@ def _parse_ishares_json_composition(
             )
         )
     return _composition(index, constituents, None)
+
+
+def _parse_athex_rows(
+    index: PublicIndex,
+    payload: str,
+) -> list[IndexConstituentRead]:
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", payload, re.I | re.S)
+    constituents: list[IndexConstituentRead] = []
+    for row in rows:
+        symbol_match = re.search(
+            r'<td[^>]*class="[^"]*field--symbol[^"]*"[^>]*>(.*?)</td>',
+            row,
+            re.I | re.S,
+        )
+        security_match = re.search(
+            r'<td[^>]*class="[^"]*field--security[^"]*"[^>]*>(.*?)</td>',
+            row,
+            re.I | re.S,
+        )
+        if symbol_match is None or security_match is None:
+            continue
+        symbol = _plain_html_text(symbol_match.group(1)).upper().replace(" ", "")
+        if not symbol:
+            continue
+        name = re.sub(
+            r"\s+\((?:CB|CR|PR)\)$",
+            "",
+            _plain_html_text(security_match.group(1)),
+            flags=re.I,
+        )
+        constituents.append(
+            IndexConstituentRead(
+                name=name,
+                ticker=f"{symbol}.AT",
+                mic=index.market,
+                trading_location=index.trading_location or "Euronext Athens",
+                country=index.country,
+                currency=index.currency,
+            )
+        )
+    return constituents
+
+
+def _plain_html_text(value: str) -> str:
+    from html import unescape
+
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", value)).split())
 
 
 def _parse_state_street_composition(

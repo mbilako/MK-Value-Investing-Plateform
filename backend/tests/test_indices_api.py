@@ -85,6 +85,25 @@ class SpanishDiscoveryProvider:
         ]
 
 
+class GreekDiscoveryProvider:
+    queries: list[str] = []
+
+    async def search_company(self, query: str):
+        self.queries.append(query)
+        return [
+            ProviderCompanySearchResult(
+                ticker="EEE.L",
+                name="Coca-Cola HBC AG",
+                exchange="London Stock Exchange",
+            ),
+            ProviderCompanySearchResult(
+                ticker="EEE.AT",
+                name="Coca-Cola HBC AG",
+                exchange="Euronext Athens",
+            ),
+        ]
+
+
 def test_lists_cac_next_20_and_its_constituents(client: TestClient) -> None:
     app.dependency_overrides[get_index_provider] = FakeIndexProvider
     try:
@@ -207,6 +226,37 @@ def test_bulk_add_resolves_a_european_index_ticker_to_yahoo_market(
     company = response.json()["created"][0]
     assert company["ticker"] == "SAN.MC"
     assert company["index_memberships"] == ["IBEX35"]
+
+
+def test_bulk_add_resolves_an_athex_ticker_on_the_athens_market(
+    client: TestClient,
+) -> None:
+    GreekDiscoveryProvider.queries = []
+    app.dependency_overrides[get_company_discovery_provider] = GreekDiscoveryProvider
+    payload = {
+        "companies": [
+            {
+                "name": "Coca-Cola HBC AG",
+                "ticker": "EEE.AT",
+                "mic": "XATH",
+                "trading_location": "Euronext Athens",
+                "country": "Grèce",
+                "currency": "EUR",
+                "index_code": "ATHEXCOMP",
+            }
+        ]
+    }
+    try:
+        response = client.post("/api/v1/indices/companies/bulk", json=payload)
+    finally:
+        app.dependency_overrides.pop(get_company_discovery_provider, None)
+
+    assert response.status_code == 200
+    company = response.json()["created"][0]
+    assert company["ticker"] == "EEE.AT"
+    assert company["exchange"] == "Euronext Athens"
+    assert company["index_memberships"] == ["ATHEXCOMP"]
+    assert GreekDiscoveryProvider.queries[0] == "EEE.AT"
 
 
 def test_bulk_add_repairs_an_existing_secondary_market_ticker(

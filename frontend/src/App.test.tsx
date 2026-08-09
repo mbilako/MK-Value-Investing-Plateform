@@ -725,6 +725,63 @@ describe("MK-VIP authentication", () => {
     expect(await screen.findByText("AAPL")).toBeInTheDocument();
   });
 
+  it("groups the ATHEX Composite under Greece in Europe", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "ATHEXCOMP",
+              name: "ATHEX Composite",
+              isin: "GRI99117A004",
+              market: "XATH",
+              provider: "Euronext Athens",
+              region: "Europe",
+              country: "Grèce",
+            },
+          ],
+          getIndex: async () => ({
+            code: "ATHEXCOMP",
+            name: "ATHEX Composite",
+            isin: "GRI99117A004",
+            market: "XATH",
+            provider: "Euronext Athens",
+            region: "Europe",
+            country: "Grèce",
+            as_of: "2026.08.07",
+            source_url: "https://athens.euronext.com/example",
+            constituents: [
+              {
+                name: "Coca-Cola HBC AG",
+                ticker: "EEE.AT",
+                mic: "XATH",
+                trading_location: "Euronext Athens",
+                country: "Grèce",
+                currency: "EUR",
+              },
+            ],
+          }),
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+
+    expect(
+      screen.getByRole("tablist", { name: "Indices Grèce" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "ATHEX Composite" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByRole("checkbox", { name: /Coca-Cola HBC AG/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/EEE\.AT/)).toBeInTheDocument();
+  });
+
   it("shows the selected index constituents and expands one zone at a time", async () => {
     const user = userEvent.setup();
     render(
