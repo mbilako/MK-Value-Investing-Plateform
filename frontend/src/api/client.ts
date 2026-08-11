@@ -179,7 +179,7 @@ export interface FinancialTrend {
   net_income_cagr: number | null;
   free_cash_flow_cagr: number | null;
   operating_income_cagr?: number | null;
-  pretax_income_cagr?: number | null;
+  ebitda_cagr?: number | null;
   pe_annual_change?: number | null;
   roe_annual_change?: number | null;
   current_ratio_annual_change?: number | null;

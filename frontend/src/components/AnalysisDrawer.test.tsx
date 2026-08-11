@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type {
   Company,
@@ -85,6 +85,7 @@ const history: FinancialHistory = {
 
 describe("AnalysisDrawer financial institutions", () => {
   beforeEach(() => window.localStorage.clear());
+  afterEach(cleanup);
 
   it("uses the same movable fundamental layout for every sector", () => {
     render(
@@ -107,8 +108,9 @@ describe("AnalysisDrawer financial institutions", () => {
 
     expect(screen.queryByText("Profil banque ou assurance")).not.toBeInTheDocument();
     expect(screen.getByText("Revenus publiés")).toBeInTheDocument();
-    expect(screen.getAllByText("Résultat avant impôt")).toHaveLength(3);
-    expect(screen.getByText("Actions en circulation")).toBeInTheDocument();
+    expect(screen.getAllByText("EBITDA")).toHaveLength(2);
+    expect(screen.getByText("Total actif")).toBeInTheDocument();
+    expect(screen.queryByText("Actions en circulation")).not.toBeInTheDocument();
     expect(screen.getByText("Flux de trésorerie d’investissement")).toBeInTheDocument();
     expect(screen.getByText("Dernier cours de bourse au 31 décembre")).toBeInTheDocument();
     expect(
@@ -126,6 +128,7 @@ describe("AnalysisDrawer financial institutions", () => {
     );
     expect(cardsBefore[0]).toHaveTextContent("Revenus publiés");
     expect(cardsBefore[1]).toHaveTextContent("Résultat net");
+    expect(cardsBefore[10]).toHaveTextContent("Actif circulant");
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -138,5 +141,116 @@ describe("AnalysisDrawer financial institutions", () => {
     );
     expect(cardsAfter[0]).toHaveTextContent("Résultat net");
     expect(cardsAfter[1]).toHaveTextContent("Revenus publiés");
+  });
+
+  it("compares the last two fiscal years and adds the requested ratios to history", () => {
+    const latest: FinancialAnalysis = {
+      ...analysis,
+      id: "analysis-latest",
+      analysis_profile: "standard",
+      revenue: 1_000,
+      ebitda: 350,
+      ebit: 200,
+      interest_expense: 20,
+      net_income: 250,
+      pretax_income: 160,
+      market_cap: 800,
+      current_assets: 1_000,
+      financial_debt: 500,
+      cash: 100,
+      total_assets: 1_000,
+      total_equity: 400,
+      treasury_stock_value: 100,
+    };
+    const previous: FinancialAnalysis = {
+      ...latest,
+      id: "analysis-previous",
+      fiscal_year: 2024,
+      revenue: 800,
+      ebitda: 320,
+      ebit: 160,
+      interest_expense: 32,
+      net_income: 80,
+      pretax_income: 100,
+      market_cap: 1_000,
+      current_assets: 800,
+      financial_debt: 600,
+      cash: 100,
+      total_assets: 900,
+    };
+    const twoYearHistory: FinancialHistory = {
+      ...history,
+      snapshots: [latest, previous],
+      trend: {
+        ...history.trend,
+        periods: 2,
+        first_year: 2024,
+      },
+    };
+
+    render(
+      <AnalysisDrawer
+        company={company}
+        history={twoYearHistory}
+        valuations={[]}
+        scores={[]}
+        loading={false}
+        error={null}
+        onCreateValuation={async () => {
+          throw new Error("not expected");
+        }}
+        onCreateScore={async () => {
+          throw new Error("not expected");
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByRole("heading", { name: "Tendance annualisée" })).not.toBeInTheDocument();
+    const comparison = screen
+      .getByRole("heading", { name: "Comparaison des deux derniers exercices" })
+      .closest("section");
+    expect(comparison).not.toBeNull();
+    const comparisonView = within(comparison as HTMLElement);
+    expect(comparisonView.getByText("2025 vs 2024")).toBeInTheDocument();
+    expect(comparisonView.getByText("Évolution : +25 %")).toBeInTheDocument();
+
+    const favorablePe = comparisonView.getByText("3,2×").closest("strong");
+    expect(favorablePe).toHaveClass("comparison-value--favorable");
+    expect(comparisonView.getByText("2024 : 12,5×")).toBeInTheDocument();
+    const unfavorableMargin = comparisonView.getByText("35 %").closest("strong");
+    expect(unfavorableMargin).toHaveClass("comparison-value--unfavorable");
+    const favorableNetMargin = comparisonView.getByText("25 %").closest("strong");
+    expect(favorableNetMargin).toHaveClass("comparison-value--favorable");
+    expect(comparisonView.getByText("43,8 %")).toBeInTheDocument();
+    const unfavorableLeverage = comparisonView.getByText("1,2×").closest("strong");
+    expect(unfavorableLeverage).toHaveClass("comparison-value--unfavorable");
+    expect(comparisonView.getByText("Seuil vert : > 40 %")).toBeInTheDocument();
+    expect(comparisonView.getByText("Seuil vert : > 20 %")).toBeInTheDocument();
+    expect(comparisonView.getByText("Seuil vert : < 20×")).toBeInTheDocument();
+
+    const annualHistory = screen.getByRole("table", { name: "Historique fondamental" });
+    expect(within(annualHistory).getByRole("columnheader", { name: /Marge brute/ })).toBeInTheDocument();
+    expect(within(annualHistory).getByRole("columnheader", { name: /Marge nette/ })).toBeInTheDocument();
+    expect(within(annualHistory).getByRole("columnheader", { name: /Poids dette financière/ })).toBeInTheDocument();
+    expect(within(annualHistory).getByRole("columnheader", { name: /Décote/ })).toBeInTheDocument();
+    expect(within(annualHistory).getByRole("columnheader", { name: /Rendement action-obligation/ })).toBeInTheDocument();
+    expect(within(annualHistory).getByRole("columnheader", { name: /Effet de levier/ })).toBeInTheDocument();
+    expect(within(annualHistory).getByRole("columnheader", { name: /Niveau d’endettement/ })).toBeInTheDocument();
+    expect(
+      within(annualHistory).getByText("35 %", {
+        selector: ".comparison-value--unfavorable",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(annualHistory).getByText("40 %", {
+        selector: ".comparison-value--unfavorable",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(annualHistory).getByText("25 %", {
+        selector: ".comparison-value--favorable",
+      }),
+    ).toBeInTheDocument();
   });
 });

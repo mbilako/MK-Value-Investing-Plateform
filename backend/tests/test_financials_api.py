@@ -474,7 +474,7 @@ def test_financial_history_returns_snapshots_and_growth(
         "net_income_cagr": pytest.approx(0.10),
         "free_cash_flow_cagr": pytest.approx(0.20),
         "operating_income_cagr": pytest.approx(0.0),
-        "pretax_income_cagr": None,
+        "ebitda_cagr": pytest.approx(0.0),
         "pe_annual_change": pytest.approx(-3.904958),
         "roe_annual_change": pytest.approx(0.0105),
         "current_ratio_annual_change": pytest.approx(0.0),

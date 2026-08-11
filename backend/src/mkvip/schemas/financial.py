@@ -86,7 +86,7 @@ class FinancialTrendRead(BaseModel):
     net_income_cagr: float | None
     free_cash_flow_cagr: float | None
     operating_income_cagr: float | None
-    pretax_income_cagr: float | None
+    ebitda_cagr: float | None
     pe_annual_change: float | None
     roe_annual_change: float | None
     current_ratio_annual_change: float | None

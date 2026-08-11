@@ -1948,6 +1948,44 @@ a:focus-visible {
   background: var(--emerald-tint);
 }
 
+.comparison-grid article {
+  align-content: start;
+  min-height: 150px;
+}
+
+.growth-grid strong.comparison-value--favorable,
+.fundamental-history__row .comparison-value--favorable {
+  color: var(--emerald);
+}
+
+.growth-grid strong.comparison-value--unfavorable,
+.fundamental-history__row .comparison-value--unfavorable {
+  color: var(--danger);
+}
+
+.growth-grid strong.comparison-value--neutral,
+.fundamental-history__row .comparison-value--neutral {
+  color: var(--navy);
+}
+
+.comparison-card__previous,
+.comparison-card__threshold {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.comparison-card__previous span {
+  display: block;
+  margin-top: 2px;
+  color: var(--navy);
+  font-weight: 650;
+}
+
+.comparison-card__threshold {
+  margin-top: auto;
+}
+
 main[id],
 section[id] {
   scroll-margin-top: 24px;

@@ -64,15 +64,19 @@ export function CompanyUniverse({
   const [query, setQuery] = useState("");
   const scoreFor = (company: Company) =>
     scores[company.id] ?? company.latest_mk_score;
+  const universeCompanies = useMemo(
+    () => companies.filter((company) => !company.is_favorite),
+    [companies],
+  );
   const filteredCompanies = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("fr");
-    if (!normalizedQuery) return companies;
-    return companies.filter((company) =>
+    if (!normalizedQuery) return universeCompanies;
+    return universeCompanies.filter((company) =>
       `${company.name} ${company.ticker}`
         .toLocaleLowerCase("fr")
         .includes(normalizedQuery),
     );
-  }, [companies, query]);
+  }, [query, universeCompanies]);
 
   return (
     <section
@@ -98,7 +102,7 @@ export function CompanyUniverse({
           <span>Pays</span>
           <span>Statut</span>
         </div>
-        {companies.length ? (
+        {universeCompanies.length ? (
           <div className="company-table__body">
             {filteredCompanies.map((company) => (
               <div className="company-table__row" role="row" key={company.id}>
@@ -138,31 +142,29 @@ export function CompanyUniverse({
                       )}
                     </button>
                   )}
-                  {scoreFor(company) != null && (
-                    <button
-                      className="row-favorite"
-                      data-favorite={company.is_favorite || undefined}
-                      onClick={() =>
-                        onToggleFavorite(company, !company.is_favorite)
-                      }
-                      aria-label={
-                        company.is_favorite
-                          ? `Retirer ${company.name} des favoris`
-                          : `Ajouter ${company.name} aux favoris`
-                      }
-                      title={
-                        company.is_favorite
-                          ? "Retirer des favoris"
-                          : "Ajouter aux favoris"
-                      }
-                    >
-                      <Star
-                        aria-hidden="true"
-                        size={17}
-                        fill={company.is_favorite ? "currentColor" : "none"}
-                      />
-                    </button>
-                  )}
+                  <button
+                    className="row-favorite"
+                    data-favorite={company.is_favorite || undefined}
+                    onClick={() =>
+                      onToggleFavorite(company, !company.is_favorite)
+                    }
+                    aria-label={
+                      company.is_favorite
+                        ? `Retirer ${company.name} des favoris`
+                        : `Ajouter ${company.name} aux favoris`
+                    }
+                    title={
+                      company.is_favorite
+                        ? "Retirer des favoris"
+                        : "Ajouter aux favoris"
+                    }
+                  >
+                    <Star
+                      aria-hidden="true"
+                      size={17}
+                      fill={company.is_favorite ? "currentColor" : "none"}
+                    />
+                  </button>
                   <button
                     className="row-manage"
                     onClick={() => onManage(company)}
@@ -179,6 +181,15 @@ export function CompanyUniverse({
                 Aucune entreprise ne correspond à cette recherche.
               </p>
             )}
+          </div>
+        ) : companies.length ? (
+          <div className="empty-state">
+            <Star aria-hidden="true" size={40} strokeWidth={1.5} />
+            <h3>Toutes les entreprises sont dans vos favoris</h3>
+            <p>
+              Retirez une entreprise des favoris pour la replacer dans votre
+              univers d’investissement.
+            </p>
           </div>
         ) : (
           <div className="empty-state">

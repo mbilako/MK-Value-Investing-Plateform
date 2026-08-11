@@ -70,8 +70,8 @@ export function FavoritesSection({
         <div className="favorites-empty">
           <Star aria-hidden="true" size={28} />
           <p>
-            Après avoir calculé un MK Score, utilisez l’étoile dans la liste des
-            entreprises pour conserver votre sélection ici.
+            Utilisez l’étoile dans la liste des entreprises pour conserver
+            votre sélection ici.
           </p>
         </div>
       )}

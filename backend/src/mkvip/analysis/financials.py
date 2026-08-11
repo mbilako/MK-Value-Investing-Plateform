@@ -45,7 +45,7 @@ class FinancialTrend:
     net_income_cagr: float | None
     free_cash_flow_cagr: float | None
     operating_income_cagr: float | None
-    pretax_income_cagr: float | None
+    ebitda_cagr: float | None
     pe_annual_change: float | None
     roe_annual_change: float | None
     current_ratio_annual_change: float | None
@@ -361,7 +361,7 @@ def calculate_financial_trend(
             net_income_cagr=None,
             free_cash_flow_cagr=None,
             operating_income_cagr=None,
-            pretax_income_cagr=None,
+            ebitda_cagr=None,
             pe_annual_change=None,
             roe_annual_change=None,
             current_ratio_annual_change=None,
@@ -379,7 +379,7 @@ def calculate_financial_trend(
             net_income_cagr=None,
             free_cash_flow_cagr=None,
             operating_income_cagr=None,
-            pretax_income_cagr=None,
+            ebitda_cagr=None,
             pe_annual_change=None,
             roe_annual_change=None,
             current_ratio_annual_change=None,
@@ -411,9 +411,9 @@ def calculate_financial_trend(
             if first.ebit is not None and last.ebit is not None
             else None
         ),
-        pretax_income_cagr=(
-            _cagr(first.pretax_income, last.pretax_income, elapsed_years)
-            if first.pretax_income is not None and last.pretax_income is not None
+        ebitda_cagr=(
+            _cagr(first.ebitda, last.ebitda, elapsed_years)
+            if first.ebitda is not None and last.ebitda is not None
             else None
         ),
         pe_annual_change=_annual_change(

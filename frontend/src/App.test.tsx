@@ -654,13 +654,63 @@ describe("MK-VIP authentication", () => {
     expect(updateCompany).toHaveBeenCalledWith("company-favorite", {
       is_favorite: true,
     });
+    const universe = screen.getByRole("region", {
+      name: "Univers d’investissement",
+    });
     const favorites = screen.getByRole("region", { name: "Favoris" });
+    expect(
+      within(universe).queryByText("AEGEAN AIRLINES"),
+    ).not.toBeInTheDocument();
     expect(within(favorites).getByText("AEGEAN AIRLINES")).toBeInTheDocument();
     expect(
       within(favorites).getByRole("button", {
         name: "Retirer AEGEAN AIRLINES des favoris",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("allows a financial institution without an MK Score to become a favorite", async () => {
+    const user = userEvent.setup();
+    const bank = {
+      id: "company-bank",
+      name: "ALPHA BANK",
+      ticker: "ALPHA.AT",
+      exchange: "Euronext Athens",
+      country: "Grèce",
+      currency: "EUR",
+      status: "ready" as const,
+      latest_mk_score: null,
+      is_favorite: false,
+    };
+    const updateCompany = vi.fn().mockImplementation(async (_id, payload) => ({
+      ...bank,
+      ...payload,
+    }));
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => [bank],
+          updateCompany,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Ajouter ALPHA BANK aux favoris",
+      }),
+    );
+
+    expect(updateCompany).toHaveBeenCalledWith("company-bank", {
+      is_favorite: true,
+    });
+    const universe = screen.getByRole("region", {
+      name: "Univers d’investissement",
+    });
+    const favorites = screen.getByRole("region", { name: "Favoris" });
+    expect(within(universe).queryByText("ALPHA BANK")).not.toBeInTheDocument();
+    expect(within(favorites).getByText("ALPHA BANK")).toBeInTheDocument();
+    expect(within(favorites).getByText("—")).toBeInTheDocument();
   });
 
   it("adds selected CAC Next 20 constituents without entering a ticker", async () => {
