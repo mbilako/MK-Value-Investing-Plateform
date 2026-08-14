@@ -18,13 +18,13 @@ from mkvip.providers.base import (
     ProviderDataError,
     ProviderTimeoutError,
 )
-from mkvip.providers.normalization import load_historical_snapshots
 from mkvip.repositories.company import CompanyRepository
 from mkvip.schemas.financial import (
     FinancialAnalysisRead,
     FinancialHistoryRead,
     FinancialSnapshotCreate,
 )
+from mkvip.services.financial_history import import_automatic_financial_history
 from mkvip.services.yahoo_imports import (
     YahooImportAdmission,
     YahooImportInProgressError,
@@ -125,12 +125,10 @@ async def import_financials_automatically(
         with admission.admit(current_user.id, company_id):
             try:
                 async with asyncio.timeout(settings.yahoo_import_timeout_seconds):
-                    payloads = await load_historical_snapshots(
+                    history = await import_automatic_financial_history(
+                        repository,
                         provider,
-                        company.ticker,
-                        isin=company.isin,
-                        cik=company.cik,
-                        lei=company.lei,
+                        company,
                         limit=10,
                     )
             except ProviderBusyError as error:
@@ -149,17 +147,7 @@ async def import_financials_automatically(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=str(error),
                 ) from error
-
-            await repository.create_financial_analyses(
-                company_id,
-                [(payload, analyse_financials(payload)) for payload in payloads],
-            )
-            snapshots = await repository.list_financial_analyses(company_id)
-            return FinancialHistoryRead(
-                company_id=company_id,
-                snapshots=snapshots,
-                trend=calculate_financial_trend(snapshots),
-            )
+            return history
     except YahooImportInProgressError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

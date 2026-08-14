@@ -76,6 +76,12 @@ def create_company(client: TestClient, ticker: str) -> str:
         ("GET", "/api/v1/companies", None),
         ("POST", "/api/v1/companies", COMPANY_PAYLOAD),
         ("GET", "/api/v1/dashboard", None),
+        ("GET", "/api/v1/screener", None),
+        (
+            "POST",
+            "/api/v1/screener/prepare",
+            {"import_financials": False},
+        ),
         ("GET", "/api/v1/rules", None),
         (
             "GET",
@@ -142,6 +148,8 @@ def test_two_users_cannot_discover_or_use_each_others_company(
     assert database_client.get("/api/v1/companies").json() == []
     dashboard = database_client.get("/api/v1/dashboard").json()
     assert dashboard["summary"]["companies"] == 0
+    screener = database_client.get("/api/v1/screener").json()
+    assert screener["summary"]["companies"] == 0
     assert database_client.get(
         f"/api/v1/companies/{alice_company}/financials"
     ).status_code == 404
@@ -321,6 +329,9 @@ async def test_repository_hides_foreign_derived_rows() -> None:
 
         assert await repository.get_financial_analysis(company.id, 2025) is None
         assert await repository.list_financial_analyses(company.id) == []
+        assert await repository.list_all_financial_analyses() == []
         assert await repository.list_valuation_analyses(company.id) == []
+        assert await repository.list_all_valuation_analyses() == []
         assert await repository.list_scoring_analyses(company.id) == []
+        assert await repository.list_all_scoring_analyses() == []
     await engine.dispose()

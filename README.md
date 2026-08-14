@@ -22,6 +22,8 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - valorisation par DCF, Owner Earnings, EPV, Graham et multiple de résultat ;
 - scoring global qualité, sécurité, valeur et moat quantitatif ;
 - tableau de décision, distribution des signaux et portefeuille de recherche ;
+- moteur de sélection ajusté au secteur, avec percentiles, rang sectoriel et
+  traitement distinct des entreprises financières ;
 - recherche des entreprises par nom ou ticker ;
 - Analyste IA sourcé pour synthétiser, comparer et interroger les dossiers ;
 - quota quotidien et cache persistant de l’Analyste IA par utilisateur ;
@@ -61,7 +63,10 @@ Le parcours applicatif commence par un compte personnel vérifié :
 8. calculer le scoring global et lire les quatre contributions et explications ;
 9. revenir au tableau de décision pour comparer les derniers scorings, filtrer
    les signaux et rouvrir un dossier prioritaire.
-10. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
+10. ouvrir « Sélection » pour consulter le Top 5 relatif à chaque secteur ;
+    utiliser « Classer l’univers » pour compléter les secteurs existants et
+    « Charger les historiques » pour traiter jusqu’à dix sociétés en attente ;
+11. ouvrir « Interroger l’IA » pour produire une synthèse, comparer deux
    entreprises ou poser une question sur les analyses MK-VIP disponibles.
 
 La couverture publique des indices peut être contrôlée depuis la racine du
@@ -203,6 +208,8 @@ GET  /api/v1/companies/{company_id}/valuations
 POST /api/v1/companies/{company_id}/scores
 GET  /api/v1/companies/{company_id}/scores
 GET  /api/v1/dashboard
+GET  /api/v1/screener
+POST /api/v1/screener/prepare
 POST /api/v1/ai/analyses
 GET  /api/v1/indices
 GET  /api/v1/indices/{code}

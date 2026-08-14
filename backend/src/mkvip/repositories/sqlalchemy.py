@@ -211,6 +211,18 @@ class SqlAlchemyCompanyRepository:
         )
         return [FinancialAnalysisRead.model_validate(snapshot) for snapshot in snapshots]
 
+    async def list_all_financial_analyses(self) -> list[FinancialAnalysisRead]:
+        snapshots = await self._session.scalars(
+            select(FinancialSnapshotOrm)
+            .join(CompanyOrm, CompanyOrm.id == FinancialSnapshotOrm.company_id)
+            .where(CompanyOrm.owner_id == self._owner_id)
+            .order_by(
+                FinancialSnapshotOrm.company_id,
+                FinancialSnapshotOrm.fiscal_year.desc(),
+            )
+        )
+        return [FinancialAnalysisRead.model_validate(snapshot) for snapshot in snapshots]
+
     async def create_financial_analysis(
         self,
         company_id: uuid.UUID,
@@ -295,6 +307,15 @@ class SqlAlchemyCompanyRepository:
         )
         return [ValuationAnalysisRead.model_validate(record) for record in records]
 
+    async def list_all_valuation_analyses(self) -> list[ValuationAnalysisRead]:
+        records = await self._session.scalars(
+            select(ValuationAnalysisOrm)
+            .join(CompanyOrm, CompanyOrm.id == ValuationAnalysisOrm.company_id)
+            .where(CompanyOrm.owner_id == self._owner_id)
+            .order_by(ValuationAnalysisOrm.created_at.desc())
+        )
+        return [ValuationAnalysisRead.model_validate(record) for record in records]
+
     async def get_valuation_analysis(
         self,
         company_id: uuid.UUID,
@@ -353,6 +374,15 @@ class SqlAlchemyCompanyRepository:
                 ScoringAnalysisOrm.company_id == company_id,
                 CompanyOrm.owner_id == self._owner_id,
             )
+            .order_by(ScoringAnalysisOrm.created_at.desc())
+        )
+        return [ScoringAnalysisRead.model_validate(record) for record in records]
+
+    async def list_all_scoring_analyses(self) -> list[ScoringAnalysisRead]:
+        records = await self._session.scalars(
+            select(ScoringAnalysisOrm)
+            .join(CompanyOrm, CompanyOrm.id == ScoringAnalysisOrm.company_id)
+            .where(CompanyOrm.owner_id == self._owner_id)
             .order_by(ScoringAnalysisOrm.created_at.desc())
         )
         return [ScoringAnalysisRead.model_validate(record) for record in records]

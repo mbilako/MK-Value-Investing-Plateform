@@ -3,6 +3,20 @@ import { Save, Trash2, X } from "lucide-react";
 
 import type { Company, CompanyPayload } from "../api/client";
 
+const GICS_SECTORS = [
+  ["Communication Services", "Services de communication"],
+  ["Consumer Discretionary", "Consommation discrétionnaire"],
+  ["Consumer Staples", "Consommation de base"],
+  ["Energy", "Énergie"],
+  ["Financials", "Finance"],
+  ["Health Care", "Santé"],
+  ["Industrials", "Industrie"],
+  ["Information Technology", "Technologie"],
+  ["Materials", "Matériaux"],
+  ["Real Estate", "Immobilier"],
+  ["Utilities", "Services aux collectivités"],
+] as const;
+
 interface CompanyManagementDrawerProps {
   company: Company;
   onUpdate(payload: Partial<CompanyPayload>): Promise<void>;
@@ -22,6 +36,8 @@ export function CompanyManagementDrawer({
     exchange: company.exchange,
     country: company.country,
     currency: company.currency,
+    sector: company.sector ?? "",
+    industry: company.industry ?? "",
     isin: company.isin ?? "",
     cik: company.cik ?? "",
     lei: company.lei ?? "",
@@ -75,6 +91,8 @@ export function CompanyManagementDrawer({
                 isin: form.isin || null,
                 cik: form.cik || null,
                 lei: form.lei || null,
+                sector: form.sector || null,
+                industry: form.industry || null,
               }),
             );
           }}
@@ -119,6 +137,32 @@ export function CompanyManagementDrawer({
                 required
                 value={form.country}
                 onChange={(event) => setForm({ ...form, country: event.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span>Secteur GICS</span>
+              <select
+                value={form.sector}
+                onChange={(event) =>
+                  setForm({ ...form, sector: event.target.value })
+                }
+              >
+                <option value="">À renseigner</option>
+                {GICS_SECTORS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Activité</span>
+              <input
+                placeholder="Ex. Banque diversifiée"
+                value={form.industry}
+                onChange={(event) =>
+                  setForm({ ...form, industry: event.target.value })
+                }
               />
             </label>
             <label className="field field--wide">

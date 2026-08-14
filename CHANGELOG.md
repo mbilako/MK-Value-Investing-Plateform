@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Première version du moteur de sélection sectoriel : classification GICS en
+  11 secteurs, persistance du secteur et de l’activité, classement par
+  percentiles et Top 5 expliqué dans l’interface.
+- Modèle relatif propre aux banques et assureurs fondé sur le ROE, les fonds
+  propres rapportés à l’actif, le PER et la croissance du résultat.
+- Route authentifiée `GET /api/v1/screener`, chargée en trois requêtes groupées
+  afin de rester adaptée à un univers étendu.
+- Action `POST /api/v1/screener/prepare` pour rétro-remplir les classifications
+  et importer les historiques manquants par lots bornés, avec résultat détaillé
+  par entreprise.
+
+### Changed
+
+- L’import financier automatique conserve désormais le secteur GICS normalisé
+  et l’activité remontés par la source publique.
+- L’écran de sélection permet de lancer le classement de l’univers et le
+  chargement de dix historiques manquants sans quitter le Top 5.
+
 ## 0.12.0 - 2026-08-14
 
 ### Sprint 1H — indices européens et américains, tranche 1
