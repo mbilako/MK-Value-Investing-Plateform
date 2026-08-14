@@ -598,6 +598,65 @@ async def test_historical_snapshots_use_year_end_market_cap_and_limit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_historical_snapshots_keep_partial_year_without_cash_flow() -> None:
+    from mkvip.providers.base import (
+        ProviderBalanceSheet,
+        ProviderCompanyProfile,
+        ProviderDataIncompleteError,
+        ProviderIncomeStatement,
+    )
+    from mkvip.providers.normalization import load_historical_snapshots
+
+    class PartialProvider:
+        name = "Partial public data"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="Partial SA",
+                exchange="Athens",
+                country="Greece",
+                currency="EUR",
+                market_cap=900_000_000,
+            )
+
+        async def get_income_statements(self, ticker: str):
+            return [
+                ProviderIncomeStatement(
+                    fiscal_year=2025,
+                    revenue=500_000_000,
+                    ebitda=80_000_000,
+                    depreciation_amortization=10_000_000,
+                    ebit=70_000_000,
+                    interest_expense=5_000_000,
+                    net_income=45_000_000,
+                )
+            ]
+
+        async def get_balance_sheet(self, ticker: str):
+            return [
+                ProviderBalanceSheet(
+                    fiscal_year=2025,
+                    total_assets=1_000_000_000,
+                    current_assets=300_000_000,
+                    current_liabilities=150_000_000,
+                    financial_debt=200_000_000,
+                    cash=50_000_000,
+                    total_equity=400_000_000,
+                )
+            ]
+
+        async def get_cash_flow(self, ticker: str):
+            raise ProviderDataIncompleteError("Cash flow unavailable")
+
+    snapshots = await load_historical_snapshots(PartialProvider(), "PART.AT")
+
+    assert [snapshot.fiscal_year for snapshot in snapshots] == [2025]
+    assert snapshots[0].operating_cash_flow is None
+    assert snapshots[0].capex is None
+
+
+@pytest.mark.asyncio
 async def test_yahoo_guard_rejects_excess_work_before_it_reaches_the_executor() -> None:
     try:
         from mkvip.providers.yahoo import YahooExecutionGuard

@@ -1,0 +1,1375 @@
+--- /mnt/data/mkvip_backend_090/backend/src/mkvip/api/dependencies.py	2026-07-27 14:44:10.453805138 +0000
++++ /mnt/data/mkvip_backend_091/backend/src/mkvip/api/dependencies.py	2026-07-27 14:43:32.781804278 +0000
+@@ -1,77 +1,89 @@
+-from typing import Annotated
+-
+-from fastapi import Depends, HTTPException, Request, status
+-from sqlalchemy.ext.asyncio import AsyncSession
+-
+-from mkvip.auth.service import AuthService
+-from mkvip.core.config import Settings, get_settings
+-from mkvip.db.session import get_session
+-from mkvip.providers.ai import AIAnalystProvider, AIProviderError, OpenAIAnalystProvider
+-from mkvip.providers.base import FinancialDataProvider
+-from mkvip.providers.yahoo import YahooFinanceProvider
+-from mkvip.repositories.company import CompanyRepository
+-from mkvip.repositories.sqlalchemy import SqlAlchemyCompanyRepository
+-from mkvip.schemas.auth import UserRead
+-
+-
+-def get_auth_service(
+-    session: Annotated[AsyncSession, Depends(get_session)],
+-    settings: Annotated[Settings, Depends(get_settings)],
+-) -> AuthService:
+-    return AuthService(session, settings)
+-
+-
+-async def get_current_user(
+-    request: Request,
+-    settings: Annotated[Settings, Depends(get_settings)],
+-    service: Annotated[AuthService, Depends(get_auth_service)],
+-) -> UserRead:
+-    user = await service.resolve_user(
+-        request.cookies.get(settings.session_cookie_name)
+-    )
+-    if user is None:
+-        raise HTTPException(
+-            status_code=status.HTTP_401_UNAUTHORIZED,
+-            detail="Session absente ou expirée.",
+-        )
+-    return user
+-
+-
+-CurrentUser = Annotated[UserRead, Depends(get_current_user)]
+-
+-
+-def get_company_repository(
+-    session: Annotated[AsyncSession, Depends(get_session)],
+-    current_user: CurrentUser,
+-) -> CompanyRepository:
+-    return SqlAlchemyCompanyRepository(session, current_user.id)
+-
+-
+-def get_financial_data_provider() -> FinancialDataProvider:
+-    return YahooFinanceProvider()
+-
+-
+-def get_ai_analyst_provider(
+-    request: Request,
+-    settings: Annotated[Settings, Depends(get_settings)],
+-) -> AIAnalystProvider:
+-    override = getattr(request.app.state, "ai_analyst_provider", None)
+-    if override is not None:
+-        return override
+-    if settings.openai_api_key is None:
+-        raise HTTPException(
+-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+-            detail=(
+-                "L’Analyste IA n’est pas configuré sur cet environnement."
+-            ),
+-        )
+-    try:
+-        return OpenAIAnalystProvider(
+-            api_key=settings.openai_api_key,
+-            model_name=settings.openai_model,
+-        )
+-    except AIProviderError as exc:
+-        raise HTTPException(
+-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+-            detail=str(exc),
+-        ) from exc
++from typing import Annotated
++
++from fastapi import Depends, HTTPException, Request, status
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from mkvip.auth.service import AuthService
++from mkvip.core.config import Settings, get_settings
++from mkvip.db.session import get_session
++from mkvip.providers.ai import AIAnalystProvider, AIProviderError, OpenAIAnalystProvider
++from mkvip.providers.base import FinancialDataProvider
++from mkvip.providers.yahoo import YahooFinanceProvider
++from mkvip.repositories.company import CompanyRepository
++from mkvip.repositories.sqlalchemy import SqlAlchemyCompanyRepository
++from mkvip.schemas.auth import UserRead
++from mkvip.services.ai_usage import AIUsageService
++
++
++def get_auth_service(
++    session: Annotated[AsyncSession, Depends(get_session)],
++    settings: Annotated[Settings, Depends(get_settings)],
++) -> AuthService:
++    return AuthService(session, settings)
++
++
++async def get_current_user(
++    request: Request,
++    settings: Annotated[Settings, Depends(get_settings)],
++    service: Annotated[AuthService, Depends(get_auth_service)],
++) -> UserRead:
++    user = await service.resolve_user(
++        request.cookies.get(settings.session_cookie_name)
++    )
++    if user is None:
++        raise HTTPException(
++            status_code=status.HTTP_401_UNAUTHORIZED,
++            detail="Session absente ou expirée.",
++        )
++    return user
++
++
++CurrentUser = Annotated[UserRead, Depends(get_current_user)]
++
++
++def get_company_repository(
++    session: Annotated[AsyncSession, Depends(get_session)],
++    current_user: CurrentUser,
++) -> CompanyRepository:
++    return SqlAlchemyCompanyRepository(session, current_user.id)
++
++
++def get_financial_data_provider() -> FinancialDataProvider:
++    return YahooFinanceProvider()
++
++
++def get_ai_usage_service(
++    session: Annotated[AsyncSession, Depends(get_session)],
++    settings: Annotated[Settings, Depends(get_settings)],
++) -> AIUsageService:
++    return AIUsageService(
++        session,
++        daily_limit=settings.ai_daily_quota,
++        cache_ttl_seconds=settings.ai_cache_ttl_seconds,
++    )
++
++
++def get_ai_analyst_provider(
++    request: Request,
++    settings: Annotated[Settings, Depends(get_settings)],
++) -> AIAnalystProvider:
++    override = getattr(request.app.state, "ai_analyst_provider", None)
++    if override is not None:
++        return override
++    if settings.openai_api_key is None:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail=(
++                "L’Analyste IA n’est pas configuré sur cet environnement."
++            ),
++        )
++    try:
++        return OpenAIAnalystProvider(
++            api_key=settings.openai_api_key,
++            model_name=settings.openai_model,
++        )
++    except AIProviderError as exc:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail=str(exc),
++        ) from exc
+
+--- /mnt/data/mkvip_backend_090/backend/src/mkvip/api/routes/ai.py	2026-07-27 14:44:10.453805138 +0000
++++ /mnt/data/mkvip_backend_091/backend/src/mkvip/api/routes/ai.py	2026-07-27 14:43:38.221804402 +0000
+@@ -8,9 +8,12 @@
+ from pydantic import ValidationError
+ 
+ from mkvip.api.dependencies import (
++    CurrentUser,
+     get_ai_analyst_provider,
++    get_ai_usage_service,
+     get_company_repository,
+ )
++from mkvip.services.ai_usage import AIQuotaExceededError, AIUsageService
+ from mkvip.providers.ai import AIAnalystProvider, AIProviderError
+ from mkvip.repositories.company import CompanyRepository
+ from mkvip.schemas.ai import (
+@@ -25,6 +28,7 @@
+ router = APIRouter(prefix="/ai/analyses", tags=["ai"])
+ Repository = Annotated[CompanyRepository, Depends(get_company_repository)]
+ Provider = Annotated[AIAnalystProvider, Depends(get_ai_analyst_provider)]
++Usage = Annotated[AIUsageService, Depends(get_ai_usage_service)]
+ 
+ DISCLAIMER = (
+     "Analyse informative fondée uniquement sur les données MK-VIP ; "
+@@ -105,6 +109,8 @@
+     payload: AIAnalysisCreate,
+     repository: Repository,
+     provider: Provider,
++    current_user: CurrentUser,
++    usage: Usage,
+ ) -> AIAnalysisRead:
+     primary, sources = await build_company_context(
+         repository,
+@@ -125,6 +131,52 @@
+         comparison=comparison,
+         sources=sources,
+     )
++
++    cache_key = usage.cache_key(
++        {
++            "mode": payload.mode,
++            "question": payload.question,
++            "primary": {
++                "company_id": str(primary.company.id),
++                "sources": [
++                    {
++                        "id": source.id,
++                        "created_at": source.created_at.isoformat(),
++                    }
++                    for source in sources
++                    if source.company_id == primary.company.id
++                ],
++            },
++            "comparison": (
++                {
++                    "company_id": str(comparison.company.id),
++                    "sources": [
++                        {
++                            "id": source.id,
++                            "created_at": source.created_at.isoformat(),
++                        }
++                        for source in sources
++                        if comparison is not None
++                        and source.company_id == comparison.company.id
++                    ],
++                }
++                if comparison is not None
++                else None
++            ),
++        }
++    )
++    cached = await usage.get_cached(current_user.id, cache_key)
++    if cached is not None:
++        return AIAnalysisRead.model_validate(cached)
++
++    try:
++        await usage.consume_quota(current_user.id)
++    except AIQuotaExceededError as exc:
++        raise HTTPException(
++            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
++            detail="Le quota quotidien de l’Analyste IA est épuisé.",
++            headers={"Retry-After": "86400"},
++        ) from exc
+     try:
+         draft = AIAnalysisDraft.model_validate(
+             await provider.analyze(request)
+@@ -155,7 +207,7 @@
+             ),
+         )
+ 
+-    return AIAnalysisRead(
++    result = AIAnalysisRead(
+         **draft.model_dump(),
+         mode=payload.mode,
+         sources=sources,
+@@ -163,3 +215,9 @@
+         generated_at=datetime.now(UTC),
+         disclaimer=DISCLAIMER,
+     )
++    await usage.put_cached(
++        current_user.id,
++        cache_key,
++        result.model_dump(mode="json"),
++    )
++    return result
+
+--- /mnt/data/mkvip_backend_090/backend/src/mkvip/core/config.py	2026-07-27 14:44:10.457805138 +0000
++++ /mnt/data/mkvip_backend_091/backend/src/mkvip/core/config.py	2026-07-27 14:42:48.533803267 +0000
+@@ -1,33 +1,35 @@
+-from functools import lru_cache
+-
+-from pydantic import Field, PositiveInt, SecretStr
+-from pydantic_settings import BaseSettings, SettingsConfigDict
+-
+-
+-class Settings(BaseSettings):
+-    app_name: str = "MK-VIP API"
+-    database_url: str = (
+-        "postgresql+asyncpg://mkvip:mkvip@localhost:5432/mkvip"
+-    )
+-    openai_api_key: SecretStr | None = Field(
+-        default=None,
+-        validation_alias="OPENAI_API_KEY",
+-    )
+-    openai_model: str = "gpt-5.6-sol"
+-    allowed_origins: list[str] = ["http://localhost:5173"]
+-    session_cookie_name: str = "mkvip_session"
+-    session_cookie_secure: bool = False
+-    session_duration_days: PositiveInt = 30
+-    login_max_attempts: PositiveInt = 5
+-    login_lock_minutes: PositiveInt = 15
+-
+-    model_config = SettingsConfigDict(
+-        env_file=("../.env.local", ".env.local", ".env"),
+-        env_prefix="MKVIP_",
+-        extra="ignore",
+-    )
+-
+-
+-@lru_cache
+-def get_settings() -> Settings:
+-    return Settings()
++from functools import lru_cache
++
++from pydantic import Field, PositiveInt, SecretStr
++from pydantic_settings import BaseSettings, SettingsConfigDict
++
++
++class Settings(BaseSettings):
++    app_name: str = "MK-VIP API"
++    database_url: str = (
++        "postgresql+asyncpg://mkvip:mkvip@localhost:5432/mkvip"
++    )
++    openai_api_key: SecretStr | None = Field(
++        default=None,
++        validation_alias="OPENAI_API_KEY",
++    )
++    openai_model: str = "gpt-5.6-sol"
++    allowed_origins: list[str] = ["http://localhost:5173"]
++    session_cookie_name: str = "mkvip_session"
++    session_cookie_secure: bool = False
++    session_duration_days: PositiveInt = 30
++    login_max_attempts: PositiveInt = 5
++    login_lock_minutes: PositiveInt = 15
++    ai_daily_quota: PositiveInt = 20
++    ai_cache_ttl_seconds: PositiveInt = 3600
++
++    model_config = SettingsConfigDict(
++        env_file=("../.env.local", ".env.local", ".env"),
++        env_prefix="MKVIP_",
++        extra="ignore",
++    )
++
++
++@lru_cache
++def get_settings() -> Settings:
++    return Settings()
+
+--- /mnt/data/mkvip_backend_090/backend/src/mkvip/models/__init__.py	2026-07-27 14:44:10.457805138 +0000
++++ /mnt/data/mkvip_backend_091/backend/src/mkvip/models/__init__.py	2026-07-27 14:42:32.797802908 +0000
+@@ -1,15 +1,18 @@
+-from mkvip.models.company import CompanyOrm
+-from mkvip.models.financial import FinancialSnapshotOrm
+-from mkvip.models.scoring import ScoringAnalysisOrm
+-from mkvip.models.session import SessionOrm
+-from mkvip.models.user import UserOrm
+-from mkvip.models.valuation import ValuationAnalysisOrm
+-
+-__all__ = [
+-    "CompanyOrm",
+-    "FinancialSnapshotOrm",
+-    "ScoringAnalysisOrm",
+-    "SessionOrm",
+-    "UserOrm",
+-    "ValuationAnalysisOrm",
+-]
++from mkvip.models.ai_usage import AIQuotaOrm, AICacheOrm
++from mkvip.models.company import CompanyOrm
++from mkvip.models.financial import FinancialSnapshotOrm
++from mkvip.models.scoring import ScoringAnalysisOrm
++from mkvip.models.session import SessionOrm
++from mkvip.models.user import UserOrm
++from mkvip.models.valuation import ValuationAnalysisOrm
++
++__all__ = [
++    "AICacheOrm",
++    "AIQuotaOrm",
++    "CompanyOrm",
++    "FinancialSnapshotOrm",
++    "ScoringAnalysisOrm",
++    "SessionOrm",
++    "UserOrm",
++    "ValuationAnalysisOrm",
++]
+
+--- /dev/null	2026-07-27 14:28:25.997783570 +0000
++++ /mnt/data/mkvip_backend_091/backend/src/mkvip/models/ai_usage.py	2026-07-27 14:42:32.797802908 +0000
+@@ -0,0 +1,43 @@
++from __future__ import annotations
++
++import uuid
++from datetime import UTC, date, datetime
++
++from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
++from sqlalchemy.orm import Mapped, mapped_column
++
++from mkvip.db.base import Base
++
++
++class AIQuotaOrm(Base):
++    __tablename__ = "ai_quotas"
++    __table_args__ = (
++        UniqueConstraint("user_id", "period_start", name="uq_ai_quotas_user_period"),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
++    user_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("users.id", ondelete="CASCADE"), index=True
++    )
++    period_start: Mapped[date] = mapped_column(Date, nullable=False)
++    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
++
++
++class AICacheOrm(Base):
++    __tablename__ = "ai_analysis_cache"
++    __table_args__ = (
++        UniqueConstraint("user_id", "cache_key", name="uq_ai_cache_user_key"),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
++    user_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("users.id", ondelete="CASCADE"), index=True
++    )
++    cache_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
++    response_json: Mapped[str] = mapped_column(Text, nullable=False)
++    expires_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, index=True
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
++    )
+
+--- /dev/null	2026-07-27 14:28:25.997783570 +0000
++++ /mnt/data/mkvip_backend_091/backend/src/mkvip/services/ai_usage.py	2026-07-27 14:42:42.141803121 +0000
+@@ -0,0 +1,134 @@
++from __future__ import annotations
++
++import hashlib
++import json
++import uuid
++from datetime import UTC, date, datetime, timedelta
++
++from sqlalchemy import delete, select, update
++from sqlalchemy.exc import IntegrityError
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from mkvip.models.ai_usage import AICacheOrm, AIQuotaOrm
++
++
++class AIQuotaExceededError(Exception):
++    pass
++
++
++class AIUsageService:
++    def __init__(
++        self,
++        session: AsyncSession,
++        *,
++        daily_limit: int,
++        cache_ttl_seconds: int,
++        now: datetime | None = None,
++    ) -> None:
++        self._session = session
++        self._daily_limit = daily_limit
++        self._cache_ttl_seconds = cache_ttl_seconds
++        self._now = now or datetime.now(UTC)
++
++    def cache_key(self, payload: dict[str, object]) -> str:
++        encoded = json.dumps(
++            payload,
++            sort_keys=True,
++            separators=(",", ":"),
++            ensure_ascii=False,
++            default=str,
++        ).encode("utf-8")
++        return hashlib.sha256(encoded).hexdigest()
++
++    async def get_cached(
++        self,
++        user_id: uuid.UUID,
++        cache_key: str,
++    ) -> dict[str, object] | None:
++        now = self._now
++        cached = await self._session.scalar(
++            select(AICacheOrm).where(
++                AICacheOrm.user_id == user_id,
++                AICacheOrm.cache_key == cache_key,
++                AICacheOrm.expires_at > now,
++            )
++        )
++        if cached is None:
++            await self._session.execute(
++                delete(AICacheOrm).where(
++                    AICacheOrm.user_id == user_id,
++                    AICacheOrm.cache_key == cache_key,
++                )
++            )
++            await self._session.commit()
++            return None
++        return json.loads(cached.response_json)
++
++    async def consume_quota(self, user_id: uuid.UUID) -> None:
++        period_start = self._now.date()
++        try:
++            async with self._session.begin_nested():
++                self._session.add(
++                    AIQuotaOrm(
++                        user_id=user_id,
++                        period_start=period_start,
++                        request_count=0,
++                    )
++                )
++                await self._session.flush()
++        except IntegrityError:
++            # Another concurrent request created this user's daily row.
++            pass
++
++        result = await self._session.execute(
++            update(AIQuotaOrm)
++            .where(
++                AIQuotaOrm.user_id == user_id,
++                AIQuotaOrm.period_start == period_start,
++                AIQuotaOrm.request_count < self._daily_limit,
++            )
++            .values(request_count=AIQuotaOrm.request_count + 1)
++        )
++        if result.rowcount != 1:
++            await self._session.rollback()
++            raise AIQuotaExceededError
++        await self._session.commit()
++
++    async def put_cached(
++        self,
++        user_id: uuid.UUID,
++        cache_key: str,
++        response: dict[str, object],
++    ) -> None:
++        now = self._now
++        expires_at = now + timedelta(seconds=self._cache_ttl_seconds)
++        existing = await self._session.scalar(
++            select(AICacheOrm).where(
++                AICacheOrm.user_id == user_id,
++                AICacheOrm.cache_key == cache_key,
++            )
++        )
++        if existing is None:
++            self._session.add(
++                AICacheOrm(
++                    user_id=user_id,
++                    cache_key=cache_key,
++                    response_json=json.dumps(
++                        response,
++                        ensure_ascii=False,
++                        separators=(",", ":"),
++                        default=str,
++                    ),
++                    expires_at=expires_at,
++                    created_at=now,
++                )
++            )
++        else:
++            existing.response_json = json.dumps(
++                response,
++                ensure_ascii=False,
++                separators=(",", ":"),
++                default=str,
++            )
++            existing.expires_at = expires_at
++        await self._session.commit()
+
+--- /dev/null	2026-07-27 14:28:25.997783570 +0000
++++ /mnt/data/mkvip_backend_091/backend/alembic/versions/20260727_0007_add_ai_quota_cache.py	2026-07-27 14:43:13.813803845 +0000
+@@ -0,0 +1,65 @@
++"""add per-user AI quota and cache
++
++Revision ID: 20260727_0007
++Revises: 20260726_0006
++Create Date: 2026-07-27
++"""
++
++from alembic import op
++import sqlalchemy as sa
++
++
++revision = "20260727_0007"
++down_revision = "20260726_0006"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table(
++        "ai_quotas",
++        sa.Column("id", sa.Uuid(), nullable=False),
++        sa.Column("user_id", sa.Uuid(), nullable=False),
++        sa.Column("period_start", sa.Date(), nullable=False),
++        sa.Column("request_count", sa.Integer(), nullable=False),
++        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
++        sa.PrimaryKeyConstraint("id"),
++        sa.UniqueConstraint(
++            "user_id",
++            "period_start",
++            name="uq_ai_quotas_user_period",
++        ),
++    )
++    op.create_index("ix_ai_quotas_user_id", "ai_quotas", ["user_id"])
++    op.create_table(
++        "ai_analysis_cache",
++        sa.Column("id", sa.Uuid(), nullable=False),
++        sa.Column("user_id", sa.Uuid(), nullable=False),
++        sa.Column("cache_key", sa.String(length=64), nullable=False),
++        sa.Column("response_json", sa.Text(), nullable=False),
++        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
++        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
++        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
++        sa.PrimaryKeyConstraint("id"),
++        sa.UniqueConstraint("user_id", "cache_key", name="uq_ai_cache_user_key"),
++    )
++    op.create_index("ix_ai_analysis_cache_user_id", "ai_analysis_cache", ["user_id"])
++    op.create_index(
++        "ix_ai_analysis_cache_cache_key",
++        "ai_analysis_cache",
++        ["cache_key"],
++    )
++    op.create_index(
++        "ix_ai_analysis_cache_expires_at",
++        "ai_analysis_cache",
++        ["expires_at"],
++    )
++
++
++def downgrade() -> None:
++    op.drop_index("ix_ai_analysis_cache_expires_at", table_name="ai_analysis_cache")
++    op.drop_index("ix_ai_analysis_cache_cache_key", table_name="ai_analysis_cache")
++    op.drop_index("ix_ai_analysis_cache_user_id", table_name="ai_analysis_cache")
++    op.drop_table("ai_analysis_cache")
++    op.drop_index("ix_ai_quotas_user_id", table_name="ai_quotas")
++    op.drop_table("ai_quotas")
+
+--- /mnt/data/mkvip_backend_090/backend/tests/test_ai_analyst_api.py	2026-07-27 14:44:10.461805138 +0000
++++ /mnt/data/mkvip_backend_091/backend/tests/test_ai_analyst_api.py	2026-07-27 14:43:47.797804621 +0000
+@@ -1,300 +1,434 @@
+-from collections.abc import Iterator
+-from typing import Any
+-
+-import pytest
+-from fastapi.testclient import TestClient
+-
+-from mkvip.main import app
+-
+-
+-class FakeAIAnalystProvider:
+-    model_name = "test-analyst"
+-
+-    def __init__(self) -> None:
+-        self.requests: list[Any] = []
+-
+-    async def analyze(self, request: Any) -> dict[str, Any]:
+-        self.requests.append(request)
+-        first_source = request.sources[0].id
+-        return {
+-            "headline": "Lecture fondamentale synthétique",
+-            "conclusion": (
+-                "La qualité opérationnelle ressort mieux que la valorisation."
+-            ),
+-            "evidence": [
+-                {
+-                    "title": "Qualité des fondamentaux",
+-                    "finding": (
+-                        "Les données MK-VIP montrent une exploitation rentable."
+-                    ),
+-                    "source_ids": [first_source],
+-                }
+-            ],
+-            "risks": ["La marge de sécurité reste à confirmer."],
+-            "missing_information": [
+-                "La trajectoire pluriannuelle n’est pas encore disponible."
+-            ],
+-        }
+-
+-
+-@pytest.fixture(autouse=True)
+-def ai_analyst_provider() -> Iterator[FakeAIAnalystProvider]:
+-    provider = FakeAIAnalystProvider()
+-    app.state.ai_analyst_provider = provider
+-    yield provider
+-    del app.state.ai_analyst_provider
+-
+-
+-def create_company(client: TestClient, name: str, ticker: str) -> str:
+-    response = client.post(
+-        "/api/v1/companies",
+-        json={
+-            "name": name,
+-            "ticker": ticker,
+-            "exchange": "Euronext Paris",
+-            "country": "France",
+-            "currency": "EUR",
+-        },
+-    )
+-    assert response.status_code == 201
+-    return response.json()["id"]
+-
+-
+-def prepare_company(client: TestClient, company_id: str, source: str) -> None:
+-    imported = client.post(
+-        f"/api/v1/companies/{company_id}/financials",
+-        json={
+-            "fiscal_year": 2025,
+-            "source": source,
+-            "currency": "EUR",
+-            "revenue": 1_000,
+-            "ebitda": 300,
+-            "depreciation_amortization": 40,
+-            "ebit": 250,
+-            "interest_expense": 20,
+-            "operating_cash_flow": 180,
+-            "capex": 80,
+-            "net_income": 160,
+-            "market_cap": 2_200,
+-            "total_assets": 2_000,
+-            "current_assets": 500,
+-            "current_liabilities": 250,
+-            "financial_debt": 400,
+-            "cash": 100,
+-            "total_equity": 800,
+-        },
+-    )
+-    assert imported.status_code == 201
+-    valued = client.post(
+-        f"/api/v1/companies/{company_id}/valuations",
+-        json={
+-            "fiscal_year": 2025,
+-            "assumptions": {
+-                "growth_rate": 0.05,
+-                "terminal_growth_rate": 0.02,
+-                "cost_of_equity": 0.10,
+-                "wacc": 0.10,
+-                "tax_rate": 0.25,
+-                "projection_years": 5,
+-                "target_pe": 15,
+-                "corporate_bond_yield": 0.044,
+-                "margin_of_safety": 0.25,
+-            },
+-        },
+-    )
+-    assert valued.status_code == 201
+-    scored = client.post(
+-        f"/api/v1/companies/{company_id}/scores",
+-        json={
+-            "fiscal_year": 2025,
+-            "valuation_id": valued.json()["id"],
+-        },
+-    )
+-    assert scored.status_code == 201
+-
+-
+-def test_generates_a_sourced_summary_from_existing_mkvip_analyses(
+-    client: TestClient,
+-) -> None:
+-    company_id = create_company(client, "Air Liquide", "AI.PA")
+-    prepare_company(client, company_id, "Rapport annuel 2025")
+-
+-    response = client.post(
+-        "/api/v1/ai/analyses",
+-        json={"mode": "summary", "company_id": company_id},
+-    )
+-
+-    assert response.status_code == 200
+-    body = response.json()
+-    assert body["mode"] == "summary"
+-    assert body["headline"] == "Lecture fondamentale synthétique"
+-    assert body["conclusion"] == (
+-        "La qualité opérationnelle ressort mieux que la valorisation."
+-    )
+-    assert body["model"] == "test-analyst"
+-    assert body["disclaimer"] == (
+-        "Analyse informative fondée uniquement sur les données MK-VIP ; "
+-        "elle ne constitue pas un conseil en investissement."
+-    )
+-    assert {source["kind"] for source in body["sources"]} == {
+-        "financial",
+-        "valuation",
+-        "scoring",
+-    }
+-    assert body["evidence"][0]["source_ids"][0] in {
+-        source["id"] for source in body["sources"]
+-    }
+-    provider = client.app.state.ai_analyst_provider
+-    assert len(provider.requests) == 1
+-    assert provider.requests[0].primary.company.ticker == "AI.PA"
+-    assert {
+-        source.kind for source in provider.requests[0].sources
+-    } == {"financial", "valuation", "scoring"}
+-
+-
+-def test_builds_a_comparison_context_for_two_distinct_companies(
+-    client: TestClient,
+-) -> None:
+-    primary_id = create_company(client, "Air Liquide", "AI.PA")
+-    comparison_id = create_company(client, "L'Oréal", "OR.PA")
+-    prepare_company(client, primary_id, "Rapport Air Liquide 2025")
+-    prepare_company(client, comparison_id, "Rapport L'Oréal 2025")
+-
+-    response = client.post(
+-        "/api/v1/ai/analyses",
+-        json={
+-            "mode": "comparison",
+-            "company_id": primary_id,
+-            "comparison_company_id": comparison_id,
+-        },
+-    )
+-
+-    assert response.status_code == 200
+-    request = client.app.state.ai_analyst_provider.requests[0]
+-    assert request.mode == "comparison"
+-    assert request.primary.company.ticker == "AI.PA"
+-    assert request.comparison.company.ticker == "OR.PA"
+-    assert {source.company_id for source in request.sources} == {
+-        request.primary.company.id,
+-        request.comparison.company.id,
+-    }
+-
+-
+-@pytest.mark.parametrize(
+-    ("payload", "expected_detail"),
+-    [
+-        (
+-            {"mode": "question", "company_id": "00000000-0000-0000-0000-000000000001"},
+-            "Une question est requise dans ce mode.",
+-        ),
+-        (
+-            {
+-                "mode": "comparison",
+-                "company_id": "00000000-0000-0000-0000-000000000001",
+-            },
+-            "Une entreprise de comparaison est requise dans ce mode.",
+-        ),
+-        (
+-            {
+-                "mode": "comparison",
+-                "company_id": "00000000-0000-0000-0000-000000000001",
+-                "comparison_company_id": (
+-                    "00000000-0000-0000-0000-000000000001"
+-                ),
+-            },
+-            "Les deux entreprises comparées doivent être distinctes.",
+-        ),
+-    ],
+-)
+-def test_rejects_incomplete_ai_requests(
+-    client: TestClient,
+-    payload: dict[str, str],
+-    expected_detail: str,
+-) -> None:
+-    response = client.post("/api/v1/ai/analyses", json=payload)
+-
+-    assert response.status_code == 422
+-    assert expected_detail in str(response.json()["detail"])
+-    assert client.app.state.ai_analyst_provider.requests == []
+-
+-
+-def test_requires_an_existing_financial_analysis(client: TestClient) -> None:
+-    company_id = create_company(client, "Danone", "BN.PA")
+-
+-    response = client.post(
+-        "/api/v1/ai/analyses",
+-        json={
+-            "mode": "question",
+-            "company_id": company_id,
+-            "question": "Quels sont les principaux points de vigilance ?",
+-        },
+-    )
+-
+-    assert response.status_code == 409
+-    assert response.json()["detail"] == (
+-        "Une analyse financière MK-VIP est requise pour interroger l’IA."
+-    )
+-    assert client.app.state.ai_analyst_provider.requests == []
+-
+-
+-def test_rejects_a_provider_citation_outside_the_mkvip_context(
+-    client: TestClient,
+-) -> None:
+-    company_id = create_company(client, "Air Liquide", "AI.PA")
+-    prepare_company(client, company_id, "Rapport annuel 2025")
+-    provider = client.app.state.ai_analyst_provider
+-
+-    async def analyze_with_unknown_source(request: Any) -> dict[str, Any]:
+-        provider.requests.append(request)
+-        return {
+-            "headline": "Lecture non fiable",
+-            "conclusion": "Cette réponse cite une donnée externe.",
+-            "evidence": [
+-                {
+-                    "title": "Constat sans source",
+-                    "finding": "Une information absente du contexte est citée.",
+-                    "source_ids": ["web:unknown"],
+-                }
+-            ],
+-            "risks": ["La source est invalide."],
+-            "missing_information": ["La source originale manque."],
+-        }
+-
+-    provider.analyze = analyze_with_unknown_source
+-
+-    response = client.post(
+-        "/api/v1/ai/analyses",
+-        json={"mode": "summary", "company_id": company_id},
+-    )
+-
+-    assert response.status_code == 502
+-    assert response.json()["detail"] == (
+-        "L’analyse IA cite une source absente du contexte MK-VIP."
+-    )
+-
+-
+-def test_rejects_a_malformed_provider_response(client: TestClient) -> None:
+-    company_id = create_company(client, "Air Liquide", "AI.PA")
+-    prepare_company(client, company_id, "Rapport annuel 2025")
+-    provider = client.app.state.ai_analyst_provider
+-
+-    async def analyze_without_required_sections(
+-        request: Any,
+-    ) -> dict[str, Any]:
+-        provider.requests.append(request)
+-        return {
+-            "headline": "Réponse incomplète",
+-            "conclusion": "Les sections requises sont absentes.",
+-        }
+-
+-    provider.analyze = analyze_without_required_sections
+-
+-    response = client.post(
+-        "/api/v1/ai/analyses",
+-        json={"mode": "summary", "company_id": company_id},
+-    )
+-
+-    assert response.status_code == 502
+-    assert response.json()["detail"] == (
+-        "Le fournisseur IA a renvoyé une analyse invalide."
+-    )
++from collections.abc import Iterator
++from typing import Any
++
++import hashlib
++import json
++
++import pytest
++from fastapi.testclient import TestClient
++
++from mkvip.api.dependencies import get_ai_usage_service
++from mkvip.main import app
++from mkvip.services.ai_usage import AIQuotaExceededError
++
++
++class FakeAIAnalystProvider:
++    model_name = "test-analyst"
++
++    def __init__(self) -> None:
++        self.requests: list[Any] = []
++
++    async def analyze(self, request: Any) -> dict[str, Any]:
++        self.requests.append(request)
++        first_source = request.sources[0].id
++        return {
++            "headline": "Lecture fondamentale synthétique",
++            "conclusion": (
++                "La qualité opérationnelle ressort mieux que la valorisation."
++            ),
++            "evidence": [
++                {
++                    "title": "Qualité des fondamentaux",
++                    "finding": (
++                        "Les données MK-VIP montrent une exploitation rentable."
++                    ),
++                    "source_ids": [first_source],
++                }
++            ],
++            "risks": ["La marge de sécurité reste à confirmer."],
++            "missing_information": [
++                "La trajectoire pluriannuelle n’est pas encore disponible."
++            ],
++        }
++
++
++class FakeAIUsageService:
++    def __init__(self, daily_limit: int = 20) -> None:
++        self.daily_limit = daily_limit
++        self.calls: dict[str, int] = {}
++        self.cache: dict[tuple[str, str], dict[str, object]] = {}
++
++    def cache_key(self, payload: dict[str, object]) -> str:
++        encoded = json.dumps(
++            payload,
++            sort_keys=True,
++            separators=(",", ":"),
++            ensure_ascii=False,
++            default=str,
++        ).encode()
++        return hashlib.sha256(encoded).hexdigest()
++
++    async def get_cached(
++        self,
++        user_id: uuid.UUID,
++        cache_key: str,
++    ) -> dict[str, object] | None:
++        return self.cache.get((str(user_id), cache_key))
++
++    async def consume_quota(self, user_id: uuid.UUID) -> None:
++        key = str(user_id)
++        count = self.calls.get(key, 0)
++        if count >= self.daily_limit:
++            raise AIQuotaExceededError
++        self.calls[key] = count + 1
++
++    async def put_cached(
++        self,
++        user_id: uuid.UUID,
++        cache_key: str,
++        response: dict[str, object],
++    ) -> None:
++        self.cache[(str(user_id), cache_key)] = response
++
++
++@pytest.fixture(autouse=True)
++def ai_usage_service() -> Iterator[FakeAIUsageService]:
++    service = FakeAIUsageService()
++    app.dependency_overrides[get_ai_usage_service] = lambda: service
++    yield service
++    app.dependency_overrides.pop(get_ai_usage_service, None)
++
++
++@pytest.fixture(autouse=True)
++def ai_analyst_provider() -> Iterator[FakeAIAnalystProvider]:
++    provider = FakeAIAnalystProvider()
++    app.state.ai_analyst_provider = provider
++    yield provider
++    del app.state.ai_analyst_provider
++
++
++def create_company(client: TestClient, name: str, ticker: str) -> str:
++    response = client.post(
++        "/api/v1/companies",
++        json={
++            "name": name,
++            "ticker": ticker,
++            "exchange": "Euronext Paris",
++            "country": "France",
++            "currency": "EUR",
++        },
++    )
++    assert response.status_code == 201
++    return response.json()["id"]
++
++
++def prepare_company(client: TestClient, company_id: str, source: str) -> None:
++    imported = client.post(
++        f"/api/v1/companies/{company_id}/financials",
++        json={
++            "fiscal_year": 2025,
++            "source": source,
++            "currency": "EUR",
++            "revenue": 1_000,
++            "ebitda": 300,
++            "depreciation_amortization": 40,
++            "ebit": 250,
++            "interest_expense": 20,
++            "operating_cash_flow": 180,
++            "capex": 80,
++            "net_income": 160,
++            "market_cap": 2_200,
++            "total_assets": 2_000,
++            "current_assets": 500,
++            "current_liabilities": 250,
++            "financial_debt": 400,
++            "cash": 100,
++            "total_equity": 800,
++        },
++    )
++    assert imported.status_code == 201
++    valued = client.post(
++        f"/api/v1/companies/{company_id}/valuations",
++        json={
++            "fiscal_year": 2025,
++            "assumptions": {
++                "growth_rate": 0.05,
++                "terminal_growth_rate": 0.02,
++                "cost_of_equity": 0.10,
++                "wacc": 0.10,
++                "tax_rate": 0.25,
++                "projection_years": 5,
++                "target_pe": 15,
++                "corporate_bond_yield": 0.044,
++                "margin_of_safety": 0.25,
++            },
++        },
++    )
++    assert valued.status_code == 201
++    scored = client.post(
++        f"/api/v1/companies/{company_id}/scores",
++        json={
++            "fiscal_year": 2025,
++            "valuation_id": valued.json()["id"],
++        },
++    )
++    assert scored.status_code == 201
++
++
++def test_generates_a_sourced_summary_from_existing_mkvip_analyses(
++    client: TestClient,
++) -> None:
++    company_id = create_company(client, "Air Liquide", "AI.PA")
++    prepare_company(client, company_id, "Rapport annuel 2025")
++
++    response = client.post(
++        "/api/v1/ai/analyses",
++        json={"mode": "summary", "company_id": company_id},
++    )
++
++    assert response.status_code == 200
++    body = response.json()
++    assert body["mode"] == "summary"
++    assert body["headline"] == "Lecture fondamentale synthétique"
++    assert body["conclusion"] == (
++        "La qualité opérationnelle ressort mieux que la valorisation."
++    )
++    assert body["model"] == "test-analyst"
++    assert body["disclaimer"] == (
++        "Analyse informative fondée uniquement sur les données MK-VIP ; "
++        "elle ne constitue pas un conseil en investissement."
++    )
++    assert {source["kind"] for source in body["sources"]} == {
++        "financial",
++        "valuation",
++        "scoring",
++    }
++    assert body["evidence"][0]["source_ids"][0] in {
++        source["id"] for source in body["sources"]
++    }
++    provider = client.app.state.ai_analyst_provider
++    assert len(provider.requests) == 1
++    assert provider.requests[0].primary.company.ticker == "AI.PA"
++    assert {
++        source.kind for source in provider.requests[0].sources
++    } == {"financial", "valuation", "scoring"}
++
++
++def test_builds_a_comparison_context_for_two_distinct_companies(
++    client: TestClient,
++) -> None:
++    primary_id = create_company(client, "Air Liquide", "AI.PA")
++    comparison_id = create_company(client, "L'Oréal", "OR.PA")
++    prepare_company(client, primary_id, "Rapport Air Liquide 2025")
++    prepare_company(client, comparison_id, "Rapport L'Oréal 2025")
++
++    response = client.post(
++        "/api/v1/ai/analyses",
++        json={
++            "mode": "comparison",
++            "company_id": primary_id,
++            "comparison_company_id": comparison_id,
++        },
++    )
++
++    assert response.status_code == 200
++    request = client.app.state.ai_analyst_provider.requests[0]
++    assert request.mode == "comparison"
++    assert request.primary.company.ticker == "AI.PA"
++    assert request.comparison.company.ticker == "OR.PA"
++    assert {source.company_id for source in request.sources} == {
++        request.primary.company.id,
++        request.comparison.company.id,
++    }
++
++
++@pytest.mark.parametrize(
++    ("payload", "expected_detail"),
++    [
++        (
++            {"mode": "question", "company_id": "00000000-0000-0000-0000-000000000001"},
++            "Une question est requise dans ce mode.",
++        ),
++        (
++            {
++                "mode": "comparison",
++                "company_id": "00000000-0000-0000-0000-000000000001",
++            },
++            "Une entreprise de comparaison est requise dans ce mode.",
++        ),
++        (
++            {
++                "mode": "comparison",
++                "company_id": "00000000-0000-0000-0000-000000000001",
++                "comparison_company_id": (
++                    "00000000-0000-0000-0000-000000000001"
++                ),
++            },
++            "Les deux entreprises comparées doivent être distinctes.",
++        ),
++    ],
++)
++def test_rejects_incomplete_ai_requests(
++    client: TestClient,
++    payload: dict[str, str],
++    expected_detail: str,
++) -> None:
++    response = client.post("/api/v1/ai/analyses", json=payload)
++
++    assert response.status_code == 422
++    assert expected_detail in str(response.json()["detail"])
++    assert client.app.state.ai_analyst_provider.requests == []
++
++
++def test_requires_an_existing_financial_analysis(client: TestClient) -> None:
++    company_id = create_company(client, "Danone", "BN.PA")
++
++    response = client.post(
++        "/api/v1/ai/analyses",
++        json={
++            "mode": "question",
++            "company_id": company_id,
++            "question": "Quels sont les principaux points de vigilance ?",
++        },
++    )
++
++    assert response.status_code == 409
++    assert response.json()["detail"] == (
++        "Une analyse financière MK-VIP est requise pour interroger l’IA."
++    )
++    assert client.app.state.ai_analyst_provider.requests == []
++
++
++def test_rejects_a_provider_citation_outside_the_mkvip_context(
++    client: TestClient,
++) -> None:
++    company_id = create_company(client, "Air Liquide", "AI.PA")
++    prepare_company(client, company_id, "Rapport annuel 2025")
++    provider = client.app.state.ai_analyst_provider
++
++    async def analyze_with_unknown_source(request: Any) -> dict[str, Any]:
++        provider.requests.append(request)
++        return {
++            "headline": "Lecture non fiable",
++            "conclusion": "Cette réponse cite une donnée externe.",
++            "evidence": [
++                {
++                    "title": "Constat sans source",
++                    "finding": "Une information absente du contexte est citée.",
++                    "source_ids": ["web:unknown"],
++                }
++            ],
++            "risks": ["La source est invalide."],
++            "missing_information": ["La source originale manque."],
++        }
++
++    provider.analyze = analyze_with_unknown_source
++
++    response = client.post(
++        "/api/v1/ai/analyses",
++        json={"mode": "summary", "company_id": company_id},
++    )
++
++    assert response.status_code == 502
++    assert response.json()["detail"] == (
++        "L’analyse IA cite une source absente du contexte MK-VIP."
++    )
++
++
++def test_rejects_a_malformed_provider_response(client: TestClient) -> None:
++    company_id = create_company(client, "Air Liquide", "AI.PA")
++    prepare_company(client, company_id, "Rapport annuel 2025")
++    provider = client.app.state.ai_analyst_provider
++
++    async def analyze_without_required_sections(
++        request: Any,
++    ) -> dict[str, Any]:
++        provider.requests.append(request)
++        return {
++            "headline": "Réponse incomplète",
++            "conclusion": "Les sections requises sont absentes.",
++        }
++
++    provider.analyze = analyze_without_required_sections
++
++    response = client.post(
++        "/api/v1/ai/analyses",
++        json={"mode": "summary", "company_id": company_id},
++    )
++
++    assert response.status_code == 502
++    assert response.json()["detail"] == (
++        "Le fournisseur IA a renvoyé une analyse invalide."
++    )
++
++
++def test_uses_cache_without_consuming_another_ai_quota(
++    client: TestClient,
++    ai_usage_service: FakeAIUsageService,
++) -> None:
++    company_id = create_company(client, "Air Liquide", "AI.PA")
++    prepare_company(client, company_id, "Rapport annuel 2025")
++
++    first = client.post(
++        "/api/v1/ai/analyses",
++        json={"mode": "summary", "company_id": company_id},
++    )
++    second = client.post(
++        "/api/v1/ai/analyses",
++        json={"mode": "summary", "company_id": company_id},
++    )
++
++    assert first.status_code == 200
++    assert second.status_code == 200
++    assert second.json() == first.json()
++    assert ai_usage_service.calls[str(TEST_USER.id)] == 1
++    assert len(client.app.state.ai_analyst_provider.requests) == 1
++
++
++def test_rejects_ai_requests_after_daily_quota_is_exhausted(
++    client: TestClient,
++    ai_usage_service: FakeAIUsageService,
++) -> None:
++    ai_usage_service.daily_limit = 1
++    company_id = create_company(client, "Air Liquide", "AI.PA")
++    prepare_company(client, company_id, "Rapport annuel 2025")
++
++    first = client.post(
++        "/api/v1/ai/analyses",
++        json={"mode": "summary", "company_id": company_id},
++    )
++    second = client.post(
++        "/api/v1/ai/analyses",
++        json={
++            "mode": "question",
++            "company_id": company_id,
++            "question": "Quels sont les principaux risques ?",
++        },
++    )
++
++    assert first.status_code == 200
++    assert second.status_code == 429
++    assert second.json()["detail"] == (
++        "Le quota quotidien de l’Analyste IA est épuisé."
++    )
++    assert len(client.app.state.ai_analyst_provider.requests) == 1
++
++
++@pytest.mark.parametrize("mode", ["summary", "question"])
++def test_cache_key_changes_with_mode_or_question(
++    client: TestClient,
++    ai_usage_service: FakeAIUsageService,
++    mode: str,
++) -> None:
++    company_id = create_company(client, "Air Liquide", "AI.PA")
++    prepare_company(client, company_id, "Rapport annuel 2025")
++
++    first_payload = {"mode": "summary", "company_id": company_id}
++    if mode == "question":
++        first_payload = {
++            "mode": "question",
++            "company_id": company_id,
++            "question": "Quels sont les principaux risques ?",
++        }
++    second_payload = {
++        "mode": "question",
++        "company_id": company_id,
++        "question": "Quels sont les principaux risques financiers ?",
++    }
++
++    first = client.post("/api/v1/ai/analyses", json=first_payload)
++    second = client.post("/api/v1/ai/analyses", json=second_payload)
++
++    assert first.status_code == 200
++    assert second.status_code == 200
++    assert len(client.app.state.ai_analyst_provider.requests) == 2

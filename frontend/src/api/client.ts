@@ -11,6 +11,7 @@ export interface CompanyPayload {
   lei?: string | null;
   provider_symbols?: Record<string, string>;
   index_memberships?: string[];
+  is_favorite?: boolean;
 }
 
 export interface Company extends CompanyPayload {
@@ -25,17 +26,21 @@ export interface Company extends CompanyPayload {
 export interface IndexSummary {
   code: string;
   name: string;
-  isin: string;
+  isin: string | null;
   market: string;
   provider: string;
+  region?: string;
+  country?: string;
 }
 
 export interface IndexConstituent {
   name: string;
-  isin: string;
+  isin?: string | null;
+  ticker?: string | null;
   mic: string;
   trading_location: string;
   country: string;
+  currency?: string;
 }
 
 export interface IndexComposition extends IndexSummary {
@@ -51,7 +56,12 @@ export interface IndexCompanySelection extends IndexConstituent {
 export interface IndexBulkAddResult {
   created: Company[];
   existing: Company[];
-  errors: Array<{ name: string; isin: string; detail: string }>;
+  errors: Array<{
+    name: string;
+    isin?: string | null;
+    ticker?: string | null;
+    detail: string;
+  }>;
 }
 
 export interface User {
@@ -169,7 +179,7 @@ export interface FinancialTrend {
   net_income_cagr: number | null;
   free_cash_flow_cagr: number | null;
   operating_income_cagr?: number | null;
-  pretax_income_cagr?: number | null;
+  ebitda_cagr?: number | null;
   pe_annual_change?: number | null;
   roe_annual_change?: number | null;
   current_ratio_annual_change?: number | null;

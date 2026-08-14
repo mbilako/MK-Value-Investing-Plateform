@@ -30,6 +30,7 @@ def test_create_company_normalizes_ticker(client: TestClient) -> None:
         "lei": None,
         "provider_symbols": {},
         "index_memberships": [],
+        "is_favorite": False,
         "archived_at": None,
         "status": "pending",
         "latest_mk_score": None,
@@ -77,6 +78,13 @@ def test_company_can_be_updated_archived_restored_and_deleted(
     assert updated.status_code == 200
     assert updated.json()["name"] == "Air Liquide SA"
     assert updated.json()["isin"] == "FR0000120073"
+
+    favorite = client.patch(
+        f"/api/v1/companies/{created['id']}",
+        json={"is_favorite": True},
+    )
+    assert favorite.status_code == 200
+    assert favorite.json()["is_favorite"] is True
 
     cleared = client.patch(
         f"/api/v1/companies/{created['id']}",
@@ -127,9 +135,7 @@ def test_repository_duplicate_ticker_error_returns_conflict(
             raise DuplicateTickerError
 
     original_override = app.dependency_overrides[get_company_repository]
-    app.dependency_overrides[get_company_repository] = (
-        lambda: ConcurrentDuplicateRepository()
-    )
+    app.dependency_overrides[get_company_repository] = lambda: ConcurrentDuplicateRepository()
     try:
         response = client.post(
             "/api/v1/companies",

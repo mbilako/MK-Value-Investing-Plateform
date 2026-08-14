@@ -21,6 +21,7 @@ import { CompanyUniverse } from "./CompanyUniverse";
 import { CompanyManagementDrawer } from "./CompanyManagementDrawer";
 import { DecisionDashboard } from "./DecisionDashboard";
 import { FinancialDrawer } from "./FinancialDrawer";
+import { FavoritesSection } from "./FavoritesSection";
 import { IndexBrowserDrawer } from "./IndexBrowserDrawer";
 import { JournalSection } from "./JournalSection";
 import { Sidebar } from "./Sidebar";
@@ -142,6 +143,15 @@ export function Workspace({
     }
   };
 
+  const toggleFavorite = async (company: Company, isFavorite: boolean) => {
+    const updated = await client.updateCompany(company.id, {
+      is_favorite: isFavorite,
+    });
+    setCompanies((current) =>
+      current.map((record) => (record.id === updated.id ? updated : record)),
+    );
+  };
+
   useEffect(() => {
     let active = true;
     client
@@ -166,6 +176,19 @@ export function Workspace({
       active = false;
     };
   }, [client]);
+
+  useEffect(() => {
+    if (!dashboard) return;
+    setScores((current) => {
+      const next = { ...current };
+      dashboard.companies.forEach((company) => {
+        if (company.global_score !== null) {
+          next[company.company_id] = company.global_score;
+        }
+      });
+      return next;
+    });
+  }, [dashboard]);
 
   return (
     <div className="app-shell">
@@ -224,6 +247,15 @@ export function Workspace({
             onFinancialImport={setFinancialCompany}
             onAnalysis={openAnalysis}
             onManage={setManagedCompany}
+            onToggleFavorite={(company, isFavorite) =>
+              void toggleFavorite(company, isFavorite)
+            }
+          />
+          <FavoritesSection
+            companies={companies}
+            scores={scores}
+            onAnalysis={openAnalysis}
+            onRemove={(company) => void toggleFavorite(company, false)}
           />
           <AnalysisPipeline />
           <JournalSection
@@ -253,13 +285,6 @@ export function Workspace({
               current.map((company) =>
                 company.id === updated.id ? updated : company,
               ),
-            );
-            void refreshDashboard();
-          }}
-          onArchive={async () => {
-            await client.archiveCompany(managedCompany.id);
-            setCompanies((current) =>
-              current.filter((company) => company.id !== managedCompany.id),
             );
             void refreshDashboard();
           }}
@@ -316,6 +341,10 @@ export function Workspace({
               payload,
             );
             setScoringAnalyses((current) => [score, ...current]);
+            setScores((current) => ({
+              ...current,
+              [analysisCompany.id]: score.global_score,
+            }));
             await refreshDashboard();
             return score;
           }}

@@ -78,6 +78,7 @@ class InMemoryCompanyRepository:
             "currency",
             "provider_symbols",
             "index_memberships",
+            "is_favorite",
         ):
             if changes.get(field) is None:
                 changes.pop(field, None)

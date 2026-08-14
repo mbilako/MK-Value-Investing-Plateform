@@ -31,6 +31,7 @@ class EuronextIndex:
     name: str
     isin: str
     market: str = "XPAR"
+    country: str = "France"
 
     @property
     def instrument(self) -> str:
@@ -41,6 +42,18 @@ INDEXES = (
     EuronextIndex("CAC40", "CAC 40", "FR0003500008"),
     EuronextIndex("CACNEXT20", "CAC Next 20", "QS0010989109"),
     EuronextIndex("SBF120", "SBF 120", "FR0003999481"),
+    EuronextIndex("AEX", "AEX", "NL0000000107", "XAMS", "Pays-Bas"),
+    EuronextIndex("AMX", "AMX", "NL0000249274", "XAMS", "Pays-Bas"),
+    EuronextIndex("ASCX", "AEX Small Cap", "NL0000249142", "XAMS", "Pays-Bas"),
+    EuronextIndex("BEL20", "BEL 20", "BE0389555039", "XBRU", "Belgique"),
+    EuronextIndex("BELMID", "BEL Mid", "BE0389856130", "XBRU", "Belgique"),
+    EuronextIndex("BELSMALL", "BEL Small", "BE0389857146", "XBRU", "Belgique"),
+    EuronextIndex("PSI", "PSI", "PTING0200002", "XLIS", "Portugal"),
+    EuronextIndex("PSIALL", "PSI All-Share", "QS0011224308", "XLIS", "Portugal"),
+    EuronextIndex("PSIIND", "PSI Industrials", "QS0011225008", "XLIS", "Portugal"),
+    EuronextIndex("ISEQ20", "ISEQ 20", "IE00B0500264", "XDUB", "Irlande"),
+    EuronextIndex("ISEQALL", "ISEQ All Share", "IE0001477250", "XDUB", "Irlande"),
+    EuronextIndex("ISEQFIN", "ISEQ Financial", "IE0000516009", "XDUB", "Irlande"),
 )
 
 
@@ -68,6 +81,8 @@ class EuronextIndexProvider:
                 isin=index.isin,
                 market=index.market,
                 provider=self.name,
+                region="Europe",
+                country=index.country,
             )
             for index in INDEXES
         ]
@@ -84,18 +99,22 @@ class EuronextIndexProvider:
         if cached and monotonic() - cached[0] < self._cache_ttl_seconds:
             return cached[1]
 
-        endpoint = f"/fr/ajax/getIndexCompositionFull/{index.instrument}"
-        url = f"{self.base_url}{endpoint}"
-        try:
-            encrypted = await asyncio.to_thread(self._fetch_json, url)
-            html = _decrypt_cryptojs(encrypted, self._passphrase)
-            composition = _parse_composition(index, url, html)
-        except ProviderDataError:
-            raise
-        except Exception as error:
+        last_error: Exception | None = None
+        composition: IndexCompositionRead | None = None
+        for language in ("fr", "en"):
+            endpoint = f"/{language}/ajax/getIndexCompositionFull/{index.instrument}"
+            url = f"{self.base_url}{endpoint}"
+            try:
+                encrypted = await asyncio.to_thread(self._fetch_json, url)
+                html = _decrypt_cryptojs(encrypted, self._passphrase)
+                composition = _parse_composition(index, url, html)
+                break
+            except Exception as error:
+                last_error = error
+        if composition is None:
             raise ProviderDataError(
                 f"La composition {index.name} est momentanément indisponible."
-            ) from error
+            ) from last_error
         self._cache[index.code] = (monotonic(), composition)
         return composition
 
@@ -183,6 +202,7 @@ def _parse_composition(
                 mic=link.group("mic").upper(),
                 trading_location=trading_location,
                 country=country,
+                currency="EUR",
             )
         )
         seen.add(isin)
@@ -196,6 +216,8 @@ def _parse_composition(
         isin=index.isin,
         market=index.market,
         provider="Euronext",
+        region="Europe",
+        country=index.country,
         as_of=date_match.group(1).strip() if date_match else None,
         source_url=source_url,
         constituents=constituents,

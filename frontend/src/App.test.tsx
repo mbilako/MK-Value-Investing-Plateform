@@ -575,6 +575,144 @@ describe("MK-VIP authentication", () => {
     expect(await screen.findByText("Air Liquide SA")).toBeInTheDocument();
   });
 
+  it("deletes a Greek company with an inline confirmation", async () => {
+    const user = userEvent.setup();
+    const deleteCompany = vi.fn().mockResolvedValue(undefined);
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => [
+            {
+              id: "company-greek",
+              name: "ALPHA SERVICES AND HOLDINGS",
+              ticker: "ALPHA.AT",
+              exchange: "Euronext Athens",
+              country: "Grèce",
+              currency: "EUR",
+              status: "pending",
+              index_memberships: ["ATHEXCOMP"],
+            },
+          ],
+          deleteCompany,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Modifier ou retirer ALPHA SERVICES AND HOLDINGS",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Supprimer définitivement" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Confirmer la suppression définitive de ALPHA SERVICES AND HOLDINGS",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirmer la suppression" }),
+    );
+
+    expect(deleteCompany).toHaveBeenCalledWith("company-greek");
+    expect(
+      screen.queryByText("ALPHA SERVICES AND HOLDINGS"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a scored company in the persistent favorites space", async () => {
+    const user = userEvent.setup();
+    const company = {
+      id: "company-favorite",
+      name: "AEGEAN AIRLINES",
+      ticker: "AEGN.AT",
+      exchange: "Euronext Athens",
+      country: "Grèce",
+      currency: "EUR",
+      status: "ready" as const,
+      latest_mk_score: 70,
+      is_favorite: false,
+    };
+    const updateCompany = vi.fn().mockImplementation(async (_id, payload) => ({
+      ...company,
+      ...payload,
+    }));
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => [company],
+          updateCompany,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Ajouter AEGEAN AIRLINES aux favoris",
+      }),
+    );
+
+    expect(updateCompany).toHaveBeenCalledWith("company-favorite", {
+      is_favorite: true,
+    });
+    const universe = screen.getByRole("region", {
+      name: "Univers d’investissement",
+    });
+    const favorites = screen.getByRole("region", { name: "Favoris" });
+    expect(
+      within(universe).queryByText("AEGEAN AIRLINES"),
+    ).not.toBeInTheDocument();
+    expect(within(favorites).getByText("AEGEAN AIRLINES")).toBeInTheDocument();
+    expect(
+      within(favorites).getByRole("button", {
+        name: "Retirer AEGEAN AIRLINES des favoris",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("allows a financial institution without an MK Score to become a favorite", async () => {
+    const user = userEvent.setup();
+    const bank = {
+      id: "company-bank",
+      name: "ALPHA BANK",
+      ticker: "ALPHA.AT",
+      exchange: "Euronext Athens",
+      country: "Grèce",
+      currency: "EUR",
+      status: "ready" as const,
+      latest_mk_score: null,
+      is_favorite: false,
+    };
+    const updateCompany = vi.fn().mockImplementation(async (_id, payload) => ({
+      ...bank,
+      ...payload,
+    }));
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => [bank],
+          updateCompany,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Ajouter ALPHA BANK aux favoris",
+      }),
+    );
+
+    expect(updateCompany).toHaveBeenCalledWith("company-bank", {
+      is_favorite: true,
+    });
+    const universe = screen.getByRole("region", {
+      name: "Univers d’investissement",
+    });
+    const favorites = screen.getByRole("region", { name: "Favoris" });
+    expect(within(universe).queryByText("ALPHA BANK")).not.toBeInTheDocument();
+    expect(within(favorites).getByText("ALPHA BANK")).toBeInTheDocument();
+    expect(within(favorites).getByText("—")).toBeInTheDocument();
+  });
+
   it("adds selected CAC Next 20 constituents without entering a ticker", async () => {
     const user = userEvent.setup();
     const addIndexCompanies = vi.fn().mockResolvedValue({
@@ -642,6 +780,214 @@ describe("MK-VIP authentication", () => {
     ]);
     expect(await screen.findByText("ABVX.PA")).toBeInTheDocument();
   });
+
+  it("groups US indices and adds a company from its official ticker", async () => {
+    const user = userEvent.setup();
+    const addIndexCompanies = vi.fn().mockResolvedValue({
+      created: [
+        {
+          id: "company-apple",
+          name: "Apple Inc.",
+          ticker: "AAPL",
+          exchange: "Nasdaq",
+          country: "États-Unis",
+          currency: "USD",
+          status: "pending",
+          index_memberships: ["NASDAQ100"],
+        },
+      ],
+      existing: [],
+      errors: [],
+    });
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "NASDAQ100",
+              name: "Nasdaq-100",
+              isin: null,
+              market: "XNAS",
+              provider: "Nasdaq",
+              region: "États-Unis",
+              country: "États-Unis",
+            },
+          ],
+          getIndex: async () => ({
+            code: "NASDAQ100",
+            name: "Nasdaq-100",
+            isin: null,
+            market: "XNAS",
+            provider: "Nasdaq",
+            region: "États-Unis",
+            country: "États-Unis",
+            as_of: "Aug 4, 2026",
+            source_url: "https://api.nasdaq.com/example",
+            constituents: [
+              {
+                name: "Apple Inc.",
+                ticker: "AAPL",
+                mic: "XNAS",
+                trading_location: "Nasdaq",
+                country: "États-Unis",
+                currency: "USD",
+              },
+            ],
+          }),
+          addIndexCompanies,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    expect(
+      await screen.findByRole("region", { name: "Indices États-Unis" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tablist", { name: "Indices États-Unis" }),
+    ).toBeInTheDocument();
+    await user.click(await screen.findByRole("checkbox", { name: /Apple Inc./ }));
+    await user.click(
+      screen.getByRole("button", { name: "Ajouter 1 à l’univers" }),
+    );
+
+    expect(addIndexCompanies).toHaveBeenCalledWith([
+      expect.objectContaining({
+        ticker: "AAPL",
+        currency: "USD",
+        index_code: "NASDAQ100",
+      }),
+    ]);
+    expect(await screen.findByText("AAPL")).toBeInTheDocument();
+  });
+
+  it("groups the ATHEX Composite under Greece in Europe", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "ATHEXCOMP",
+              name: "ATHEX Composite",
+              isin: "GRI99117A004",
+              market: "XATH",
+              provider: "Euronext Athens",
+              region: "Europe",
+              country: "Grèce",
+            },
+          ],
+          getIndex: async () => ({
+            code: "ATHEXCOMP",
+            name: "ATHEX Composite",
+            isin: "GRI99117A004",
+            market: "XATH",
+            provider: "Euronext Athens",
+            region: "Europe",
+            country: "Grèce",
+            as_of: "2026.08.07",
+            source_url: "https://athens.euronext.com/example",
+            constituents: [
+              {
+                name: "Coca-Cola HBC AG",
+                ticker: "EEE.AT",
+                mic: "XATH",
+                trading_location: "Euronext Athens",
+                country: "Grèce",
+                currency: "EUR",
+              },
+            ],
+          }),
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+
+    expect(
+      screen.getByRole("tablist", { name: "Indices Grèce" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "ATHEX Composite" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByRole("checkbox", { name: /Coca-Cola HBC AG/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/EEE\.AT/)).toBeInTheDocument();
+  });
+
+  it("shows the selected index constituents and expands one zone at a time", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "CAC40",
+              name: "CAC 40",
+              isin: null,
+              market: "XPAR",
+              provider: "Euronext",
+              region: "Europe",
+              country: "France",
+            },
+            {
+              code: "SP500",
+              name: "S&P 500",
+              isin: null,
+              market: "XNYS",
+              provider: "S&P Dow Jones Indices",
+              region: "\u00c9tats-Unis",
+              country: "\u00c9tats-Unis",
+            },
+          ],
+          getIndex: async (code) => ({
+            code,
+            name: code === "CAC40" ? "CAC 40" : "S&P 500",
+            isin: null,
+            market: code === "CAC40" ? "XPAR" : "XNYS",
+            provider: "Test",
+            as_of: "05/08/2026",
+            source_url: "https://example.test",
+            constituents: code === "CAC40"
+              ? [{
+                  name: "Airbus",
+                  ticker: "AIR.PA",
+                  mic: "XPAR",
+                  trading_location: "Euronext Paris",
+                  country: "France",
+                }]
+              : [{
+                  name: "Apple Inc.",
+                  ticker: "AAPL",
+                  mic: "XNAS",
+                  trading_location: "Nasdaq",
+                  country: "\u00c9tats-Unis",
+                }],
+          }),
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    expect(await screen.findByRole("checkbox", { name: /Airbus/ })).toBeInTheDocument();
+
+    const europe = screen.getByRole("button", { name: "Europe" });
+    const unitedStates = screen.getByRole("button", { name: "\u00c9tats-Unis" });
+    await user.click(unitedStates);
+    expect(europe).toHaveAttribute("aria-expanded", "false");
+    expect(unitedStates).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(screen.getByRole("tab", { name: "S&P 500" }));
+    expect(await screen.findByRole("checkbox", { name: /Apple Inc./ })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Airbus/ })).not.toBeInTheDocument();
+  });
 });
 
 describe("MK-VIP dashboard", () => {
@@ -655,7 +1001,7 @@ describe("MK-VIP dashboard", () => {
     expect(screen.getByText("Import")).toBeInTheDocument();
     expect(screen.getByText("MK Score")).toBeInTheDocument();
     expect(
-      screen.getByText("Version 0.11 Sécurité renforcée"),
+      screen.getByText("Version 0.12 Indices internationaux"),
     ).toBeInTheDocument();
   });
 

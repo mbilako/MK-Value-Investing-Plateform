@@ -5,11 +5,13 @@ import {
   Building2,
   Home,
   SlidersHorizontal,
+  Star,
 } from "lucide-react";
 
 const navigation = [
   { label: "Vue d’ensemble", icon: Home, href: "#overview" },
   { label: "Entreprises", icon: Building2, href: "#companies" },
+  { label: "Favoris", icon: Star, href: "#favorites" },
   { label: "Analyses", icon: BarChart3, href: "#analyses" },
   { label: "Règles", icon: SlidersHorizontal, href: "#rules" },
   { label: "Journal", icon: BookOpen, href: "#journal" },
@@ -43,7 +45,7 @@ export function Sidebar() {
       </nav>
       <div className="sidebar__foot">
         <span className="status-dot" aria-hidden="true" />
-        Version 0.11 Sécurité renforcée
+        Version 0.12 Indices internationaux
       </div>
     </aside>
   );

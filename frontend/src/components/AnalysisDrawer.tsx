@@ -28,62 +28,73 @@ interface AnalysisDrawerProps {
 type FundamentalKey =
   | "revenue"
   | "net_income"
-  | "pretax_income"
+  | "ebitda"
   | "operating_income"
-  | "shares_outstanding"
+  | "total_assets"
   | "market_cap"
   | "total_equity"
   | "operating_cash_flow"
   | "investing_cash_flow"
   | "closing_price"
-  | "pe_ratio"
+  | "current_assets"
   | "equity_value_per_share";
 
-type TrendKey =
+type ComparisonKey =
   | "revenue"
-  | "net_income"
-  | "operating_income"
-  | "pretax_income"
   | "pe_ratio"
-  | "roe"
-  | "current_ratio";
+  | "gross_margin"
+  | "net_margin"
+  | "interest_burden"
+  | "discount"
+  | "stock_bond_yield"
+  | "leverage"
+  | "debt_level";
 
 type HistoryColumnKey =
   | "fiscal_year"
   | "revenue"
   | "net_income"
   | "operating_income"
-  | "pretax_income"
+  | "ebitda"
   | "closing_price"
   | "pe_ratio"
   | "roe"
   | "equity_to_assets"
   | "operating_cash_flow"
+  | "gross_margin"
+  | "net_margin"
+  | "interest_burden"
+  | "discount"
+  | "stock_bond_yield"
+  | "leverage"
+  | "debt_level"
   | "mk_score";
 
 const FUNDAMENTAL_ORDER: FundamentalKey[] = [
   "revenue",
   "net_income",
-  "pretax_income",
+  "ebitda",
   "operating_income",
-  "shares_outstanding",
+  "total_assets",
   "market_cap",
   "total_equity",
   "operating_cash_flow",
   "investing_cash_flow",
   "closing_price",
-  "pe_ratio",
+  "current_assets",
   "equity_value_per_share",
 ];
 
-const TREND_ORDER: TrendKey[] = [
+const COMPARISON_ORDER: ComparisonKey[] = [
   "revenue",
-  "net_income",
-  "operating_income",
-  "pretax_income",
   "pe_ratio",
-  "roe",
-  "current_ratio",
+  "gross_margin",
+  "net_margin",
+  "interest_burden",
+  "discount",
+  "stock_bond_yield",
+  "leverage",
+  "debt_level",
 ];
 
 const HISTORY_ORDER: HistoryColumnKey[] = [
@@ -91,38 +102,59 @@ const HISTORY_ORDER: HistoryColumnKey[] = [
   "revenue",
   "net_income",
   "operating_income",
-  "pretax_income",
+  "ebitda",
   "closing_price",
   "pe_ratio",
   "roe",
   "equity_to_assets",
   "operating_cash_flow",
+  "gross_margin",
+  "net_margin",
+  "interest_burden",
+  "discount",
+  "stock_bond_yield",
+  "leverage",
+  "debt_level",
   "mk_score",
 ];
 
 const FUNDAMENTAL_LABELS: Record<FundamentalKey, string> = {
   revenue: "Revenus publiés",
   net_income: "Résultat net",
-  pretax_income: "Résultat avant impôt",
+  ebitda: "EBITDA",
   operating_income: "Résultat d’exploitation",
-  shares_outstanding: "Actions en circulation",
+  total_assets: "Total actif",
   market_cap: "Capitalisation boursière",
   total_equity: "Capitaux propres",
   operating_cash_flow: "Flux de trésorerie d’exploitation",
   investing_cash_flow: "Flux de trésorerie d’investissement",
   closing_price: "Dernier cours de bourse au 31 décembre",
-  pe_ratio: "Cours / bénéfice (PER)",
+  current_assets: "Actif circulant",
   equity_value_per_share: "Valeur économique des capitaux propres par action",
 };
 
-const TREND_LABELS: Record<TrendKey, string> = {
+const COMPARISON_LABELS: Record<ComparisonKey, string> = {
   revenue: "Revenus",
-  net_income: "Résultat net",
-  operating_income: "Résultat d’exploitation",
-  pretax_income: "Résultat avant impôt",
   pe_ratio: "Cours / bénéfice (PER)",
-  roe: "Rendement des capitaux propres (ROE)",
-  current_ratio: "Actif circulant / passif exigible",
+  gross_margin: "Marge brute",
+  net_margin: "Marge nette",
+  interest_burden: "Poids de la dette financière",
+  discount: "Décote",
+  stock_bond_yield: "Rendement de l’action-obligation",
+  leverage: "Effet de levier",
+  debt_level: "Niveau d’endettement",
+};
+
+const COMPARISON_FORMULAS: Record<ComparisonKey, string> = {
+  revenue: "Chiffre d’affaires publié",
+  pe_ratio: "Capitalisation boursière / résultat net",
+  gross_margin: "EBITDA / chiffre d’affaires",
+  net_margin: "Résultat net / chiffre d’affaires",
+  interest_burden: "Charges d’intérêts / EBIT",
+  discount: "Capitalisation boursière / actif circulant",
+  stock_bond_yield: "EBITDA / capitalisation boursière",
+  leverage: "Passif total / (capitaux propres + réserve d’actions propres)",
+  debt_level: "Dette financière nette / EBITDA",
 };
 
 const HISTORY_LABELS: Record<HistoryColumnKey, string> = {
@@ -130,23 +162,37 @@ const HISTORY_LABELS: Record<HistoryColumnKey, string> = {
   revenue: "Revenus",
   net_income: "Résultat net",
   operating_income: "Résultat d’exploitation",
-  pretax_income: "Résultat avant impôt",
+  ebitda: "EBITDA",
   closing_price: "Cours de clôture",
   pe_ratio: "PER",
   roe: "ROE",
   equity_to_assets: "Fonds propres / actif",
   operating_cash_flow: "Cash-flow d’exploitation",
+  gross_margin: "Marge brute",
+  net_margin: "Marge nette",
+  interest_burden: "Poids dette financière",
+  discount: "Décote",
+  stock_bond_yield: "Rendement action-obligation",
+  leverage: "Effet de levier",
+  debt_level: "Niveau d’endettement",
   mk_score: "MK Score",
+};
+
+const THRESHOLDS: Partial<
+  Record<ComparisonKey, { value: number; direction: "above" | "below" }>
+> = {
+  pe_ratio: { value: 20, direction: "below" },
+  gross_margin: { value: 0.4, direction: "above" },
+  net_margin: { value: 0.2, direction: "above" },
+  interest_burden: { value: 0.15, direction: "below" },
+  discount: { value: 1, direction: "below" },
+  leverage: { value: 0.8, direction: "below" },
+  debt_level: { value: 2.5, direction: "below" },
 };
 
 function formatAmount(value: number | null | undefined, currency: string): string {
   if (value == null) return "N/A";
   return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} M ${currency}`;
-}
-
-function formatShares(value: number | null | undefined): string {
-  if (value == null) return "N/A";
-  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} M actions`;
 }
 
 function formatPrice(value: number | null | undefined, currency: string): string {
@@ -169,19 +215,91 @@ function formatMultiple(value: number | null): string {
   return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}×`;
 }
 
-function formatGrowth(value: number | null | undefined): string {
-  if (value == null) return "Historique insuffisant";
-  return `${(value * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} % / an`;
+function comparisonValue(key: ComparisonKey, snapshot: FinancialAnalysis): number | null {
+  switch (key) {
+    case "revenue":
+      return snapshot.revenue;
+    case "pe_ratio":
+      return ratio(snapshot.market_cap, snapshot.net_income);
+    case "gross_margin":
+      return ratio(snapshot.ebitda, snapshot.revenue);
+    case "net_margin":
+      return ratio(snapshot.net_income, snapshot.revenue);
+    case "interest_burden":
+      return ratio(snapshot.interest_expense, snapshot.ebit);
+    case "discount":
+      return ratio(snapshot.market_cap, snapshot.current_assets);
+    case "stock_bond_yield":
+      return ratio(snapshot.ebitda, snapshot.market_cap);
+    case "leverage": {
+      const totalLiabilities = snapshot.total_assets - snapshot.total_equity;
+      if (totalLiabilities < 0) return null;
+      return ratio(
+        totalLiabilities,
+        snapshot.total_equity + (snapshot.treasury_stock_value ?? 0),
+      );
+    }
+    case "debt_level":
+      if (snapshot.financial_debt == null || snapshot.cash == null) return null;
+      return ratio(snapshot.financial_debt - snapshot.cash, snapshot.ebitda);
+  }
 }
 
-function formatMultipleChange(value: number | null | undefined): string {
-  if (value == null) return "Historique insuffisant";
-  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2, signDisplay: "always" })}× / an`;
+function formatComparisonValue(
+  key: ComparisonKey,
+  value: number | null,
+  currency: string,
+): string {
+  if (key === "revenue") return formatAmount(value, currency);
+  if (key === "pe_ratio" || key === "leverage" || key === "debt_level") {
+    return formatMultiple(value);
+  }
+  return formatRatio(value);
 }
 
-function formatPointChange(value: number | null | undefined): string {
-  if (value == null) return "Historique insuffisant";
-  return `${(value * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2, signDisplay: "always" })} pt / an`;
+function formatComparisonDelta(
+  key: ComparisonKey,
+  current: number | null,
+  previous: number | null,
+): string {
+  if (current == null || previous == null) return "Comparaison indisponible";
+  if (key === "revenue") {
+    if (previous <= 0) return "Comparaison indisponible";
+    return `${((current - previous) / previous * 100).toLocaleString("fr-FR", {
+      maximumFractionDigits: 1,
+      signDisplay: "always",
+    })} %`;
+  }
+  if (key === "pe_ratio" || key === "leverage" || key === "debt_level") {
+    return `${(current - previous).toLocaleString("fr-FR", {
+      maximumFractionDigits: 2,
+      signDisplay: "always",
+    })}×`;
+  }
+  return `${((current - previous) * 100).toLocaleString("fr-FR", {
+    maximumFractionDigits: 1,
+    signDisplay: "always",
+  })} pt`;
+}
+
+function comparisonTone(key: ComparisonKey, value: number | null): string {
+  const rule = THRESHOLDS[key];
+  if (rule == null || value == null) return "comparison-value--neutral";
+  const isFavorable = rule.direction === "above"
+    ? value > rule.value
+    : value < rule.value;
+  return isFavorable
+    ? "comparison-value--favorable"
+    : "comparison-value--unfavorable";
+}
+
+function thresholdLabel(key: ComparisonKey): string | null {
+  const rule = THRESHOLDS[key];
+  if (rule == null) return null;
+  const formatted = key === "pe_ratio" || key === "leverage" || key === "debt_level"
+    ? `${rule.value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}×`
+    : `${(rule.value * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
+  return `Seuil vert : ${rule.direction === "above" ? ">" : "<"} ${formatted}`;
 }
 
 function useReorderableKeys<Key extends string>(
@@ -260,12 +378,12 @@ function fundamentalValue(key: FundamentalKey, snapshot: FinancialAnalysis): str
       return formatAmount(snapshot.revenue, currency);
     case "net_income":
       return formatAmount(snapshot.net_income, currency);
-    case "pretax_income":
-      return formatAmount(snapshot.pretax_income, currency);
+    case "ebitda":
+      return formatAmount(snapshot.ebitda, currency);
     case "operating_income":
       return formatAmount(snapshot.ebit, currency);
-    case "shares_outstanding":
-      return formatShares(snapshot.shares_outstanding);
+    case "total_assets":
+      return formatAmount(snapshot.total_assets, currency);
     case "market_cap":
       return formatAmount(snapshot.market_cap, currency);
     case "total_equity":
@@ -276,8 +394,8 @@ function fundamentalValue(key: FundamentalKey, snapshot: FinancialAnalysis): str
       return formatAmount(snapshot.investing_cash_flow, currency);
     case "closing_price":
       return formatPrice(snapshot.closing_price, currency);
-    case "pe_ratio":
-      return formatMultiple(ratio(snapshot.market_cap, snapshot.net_income));
+    case "current_assets":
+      return formatAmount(snapshot.current_assets, currency);
     case "equity_value_per_share":
       return formatPrice(
         ratio(
@@ -299,8 +417,8 @@ function historyValue(key: HistoryColumnKey, snapshot: FinancialAnalysis): strin
       return formatAmount(snapshot.net_income, snapshot.currency);
     case "operating_income":
       return formatAmount(snapshot.ebit, snapshot.currency);
-    case "pretax_income":
-      return formatAmount(snapshot.pretax_income, snapshot.currency);
+    case "ebitda":
+      return formatAmount(snapshot.ebitda, snapshot.currency);
     case "closing_price":
       return formatPrice(snapshot.closing_price, snapshot.currency);
     case "pe_ratio":
@@ -311,9 +429,32 @@ function historyValue(key: HistoryColumnKey, snapshot: FinancialAnalysis): strin
       return formatRatio(ratio(snapshot.total_equity, snapshot.total_assets));
     case "operating_cash_flow":
       return formatAmount(snapshot.operating_cash_flow, snapshot.currency);
+    case "gross_margin":
+    case "net_margin":
+    case "interest_burden":
+    case "discount":
+    case "stock_bond_yield":
+      return formatRatio(comparisonValue(key, snapshot));
+    case "leverage":
+    case "debt_level":
+      return formatMultiple(comparisonValue(key, snapshot));
     case "mk_score":
       return snapshot.mk_score == null ? "N/A" : `${snapshot.mk_score}/100`;
   }
+}
+
+function historyValueClass(
+  key: HistoryColumnKey,
+  snapshot: FinancialAnalysis,
+): string | undefined {
+  if (
+    !COMPARISON_ORDER.includes(key as ComparisonKey)
+    || key === "revenue"
+    || key === "pe_ratio"
+  ) {
+    return undefined;
+  }
+  return comparisonTone(key as ComparisonKey, comparisonValue(key as ComparisonKey, snapshot));
 }
 
 export function AnalysisDrawer({
@@ -328,35 +469,20 @@ export function AnalysisDrawer({
   onClose,
 }: AnalysisDrawerProps) {
   const latest = history?.snapshots[0];
+  const previous = history?.snapshots[1];
   const trend = history?.trend;
   const fundamentals = useReorderableKeys(
     "mkvip.analysis.fundamentals-order",
     FUNDAMENTAL_ORDER,
   );
-  const trends = useReorderableKeys("mkvip.analysis.trends-order", TREND_ORDER);
+  const comparisons = useReorderableKeys(
+    "mkvip.analysis.comparisons-order",
+    COMPARISON_ORDER,
+  );
   const historyColumns = useReorderableKeys(
     "mkvip.analysis.history-order",
     HISTORY_ORDER,
   );
-
-  const trendValue = (key: TrendKey): string => {
-    switch (key) {
-      case "revenue":
-        return formatGrowth(trend?.revenue_cagr);
-      case "net_income":
-        return formatGrowth(trend?.net_income_cagr);
-      case "operating_income":
-        return formatGrowth(trend?.operating_income_cagr);
-      case "pretax_income":
-        return formatGrowth(trend?.pretax_income_cagr);
-      case "pe_ratio":
-        return formatMultipleChange(trend?.pe_annual_change);
-      case "roe":
-        return formatPointChange(trend?.roe_annual_change);
-      case "current_ratio":
-        return formatMultipleChange(trend?.current_ratio_annual_change);
-    }
-  };
 
   return (
     <div className="drawer-layer" role="presentation">
@@ -429,24 +555,48 @@ export function AnalysisDrawer({
 
               <section className="analysis-section" aria-labelledby="growth-title">
                 <div className="analysis-section__head">
-                  <h3 id="growth-title">Tendance annualisée</h3>
-                  {trend && trend.periods >= 2 && <span>{trend.first_year}–{trend.last_year}</span>}
+                  <h3 id="growth-title">Comparaison des deux derniers exercices</h3>
+                  <span>
+                    {previous
+                      ? `${latest.fiscal_year} vs ${previous.fiscal_year}`
+                      : `Dernier exercice : ${latest.fiscal_year}`}
+                  </span>
                 </div>
-                <div className="growth-grid growth-grid--reorderable">
-                  {trends.order.map((key, index) => (
-                    <article key={key}>
+                <div className="growth-grid comparison-grid growth-grid--reorderable">
+                  {comparisons.order.map((key, index) => {
+                    const currentValue = comparisonValue(key, latest);
+                    const previousValue = previous ? comparisonValue(key, previous) : null;
+                    const threshold = thresholdLabel(key);
+                    return (
+                    <article key={key} title={COMPARISON_FORMULAS[key]}>
                       <div className="indicator-card__head">
-                        <span>{TREND_LABELS[key]}</span>
+                        <span>{COMPARISON_LABELS[key]}</span>
                         <MoveControls
-                          label={TREND_LABELS[key]}
+                          label={COMPARISON_LABELS[key]}
                           index={index}
-                          total={trends.order.length}
-                          onMove={(direction) => trends.move(key, direction)}
+                          total={comparisons.order.length}
+                          onMove={(direction) => comparisons.move(key, direction)}
                         />
                       </div>
-                      <strong>{trendValue(key)}</strong>
+                      <strong className={comparisonTone(key, currentValue)}>
+                        {formatComparisonValue(key, currentValue, latest.currency)}
+                      </strong>
+                      {previous ? (
+                        <small className="comparison-card__previous">
+                          {previous.fiscal_year} : {formatComparisonValue(
+                            key,
+                            previousValue,
+                            previous.currency,
+                          )}
+                          <span>Évolution : {formatComparisonDelta(key, currentValue, previousValue)}</span>
+                        </small>
+                      ) : (
+                        <small className="comparison-card__previous">Historique insuffisant</small>
+                      )}
+                      {threshold && <small className="comparison-card__threshold">{threshold}</small>}
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
 
@@ -465,7 +615,14 @@ export function AnalysisDrawer({
                     }}
                   >
                     {historyColumns.order.map((key, index) => (
-                      <span className="history-column-head" role="columnheader" key={key}>
+                      <span
+                        className="history-column-head"
+                        role="columnheader"
+                        key={key}
+                        title={COMPARISON_ORDER.includes(key as ComparisonKey)
+                          ? COMPARISON_FORMULAS[key as ComparisonKey]
+                          : undefined}
+                      >
                         {HISTORY_LABELS[key]}
                         <MoveControls
                           label={HISTORY_LABELS[key]}
@@ -487,7 +644,13 @@ export function AnalysisDrawer({
                       }}
                     >
                       {historyColumns.order.map((key) => (
-                        <span role="cell" key={key}>{historyValue(key, snapshot)}</span>
+                        <span
+                          className={historyValueClass(key, snapshot)}
+                          role="cell"
+                          key={key}
+                        >
+                          {historyValue(key, snapshot)}
+                        </span>
                       ))}
                     </div>
                   ))}

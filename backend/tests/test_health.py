@@ -10,7 +10,7 @@ def test_health_endpoint_reports_api_ready() -> None:
     assert response.json() == {
         "name": "MK-VIP API",
         "status": "ready",
-        "version": "0.11.0",
+        "version": "0.12.0",
     }
 
 
@@ -21,7 +21,7 @@ def test_readiness_endpoint_checks_database(database_client: TestClient) -> None
     assert response.json() == {
         "name": "MK-VIP API",
         "status": "ready",
-        "version": "0.11.0",
+        "version": "0.12.0",
     }
 
 

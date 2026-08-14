@@ -22,6 +22,7 @@ class CompanyCreate(BaseModel):
     lei: str | None = Field(default=None, min_length=20, max_length=20)
     provider_symbols: dict[str, str] = Field(default_factory=dict)
     index_memberships: list[str] = Field(default_factory=list)
+    is_favorite: bool = False
 
     @field_validator("name", "exchange", "country")
     @classmethod
@@ -64,6 +65,7 @@ class CompanyUpdate(BaseModel):
     lei: str | None = Field(default=None, min_length=20, max_length=20)
     provider_symbols: dict[str, str] | None = None
     index_memberships: list[str] | None = None
+    is_favorite: bool | None = None
 
     @field_validator("name", "exchange", "country")
     @classmethod
@@ -81,16 +83,10 @@ class CompanyUpdate(BaseModel):
         return CompanyCreate.normalize_cik(value)
 
     _normalize_provider_symbols = field_validator("provider_symbols")(
-        lambda value: (
-            CompanyCreate.normalize_provider_symbols(value)
-            if value is not None
-            else None
-        )
+        lambda value: CompanyCreate.normalize_provider_symbols(value) if value is not None else None
     )
     _normalize_memberships = field_validator("index_memberships")(
-        lambda value: (
-            CompanyCreate.normalize_memberships(value) if value is not None else None
-        )
+        lambda value: CompanyCreate.normalize_memberships(value) if value is not None else None
     )
 
 

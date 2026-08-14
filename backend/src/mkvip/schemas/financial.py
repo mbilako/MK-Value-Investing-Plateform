@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mkvip.analysis.rules import RuleStatus
 
@@ -48,29 +48,6 @@ class FinancialSnapshotCreate(BaseModel):
     def normalize_currency(cls, value: str) -> str:
         return value.strip().upper()
 
-    @model_validator(mode="after")
-    def require_standard_company_fields(self) -> "FinancialSnapshotCreate":
-        if self.analysis_profile is FinancialProfile.FINANCIAL:
-            return self
-        required = (
-            "ebitda",
-            "depreciation_amortization",
-            "ebit",
-            "interest_expense",
-            "operating_cash_flow",
-            "capex",
-            "current_assets",
-            "current_liabilities",
-            "financial_debt",
-            "cash",
-        )
-        missing = [field for field in required if getattr(self, field) is None]
-        if missing:
-            raise ValueError(
-                "Champs requis pour une société non financière : " + ", ".join(missing)
-            )
-        return self
-
 
 class FinancialMetricRead(BaseModel):
     key: str
@@ -109,7 +86,7 @@ class FinancialTrendRead(BaseModel):
     net_income_cagr: float | None
     free_cash_flow_cagr: float | None
     operating_income_cagr: float | None
-    pretax_income_cagr: float | None
+    ebitda_cagr: float | None
     pe_annual_change: float | None
     roe_annual_change: float | None
     current_ratio_annual_change: float | None

@@ -13,8 +13,9 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - import des entreprises et de leurs données financières annuelles ;
 - import automatique de jusqu’à dix exercices publics avec fusion annuelle
   Yahoo Finance, SEC EDGAR et ESEF européen ;
-- explorateur CAC 40, CAC Next 20 et SBF 120 avec ajout multiple sans saisie de
-  ticker ;
+- explorateur classé par zone et par pays avec trois indices pour chacun des
+  onze pays européens couverts, plus Dow Jones, S&P 500 et Nasdaq-100, sans
+  saisie manuelle de ticker ;
 - audit reproductible de la couverture des composantes d’indices ;
 - modification, archivage ou suppression d’une entreprise dans les deux vues ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
@@ -50,7 +51,7 @@ Le parcours applicatif commence par un compte personnel vérifié :
 3. ouvrir « Sécurité » pour configurer le MFA, conserver les codes de
    récupération et contrôler les sessions actives ;
 4. utiliser « Explorer les indices » pour sélectionner une ou plusieurs
-   composantes du CAC 40, du CAC Next 20 ou du SBF 120 ;
+   composantes des grands indices français, européens ou américains ;
 5. utiliser « Charger l’historique » pour récupérer jusqu’aux dix derniers
    exercices structurés disponibles et calculer un MK Score par année ;
 6. ouvrir l’analyse d’une entreprise prête pour consulter ses fondamentaux,
@@ -68,6 +69,13 @@ projet avec :
 
 ```bash
 backend/.venv/Scripts/python.exe backend/scripts/audit_index_coverage.py --indices SBF120
+```
+
+Pour contrôler uniquement la disponibilité et le volume de toutes les
+compositions publiques prises en charge :
+
+```bash
+backend/.venv/Scripts/python.exe backend/scripts/audit_index_coverage.py --composition-only
 ```
 
 ### Tester la vérification et la réinitialisation
