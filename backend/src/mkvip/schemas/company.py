@@ -4,6 +4,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from mkvip.analysis.sector import normalize_gics_sector
+
 
 class CompanyStatus(StrEnum):
     PENDING = "pending"
@@ -17,6 +19,8 @@ class CompanyCreate(BaseModel):
     exchange: str = Field(min_length=1, max_length=100)
     country: str = Field(min_length=1, max_length=100)
     currency: str = Field(min_length=3, max_length=3)
+    sector: str | None = Field(default=None, max_length=100)
+    industry: str | None = Field(default=None, max_length=150)
     isin: str | None = Field(default=None, min_length=12, max_length=12)
     cik: str | None = Field(default=None, min_length=1, max_length=10)
     lei: str | None = Field(default=None, min_length=20, max_length=20)
@@ -28,6 +32,24 @@ class CompanyCreate(BaseModel):
     @classmethod
     def strip_text(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("sector")
+    @classmethod
+    def normalize_sector(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = normalize_gics_sector(value)
+        if normalized is None:
+            raise ValueError("Le secteur doit correspondre à l'un des 11 secteurs GICS.")
+        return normalized
+
+    @field_validator("industry")
+    @classmethod
+    def strip_industry(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
     @field_validator("ticker", "currency", "isin", "lei")
     @classmethod
@@ -60,6 +82,8 @@ class CompanyUpdate(BaseModel):
     exchange: str | None = Field(default=None, min_length=1, max_length=100)
     country: str | None = Field(default=None, min_length=1, max_length=100)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
+    sector: str | None = Field(default=None, max_length=100)
+    industry: str | None = Field(default=None, max_length=150)
     isin: str | None = Field(default=None, min_length=12, max_length=12)
     cik: str | None = Field(default=None, min_length=1, max_length=10)
     lei: str | None = Field(default=None, min_length=20, max_length=20)
@@ -87,6 +111,12 @@ class CompanyUpdate(BaseModel):
     )
     _normalize_memberships = field_validator("index_memberships")(
         lambda value: CompanyCreate.normalize_memberships(value) if value is not None else None
+    )
+    _normalize_sector = field_validator("sector")(
+        lambda value: CompanyCreate.normalize_sector(value)
+    )
+    _strip_industry = field_validator("industry")(
+        lambda value: CompanyCreate.strip_industry(value)
     )
 
 

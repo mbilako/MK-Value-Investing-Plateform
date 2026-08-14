@@ -45,6 +45,8 @@ class CompanyRepository(Protocol):
         company_id: uuid.UUID,
     ) -> list[FinancialAnalysisRead]: ...
 
+    async def list_all_financial_analyses(self) -> list[FinancialAnalysisRead]: ...
+
     async def create_financial_analysis(
         self,
         company_id: uuid.UUID,
@@ -62,6 +64,8 @@ class CompanyRepository(Protocol):
         self,
         company_id: uuid.UUID,
     ) -> list[ValuationAnalysisRead]: ...
+
+    async def list_all_valuation_analyses(self) -> list[ValuationAnalysisRead]: ...
 
     async def get_valuation_analysis(
         self,
@@ -81,6 +85,8 @@ class CompanyRepository(Protocol):
         self,
         company_id: uuid.UUID,
     ) -> list[ScoringAnalysisRead]: ...
+
+    async def list_all_scoring_analyses(self) -> list[ScoringAnalysisRead]: ...
 
     async def create_scoring_analysis(
         self,

@@ -6,6 +6,8 @@ export interface CompanyPayload {
   exchange: string;
   country: string;
   currency: string;
+  sector?: string | null;
+  industry?: string | null;
   isin?: string | null;
   cik?: string | null;
   lei?: string | null;
@@ -318,6 +320,84 @@ export interface Dashboard {
   companies: DashboardCompany[];
 }
 
+export type ScreenerStatus =
+  | "leader"
+  | "candidate"
+  | "secondary"
+  | "insufficient_data"
+  | "insufficient_peers"
+  | "unclassified";
+
+export interface ScreenerMetric {
+  key: string;
+  label: string;
+  value: number;
+  sector_median: number;
+  percentile: number;
+  weight: number;
+  higher_is_better: boolean;
+}
+
+export interface ScreenerCompany {
+  company_id: string;
+  name: string;
+  ticker: string;
+  sector: string | null;
+  sector_label: string | null;
+  industry: string | null;
+  is_favorite: boolean;
+  index_memberships: string[];
+  fiscal_year: number | null;
+  absolute_score: number | null;
+  sector_score: number | null;
+  sector_rank: number | null;
+  peer_count: number;
+  data_coverage: number;
+  status: ScreenerStatus;
+  status_label: string;
+  explanation: string;
+  metrics: ScreenerMetric[];
+  updated_at: string | null;
+}
+
+export interface Screener {
+  summary: {
+    companies: number;
+    classified: number;
+    eligible: number;
+    leaders: number;
+    sectors: number;
+    min_peer_count: number;
+  };
+  sectors: string[];
+  companies: ScreenerCompany[];
+  disclaimer: string;
+}
+
+export interface ScreenerPreparation {
+  requested: number;
+  processed: number;
+  classified: number;
+  imported: number;
+  unchanged: number;
+  failed: number;
+  remaining: number;
+  items: Array<{
+    company_id: string;
+    name: string;
+    ticker: string;
+    status:
+      | "classified"
+      | "imported"
+      | "unchanged"
+      | "unclassified"
+      | "failed";
+    sector: string | null;
+    industry: string | null;
+    detail: string;
+  }>;
+}
+
 export type AIAnalysisMode = "summary" | "comparison" | "question";
 
 export interface AIAnalysisPayload {
@@ -374,6 +454,12 @@ export interface CompanyClient {
   onUnauthorized(handler: () => void): () => void;
   listCompanies(): Promise<Company[]>;
   getDashboard?(): Promise<Dashboard>;
+  getScreener?(): Promise<Screener>;
+  prepareScreener?(payload: {
+    company_ids?: string[];
+    import_financials?: boolean;
+    limit?: number;
+  }): Promise<ScreenerPreparation>;
   analyzeWithAI?(payload: AIAnalysisPayload): Promise<AIAnalysis>;
   createCompany(payload: CompanyPayload): Promise<Company>;
   updateCompany(id: string, payload: Partial<CompanyPayload>): Promise<Company>;
@@ -537,6 +623,12 @@ export function createApiClient(): CompanyClient {
     },
     listCompanies: () => request<Company[]>("/companies"),
     getDashboard: () => request<Dashboard>("/dashboard"),
+    getScreener: () => request<Screener>("/screener"),
+    prepareScreener: (payload) =>
+      request<ScreenerPreparation>("/screener/prepare", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
     analyzeWithAI: (payload) =>
       request<AIAnalysis>("/ai/analyses", {
         method: "POST",

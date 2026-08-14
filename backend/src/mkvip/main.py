@@ -17,6 +17,7 @@ from mkvip.api.routes import (
     indices,
     rules,
     scores,
+    screener,
     valuations,
 )
 from mkvip.core.config import get_settings
@@ -98,6 +99,11 @@ def create_app() -> FastAPI:
     )
     application.include_router(
         dashboard.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
+    application.include_router(
+        screener.router,
         prefix="/api/v1",
         dependencies=[Depends(get_current_user)],
     )

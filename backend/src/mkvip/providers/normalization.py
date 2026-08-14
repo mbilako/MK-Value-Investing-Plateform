@@ -1,5 +1,8 @@
+from dataclasses import dataclass
+
 from pydantic import ValidationError
 
+from mkvip.analysis.sector import normalize_gics_sector
 from mkvip.providers.base import (
     FinancialDataProvider,
     ProviderBalanceSheet,
@@ -11,6 +14,19 @@ from mkvip.providers.base import (
 from mkvip.schemas.financial import FinancialProfile, FinancialSnapshotCreate
 
 MILLION = 1_000_000
+
+
+@dataclass(frozen=True)
+class NormalizedFinancialData:
+    snapshots: list[FinancialSnapshotCreate]
+    sector: str | None
+    industry: str | None
+
+
+@dataclass(frozen=True)
+class NormalizedCompanyClassification:
+    sector: str | None
+    industry: str | None
 
 
 def _to_millions(value: float) -> float:
@@ -32,6 +48,51 @@ def _financial_profile(sector: str | None, industry: str | None) -> FinancialPro
     if any(marker in classification for marker in financial_markers):
         return FinancialProfile.FINANCIAL
     return FinancialProfile.STANDARD
+
+
+async def load_company_classification(
+    provider: FinancialDataProvider,
+    ticker: str,
+    *,
+    isin: str | None = None,
+    cik: str | None = None,
+    lei: str | None = None,
+) -> NormalizedCompanyClassification:
+    candidates = getattr(provider, "providers", None) or (provider,)
+    errors: list[str] = []
+    fallback_industry = None
+    profile_loaded = False
+    for candidate in candidates:
+        try:
+            candidate_ticker = ticker
+            resolver = getattr(candidate, "resolve_identifier", None)
+            if resolver is not None:
+                candidate_ticker = await resolver(
+                    ticker,
+                    isin=isin,
+                    cik=cik,
+                    lei=lei,
+                )
+            profile = await candidate.get_profile(candidate_ticker)
+        except ProviderDataError as error:
+            errors.append(f"{candidate.name}: {error}")
+            continue
+        profile_loaded = True
+        industry = profile.industry.strip() if profile.industry else None
+        fallback_industry = fallback_industry or industry
+        sector = normalize_gics_sector(profile.sector)
+        if sector is not None:
+            return NormalizedCompanyClassification(sector=sector, industry=industry)
+
+    if profile_loaded:
+        return NormalizedCompanyClassification(
+            sector=None,
+            industry=fallback_industry,
+        )
+    raise ProviderDataIncompleteError(
+        "Aucune source publique n'a fourni de classification exploitable. "
+        + " | ".join(errors)
+    )
 
 
 async def load_latest_snapshot(
@@ -74,12 +135,35 @@ async def load_historical_snapshots(
     lei: str | None = None,
     limit: int = 10,
 ) -> list[FinancialSnapshotCreate]:
+    return (
+        await load_historical_data(
+            provider,
+            ticker,
+            isin=isin,
+            cik=cik,
+            lei=lei,
+            limit=limit,
+        )
+    ).snapshots
+
+
+async def load_historical_data(
+    provider: FinancialDataProvider,
+    ticker: str,
+    *,
+    isin: str | None = None,
+    cik: str | None = None,
+    lei: str | None = None,
+    limit: int = 10,
+) -> NormalizedFinancialData:
     candidates = getattr(provider, "providers", None)
     if candidates is None:
-        return await _load_historical_snapshots(provider, ticker, limit=limit)
+        return await _load_historical_data(provider, ticker, limit=limit)
 
     snapshots_by_year: dict[int, FinancialSnapshotCreate] = {}
     errors: list[str] = []
+    sector = None
+    industry = None
     for candidate in candidates:
         try:
             candidate_ticker = ticker
@@ -91,12 +175,14 @@ async def load_historical_snapshots(
                     cik=cik,
                     lei=lei,
                 )
-            snapshots = await _load_historical_snapshots(
+            data = await _load_historical_data(
                 candidate,
                 candidate_ticker,
                 limit=limit,
             )
-            for snapshot in snapshots:
+            sector = sector or data.sector
+            industry = industry or data.industry
+            for snapshot in data.snapshots:
                 snapshots_by_year.setdefault(snapshot.fiscal_year, snapshot)
         except ProviderDataError as error:
             errors.append(f"{candidate.name}: {error}")
@@ -106,11 +192,15 @@ async def load_historical_snapshots(
             "Aucune source publique n'a fourni d'historique annuel exploitable. "
             + " | ".join(errors)
         )
-    return sorted(
-        snapshots_by_year.values(),
-        key=lambda snapshot: snapshot.fiscal_year,
-        reverse=True,
-    )[:limit]
+    return NormalizedFinancialData(
+        snapshots=sorted(
+            snapshots_by_year.values(),
+            key=lambda snapshot: snapshot.fiscal_year,
+            reverse=True,
+        )[:limit],
+        sector=sector,
+        industry=industry,
+    )
 
 
 async def _load_latest_snapshot(
@@ -138,6 +228,15 @@ async def _load_historical_snapshots(
     *,
     limit: int,
 ) -> list[FinancialSnapshotCreate]:
+    return (await _load_historical_data(provider, ticker, limit=limit)).snapshots
+
+
+async def _load_historical_data(
+    provider: FinancialDataProvider,
+    ticker: str,
+    *,
+    limit: int,
+) -> NormalizedFinancialData:
     profile = await provider.get_profile(ticker)
     income_statements = await provider.get_income_statements(ticker)
     balance_sheets = await provider.get_balance_sheet(ticker)
@@ -214,7 +313,11 @@ async def _load_historical_snapshots(
             break
 
     if snapshots:
-        return snapshots
+        return NormalizedFinancialData(
+            snapshots=snapshots,
+            sector=normalize_gics_sector(profile.sector),
+            industry=profile.industry.strip() if profile.industry else None,
+        )
     detail = " | ".join(validation_errors) or "aucun exercice compatible"
     raise ProviderDataIncompleteError(
         f"Les données publiques de {ticker.upper()} ne peuvent pas être normalisées ({detail})."

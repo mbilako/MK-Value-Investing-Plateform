@@ -25,6 +25,8 @@ def test_create_company_normalizes_ticker(client: TestClient) -> None:
         "exchange": "Euronext Paris",
         "country": "France",
         "currency": "EUR",
+        "sector": None,
+        "industry": None,
         "isin": None,
         "cik": None,
         "lei": None,

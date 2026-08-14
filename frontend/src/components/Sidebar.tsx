@@ -4,12 +4,14 @@ import {
   BookOpen,
   Building2,
   Home,
+  ListFilter,
   SlidersHorizontal,
   Star,
 } from "lucide-react";
 
 const navigation = [
   { label: "Vue d’ensemble", icon: Home, href: "#overview" },
+  { label: "Sélection", icon: ListFilter, href: "#screener" },
   { label: "Entreprises", icon: Building2, href: "#companies" },
   { label: "Favoris", icon: Star, href: "#favorites" },
   { label: "Analyses", icon: BarChart3, href: "#analyses" },

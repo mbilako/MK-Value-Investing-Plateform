@@ -128,6 +128,13 @@ class InMemoryCompanyRepository:
             reverse=True,
         )
 
+    async def list_all_valuation_analyses(self) -> list[ValuationAnalysisRead]:
+        return sorted(
+            self._valuations,
+            key=lambda valuation: valuation.created_at,
+            reverse=True,
+        )
+
     async def get_valuation_analysis(
         self,
         company_id: uuid.UUID,
@@ -178,6 +185,13 @@ class InMemoryCompanyRepository:
             reverse=True,
         )
 
+    async def list_all_scoring_analyses(self) -> list[ScoringAnalysisRead]:
+        return sorted(
+            self._scores,
+            key=lambda score: score.created_at,
+            reverse=True,
+        )
+
     async def create_scoring_analysis(
         self,
         company_id: uuid.UUID,
@@ -222,6 +236,12 @@ class InMemoryCompanyRepository:
             ),
             key=lambda analysis: analysis.fiscal_year,
             reverse=True,
+        )
+
+    async def list_all_financial_analyses(self) -> list[FinancialAnalysisRead]:
+        return sorted(
+            self._financials.values(),
+            key=lambda analysis: (str(analysis.company_id), -analysis.fiscal_year),
         )
 
     async def create_financial_analysis(

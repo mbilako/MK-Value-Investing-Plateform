@@ -10,6 +10,7 @@ import {
   type IndexBulkAddResult,
   type ScoringAnalysis,
   type ScoringPayload,
+  type Screener,
   type User,
   type ValuationAnalysis,
   type ValuationPayload,
@@ -28,6 +29,7 @@ import { Sidebar } from "./Sidebar";
 import { SummaryStrip } from "./SummaryStrip";
 import { UserMenu } from "./UserMenu";
 import { SecurityDrawer } from "./SecurityDrawer";
+import { SectorScreener } from "./SectorScreener";
 
 export interface WorkspaceProps {
   client: CompanyClient;
@@ -44,6 +46,7 @@ export function Workspace({
 }: WorkspaceProps) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [screener, setScreener] = useState<Screener | null>(null);
   const [isIndexBrowserOpen, setIndexBrowserOpen] = useState(false);
   const [managedCompany, setManagedCompany] = useState<Company | null>(null);
   const [isAIAnalystOpen, setAIAnalystOpen] = useState(false);
@@ -72,6 +75,15 @@ export function Workspace({
     }
   };
 
+  const refreshScreener = async () => {
+    if (!client.getScreener) return;
+    try {
+      setScreener(await client.getScreener());
+    } catch {
+      // Le reste de l’espace reste disponible pendant le démarrage de l’API.
+    }
+  };
+
   const mergeIndexCompanies = (result: IndexBulkAddResult) => {
     const incoming = [...result.created, ...result.existing];
     setCompanies((current) => {
@@ -82,6 +94,7 @@ export function Workspace({
       );
     });
     void refreshDashboard();
+    void refreshScreener();
   };
 
   const completeFinancialImport = (
@@ -114,6 +127,7 @@ export function Workspace({
     setValuations([]);
     setScoringAnalyses([]);
     void refreshDashboard();
+    void refreshScreener();
   };
 
   const openAnalysis = async (company: Company) => {
@@ -150,6 +164,7 @@ export function Workspace({
     setCompanies((current) =>
       current.map((record) => (record.id === updated.id ? updated : record)),
     );
+    void refreshScreener();
   };
 
   useEffect(() => {
@@ -170,6 +185,16 @@ export function Workspace({
         })
         .catch(() => {
           // The dashboard appears as soon as the API is available.
+        });
+    }
+    if (client.getScreener) {
+      client
+        .getScreener()
+        .then((result) => {
+          if (active) setScreener(result);
+        })
+        .catch(() => {
+          // Le moteur apparaît dès que l’API est disponible.
         });
     }
     return () => {
@@ -240,6 +265,26 @@ export function Workspace({
               onManage={setManagedCompany}
             />
           )}
+          {screener && (
+            <SectorScreener
+              screener={screener}
+              companies={companies}
+              onAnalysis={openAnalysis}
+              onPrepare={
+                client.prepareScreener
+                  ? async (importFinancials) => {
+                      const result = await client.prepareScreener!({
+                        import_financials: importFinancials,
+                        limit: 10,
+                      });
+                      setCompanies(await client.listCompanies());
+                      await Promise.all([refreshDashboard(), refreshScreener()]);
+                      return result;
+                    }
+                  : undefined
+              }
+            />
+          )}
           <CompanyUniverse
             companies={companies}
             scores={scores}
@@ -287,6 +332,7 @@ export function Workspace({
               ),
             );
             void refreshDashboard();
+            void refreshScreener();
           }}
           onDelete={async () => {
             await client.deleteCompany(managedCompany.id);
@@ -294,6 +340,7 @@ export function Workspace({
               current.filter((company) => company.id !== managedCompany.id),
             );
             void refreshDashboard();
+            void refreshScreener();
           }}
           onClose={() => setManagedCompany(null)}
         />
@@ -315,7 +362,14 @@ export function Workspace({
             const history = await client.importFinancialsAutomatically(
               financialCompany.id,
             );
-            completeFinancialImport(financialCompany, history);
+            const refreshedCompanies = await client.listCompanies();
+            setCompanies(refreshedCompanies);
+            completeFinancialImport(
+              refreshedCompanies.find(
+                (company) => company.id === financialCompany.id,
+              ) ?? financialCompany,
+              history,
+            );
           }}
         />
       )}
@@ -333,6 +387,7 @@ export function Workspace({
               payload,
             );
             setValuations((current) => [valuation, ...current]);
+            await refreshScreener();
             return valuation;
           }}
           onCreateScore={async (payload: ScoringPayload) => {
@@ -346,6 +401,7 @@ export function Workspace({
               [analysisCompany.id]: score.global_score,
             }));
             await refreshDashboard();
+            await refreshScreener();
             return score;
           }}
           onClose={() => {

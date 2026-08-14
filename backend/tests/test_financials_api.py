@@ -193,6 +193,8 @@ def test_automatic_import_creates_latest_available_analysis(
                 country="France",
                 currency="EUR",
                 market_cap=4_500_000_000,
+                sector="Industrials",
+                industry="Specialty Chemicals",
             )
 
         async def get_income_statements(
@@ -252,6 +254,9 @@ def test_automatic_import_creates_latest_available_analysis(
     assert body["company_id"] == company_id
     assert body["snapshots"][0]["source"] == ("Public Test Data · AI.PA · exercice 2025")
     assert body["snapshots"][0]["mk_score"] == 100.0
+    company = client.get("/api/v1/companies").json()[0]
+    assert company["sector"] == "Industrials"
+    assert company["industry"] == "Specialty Chemicals"
 
 
 def test_automatic_import_builds_history_and_refreshes_existing_years(
