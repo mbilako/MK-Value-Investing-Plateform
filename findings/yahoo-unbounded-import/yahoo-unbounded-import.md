@@ -1,5 +1,16 @@
 # Automatic Yahoo imports admit unbounded blocking work
 
+## Resolution status (verified 2026-08-14)
+
+Remediated in the current v0.12.0 codebase. Yahoo operations use a dedicated
+bounded executor with fail-fast admission and response timeouts; capacity is
+retained until the underlying thread completes. Automatic imports additionally
+enforce one end-to-end deadline, a per-user concurrency limit, and a
+per-company single-flight guard. Regression tests cover capacity exhaustion,
+late thread completion, duplicate concurrent imports, per-user limits, and the
+global deadline. The remainder of this report is retained as the historical
+analysis of the affected revision.
+
 ## Executive Summary
 
 MK Value Investing Platform exposes an authenticated automatic financial import

@@ -225,10 +225,31 @@ button {
   padding-inline: 8px;
 }
 
+.user-menu-control {
+  position: relative;
+}
+
 .user-menu {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.user-menu__error {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(360px, 80vw);
+  padding: 11px 13px;
+  margin: 0;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 7px 7px 0;
+  color: var(--danger);
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 38, 65, 0.15);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .user-menu__email {

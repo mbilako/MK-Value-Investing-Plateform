@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 - 2026-08-14
 
 ### Sprint 1H — indices européens et américains, tranche 1
 
@@ -63,6 +63,10 @@
 
 ### Added
 
+- Espace Favoris persistant, disponible également pour les banques et
+  assureurs sans MK Score, sans doublon dans l’univers d’investissement.
+- Comparaison des deux derniers exercices avec EBITDA, marges, décote,
+  rendement action-obligation, levier et niveau d’endettement.
 - Modification, archivage réversible et suppression définitive des entreprises
   depuis le portefeuille de recherche et l’univers d’investissement.
 - Explorateur des compositions CAC 40, CAC Next 20 et SBF 120 avec sélection
@@ -93,6 +97,9 @@
 
 ### Security
 
+- La déconnexion échoue désormais de manière fermée : si la révocation serveur
+  n’est pas confirmée, l’espace authentifié reste visible avec une alerte
+  persistante et une nouvelle tentative reste possible.
 - Le démarrage en mode production refuse les valeurs de développement, les
   origines non HTTPS, les cookies non sécurisés et les secrets manquants.
 - PostgreSQL et l’API ne publient aucun port directement sur le VPS ; seul
