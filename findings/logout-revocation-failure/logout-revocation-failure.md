@@ -1,5 +1,14 @@
 # Logout Failure Is Presented as Successful While the Server Session Remains Valid
 
+## Resolution status (2026-08-14)
+
+Remediated for v0.12.0 and tracked in GitHub issue #7. The frontend now keeps
+the authenticated workspace visible when server-side logout fails, presents a
+persistent accessible warning, prevents concurrent logout requests, and allows
+the user to retry. Regression coverage verifies both the fail-closed path and
+the successful transition to the login screen. The remainder of this report is
+retained as the historical analysis of the affected revision.
+
 ## Executive Summary
 
 The logout workflow in MK Value Investing Platform fails open in the user

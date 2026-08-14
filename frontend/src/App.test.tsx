@@ -489,7 +489,7 @@ describe("MK-VIP authentication", () => {
     ).toBeInTheDocument();
   });
 
-  it("clears protected content when the logout request fails", async () => {
+  it("keeps the session visible when server-side logout fails", async () => {
     const user = userEvent.setup();
     const logout = vi
       .fn()
@@ -502,9 +502,45 @@ describe("MK-VIP authentication", () => {
     );
 
     expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent(
+      "La déconnexion a échoué. Votre session est encore active.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Vue d’ensemble" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Se connecter" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Se déconnecter" }));
+    expect(logout).toHaveBeenCalledTimes(2);
+  });
+
+  it("prevents concurrent logout requests", async () => {
+    const user = userEvent.setup();
+    let completeLogout: (() => void) | undefined;
+    const logout = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          completeLogout = resolve;
+        }),
+    );
+
+    render(<App client={createTestClient({ logout })} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Se déconnecter" }),
+    );
+
+    const pendingButton = screen.getByRole("button", { name: "Déconnexion…" });
+    expect(pendingButton).toBeDisabled();
+    expect(logout).toHaveBeenCalledOnce();
+
+    await act(async () => completeLogout?.());
+    expect(
       await screen.findByRole("heading", { name: "Se connecter" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Vue d’ensemble")).not.toBeInTheDocument();
   });
 
   it("returns to login when a business request reports an expired session", async () => {

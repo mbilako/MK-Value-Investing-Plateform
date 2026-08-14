@@ -90,15 +90,10 @@ export function App({ client = apiClient }: AppProps) {
   };
 
   const logout = async () => {
-    try {
-      await client.logout();
-    } catch {
-      // Local logout still succeeds when the remote session is unavailable.
-    } finally {
-      setUser(null);
-      setNotice(null);
-      setStatus("unauthenticated");
-    }
+    await client.logout();
+    setUser(null);
+    setNotice(null);
+    setStatus("unauthenticated");
   };
 
   if (status === "checking") {
