@@ -31,6 +31,8 @@ def test_supported_indices_include_major_euronext_markets() -> None:
         "Portugal": 3,
         "Irlande": 3,
     }
+    sectors = {index.code: index.sector for index in indices if index.kind == "sector"}
+    assert sectors == {"PSIIND": "Industrials", "ISEQFIN": "Financials"}
 
 
 def test_parses_euronext_composition_rows() -> None:

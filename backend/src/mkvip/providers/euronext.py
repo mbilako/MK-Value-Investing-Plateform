@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from html import unescape
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 from urllib.request import Request, urlopen
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -32,6 +32,8 @@ class EuronextIndex:
     isin: str
     market: str = "XPAR"
     country: str = "France"
+    kind: Literal["broad", "sector"] = "broad"
+    sector: str | None = None
 
     @property
     def instrument(self) -> str:
@@ -50,10 +52,26 @@ INDEXES = (
     EuronextIndex("BELSMALL", "BEL Small", "BE0389857146", "XBRU", "Belgique"),
     EuronextIndex("PSI", "PSI", "PTING0200002", "XLIS", "Portugal"),
     EuronextIndex("PSIALL", "PSI All-Share", "QS0011224308", "XLIS", "Portugal"),
-    EuronextIndex("PSIIND", "PSI Industrials", "QS0011225008", "XLIS", "Portugal"),
+    EuronextIndex(
+        "PSIIND",
+        "PSI Industrials",
+        "QS0011225008",
+        "XLIS",
+        "Portugal",
+        "sector",
+        "Industrials",
+    ),
     EuronextIndex("ISEQ20", "ISEQ 20", "IE00B0500264", "XDUB", "Irlande"),
     EuronextIndex("ISEQALL", "ISEQ All Share", "IE0001477250", "XDUB", "Irlande"),
-    EuronextIndex("ISEQFIN", "ISEQ Financial", "IE0000516009", "XDUB", "Irlande"),
+    EuronextIndex(
+        "ISEQFIN",
+        "ISEQ Financial",
+        "IE0000516009",
+        "XDUB",
+        "Irlande",
+        "sector",
+        "Financials",
+    ),
 )
 
 
@@ -83,6 +101,8 @@ class EuronextIndexProvider:
                 provider=self.name,
                 region="Europe",
                 country=index.country,
+                kind=index.kind,
+                sector=index.sector,
             )
             for index in INDEXES
         ]

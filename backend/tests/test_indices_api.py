@@ -4,6 +4,7 @@ from mkvip.api.dependencies import (
     get_company_discovery_provider,
     get_index_provider,
 )
+from mkvip.api.routes.indices import _market_suffixes
 from mkvip.main import app
 from mkvip.providers.base import ProviderCompanySearchResult
 from mkvip.schemas.index import (
@@ -102,6 +103,17 @@ class GreekDiscoveryProvider:
                 exchange="Euronext Athens",
             ),
         ]
+
+
+def test_sector_index_markets_use_public_ticker_suffixes() -> None:
+    assert _market_suffixes("XCSE") == (".CO",)
+    assert _market_suffixes("XHEL") == (".HE",)
+    assert _market_suffixes("XOSL") == (".OL",)
+    assert _market_suffixes("XSTO") == (".ST",)
+    assert _market_suffixes("XWAR") == (".WA",)
+    assert _market_suffixes("XWBO") == (".VI",)
+    assert _market_suffixes("XSHG") == (".SS",)
+    assert _market_suffixes("XSHE") == (".SZ",)
 
 
 def test_lists_cac_next_20_and_its_constituents(client: TestClient) -> None:

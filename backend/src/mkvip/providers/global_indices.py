@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO, StringIO
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 from zipfile import ZipFile
@@ -38,6 +38,9 @@ class PublicIndex:
     isin: str | None = None
     trading_location: str | None = None
     currency: str = "EUR"
+    kind: Literal["broad", "sector"] = "broad"
+    sector: str | None = None
+    source_sector: str | None = None
 
 
 def _blackrock_url(product_id: int) -> str:
@@ -50,6 +53,18 @@ def _blackrock_url(product_id: int) -> str:
         f"&locale=en_GB&portfolioId={product_id}&targetSite=ishares-uk"
         "&userType=individual&excludeContent=true&asOfDate=&includeConfig=true"
     )
+
+
+_SP500_HOLDINGS_URL = (
+    "https://www.ishares.com/us/products/239726/"
+    "ishares-core-s-p-500-etf/latest-holdings.csv"
+)
+
+_CSI300_HOLDINGS_URL = (
+    "https://www.blackrock.com/hk/en/products/251754/"
+    "ishares-csi-300-a-share-index-etf/1478358625333.ajax"
+    "?dataType=fund&fileName=2846_holdings&fileType=csv"
+)
 
 
 INDEXES = (
@@ -306,10 +321,7 @@ INDEXES = (
         name="S&P 500",
         market="États-Unis",
         provider="iShares",
-        source_url=(
-            "https://www.ishares.com/us/products/239726/"
-            "ishares-core-s-p-500-etf/latest-holdings.csv"
-        ),
+        source_url=_SP500_HOLDINGS_URL,
         region="États-Unis",
         country="États-Unis",
         source_kind="ishares_csv",
@@ -326,16 +338,463 @@ INDEXES = (
         source_kind="nasdaq",
         currency="USD",
     ),
+    PublicIndex(
+        code="EUROPEBANKS",
+        name="STOXX Europe 600 Banks",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251934),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Financials",
+    ),
+    PublicIndex(
+        code="EUROPETECH",
+        name="STOXX Europe 600 Technology",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251961),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Information Technology",
+    ),
+    PublicIndex(
+        code="EUROPEHEALTH",
+        name="STOXX Europe 600 Health Care",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251946),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Health Care",
+    ),
+    PublicIndex(
+        code="EUROPEENERGY",
+        name="STOXX Europe 600 Oil & Gas",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251954),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Energy",
+    ),
+    PublicIndex(
+        code="EUROPEINDUSTRIALS",
+        name="STOXX Europe 600 Industrial Goods & Services",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251948),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Industrials",
+    ),
+    PublicIndex(
+        code="EUROPESTAPLES",
+        name="STOXX Europe 600 Food & Beverage",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251944),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Consumer Staples",
+    ),
+    PublicIndex(
+        code="CSI300",
+        name="CSI 300",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+    ),
+    PublicIndex(
+        code="USMATERIALS",
+        name="S&P 500 Materials",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Materials",
+        source_sector="Materials",
+    ),
+    PublicIndex(
+        code="USDISCRETIONARY",
+        name="S&P 500 Consumer Discretionary",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Consumer Discretionary",
+        source_sector="Consumer Discretionary",
+    ),
+    PublicIndex(
+        code="USSTAPLES",
+        name="S&P 500 Consumer Staples",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Consumer Staples",
+        source_sector="Consumer Staples",
+    ),
+    PublicIndex(
+        code="USENERGY",
+        name="S&P 500 Energy",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Energy",
+        source_sector="Energy",
+    ),
+    PublicIndex(
+        code="USFINANCIALS",
+        name="S&P 500 Financials",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Financials",
+        source_sector="Financials",
+    ),
+    PublicIndex(
+        code="USHEALTH",
+        name="S&P 500 Health Care",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Health Care",
+        source_sector="Health Care",
+    ),
+    PublicIndex(
+        code="USINDUSTRIALS",
+        name="S&P 500 Industrials",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Industrials",
+        source_sector="Industrials",
+    ),
+    PublicIndex(
+        code="USREALESTATE",
+        name="S&P 500 Real Estate",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Real Estate",
+        source_sector="Real Estate",
+    ),
+    PublicIndex(
+        code="USTECH",
+        name="S&P 500 Information Technology",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Information Technology",
+        source_sector="Information Technology",
+    ),
+    PublicIndex(
+        code="USCOMM",
+        name="S&P 500 Communication Services",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Communication Services",
+        source_sector="Communication",
+    ),
+    PublicIndex(
+        code="USUTILITIES",
+        name="S&P 500 Utilities",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="États-Unis",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Utilities",
+        source_sector="Utilities",
+    ),
+    PublicIndex(
+        code="CNMATERIALS",
+        name="CSI 300 Materials",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Materials",
+        source_sector="Materials",
+    ),
+    PublicIndex(
+        code="CNDISCRETIONARY",
+        name="CSI 300 Consumer Discretionary",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Consumer Discretionary",
+        source_sector="Consumer Discretionary",
+    ),
+    PublicIndex(
+        code="CNSTAPLES",
+        name="CSI 300 Consumer Staples",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Consumer Staples",
+        source_sector="Consumer Staples",
+    ),
+    PublicIndex(
+        code="CNENERGY",
+        name="CSI 300 Energy",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Energy",
+        source_sector="Energy",
+    ),
+    PublicIndex(
+        code="CNFINANCIALS",
+        name="CSI 300 Financials",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Financials",
+        source_sector="Financials",
+    ),
+    PublicIndex(
+        code="CNHEALTH",
+        name="CSI 300 Health Care",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Health Care",
+        source_sector="Health Care",
+    ),
+    PublicIndex(
+        code="CNINDUSTRIALS",
+        name="CSI 300 Industrials",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Industrials",
+        source_sector="Industrials",
+    ),
+    PublicIndex(
+        code="CNREALESTATE",
+        name="CSI 300 Real Estate",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Real Estate",
+        source_sector="Real Estate",
+    ),
+    PublicIndex(
+        code="CNTECH",
+        name="CSI 300 Information Technology",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Information Technology",
+        source_sector="Information Technology",
+    ),
+    PublicIndex(
+        code="CNCOMM",
+        name="CSI 300 Communication Services",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Communication Services",
+        source_sector="Communication",
+    ),
+    PublicIndex(
+        code="CNUTILITIES",
+        name="CSI 300 Utilities",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Chine",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Utilities",
+        source_sector="Utilities",
+    ),
 )
 
 _EXCHANGE_MICS = {
+    "BORSA ITALIANA": "XMIL",
+    "BOLSA DE MADRID": "XMAD",
+    "DEUTSCHE BOERSE XETRA": "XETR",
+    "EURONEXT AMSTERDAM": "XAMS",
+    "EURONEXT BRUSSELS": "XBRU",
+    "EURONEXT DUBLIN": "XDUB",
+    "EURONEXT LISBON": "XLIS",
+    "EURONEXT PARIS": "XPAR",
+    "LONDON STOCK EXCHANGE": "XLON",
+    "IRISH STOCK EXCHANGE - ALL MARKET": "XDUB",
     "NASDAQ": "XNAS",
     "NASDAQ GS": "XNAS",
     "NASDAQ GLOBAL SELECT MARKET": "XNAS",
     "NEW YORK STOCK EXCHANGE INC.": "XNYS",
     "NYSE": "XNYS",
     "NYSE ARCA": "ARCX",
+    "NYSE EURONEXT - EURONEXT BRUSSELS": "XBRU",
+    "NYSE EURONEXT - EURONEXT LISBON": "XLIS",
+    "NYSE EURONEXT - EURONEXT PARIS": "XPAR",
+    "OMX NORDIC EXCHANGE COPENHAGEN A/S": "XCSE",
+    "OSLO BORS ASA": "XOSL",
+    "SIX SWISS EXCHANGE": "XSWX",
+    "SHANGHAI STOCK EXCHANGE": "XSHG",
+    "SHENZHEN STOCK EXCHANGE": "XSHE",
+    "WARSAW STOCK EXCHANGE/EQUITIES/MAIN MARKET": "XWAR",
+    "WIENER BOERSE AG": "XWBO",
+    "XETRA": "XETR",
 }
+
+_COUNTRY_MICS = {
+    "Austria": "XWBO",
+    "Denmark": "XCSE",
+    "Finland": "XHEL",
+    "Norway": "XOSL",
+    "Poland": "XWAR",
+    "Sweden": "XSTO",
+    "China": "XSHG",
+}
+
+
+def _mic_for_exchange(exchange: object, country: object, fallback: str) -> str:
+    return _EXCHANGE_MICS.get(
+        str(exchange or "").strip().upper(),
+        _COUNTRY_MICS.get(str(country or "").strip(), fallback),
+    )
 
 _US_TICKER_ALIASES = {
     "BFB": "BF-B",
@@ -650,7 +1109,7 @@ def _parse_blackrock_composition(
                 name=str(name or normalized_ticker).strip(),
                 ticker=normalized_ticker or None,
                 isin=normalized_isin or None,
-                mic=index.market,
+                mic=_mic_for_exchange(exchange, country, index.market),
                 trading_location=str(exchange or index.trading_location).strip(),
                 country=str(country or index.country).strip(),
                 currency=str(currency or index.currency).strip(),
@@ -674,7 +1133,7 @@ def _parse_ishares_json_composition(
                 name=str(row[1]).strip(),
                 ticker=str(row[0]).strip().upper(),
                 isin=str(row[8]).strip().upper() or None,
-                mic=index.market,
+                mic=_mic_for_exchange(row[11], row[10], index.market),
                 trading_location=str(row[11] or index.trading_location).strip(),
                 country=str(row[10] or index.country).strip(),
                 currency=str(row[12] or index.currency).strip(),
@@ -848,23 +1307,29 @@ def _parse_ishares_composition(
     constituents: list[IndexConstituentRead] = []
     seen: set[str] = set()
     for row in reader:
-        if row.get("Asset Class", "").strip().casefold() != "equity":
+        if str(row.get("Asset Class") or "").strip().casefold() != "equity":
             continue
-        raw_ticker = row.get("Ticker", "").strip().upper()
+        if index.source_sector and (
+            str(row.get("Sector") or "").strip().casefold()
+            != index.source_sector.casefold()
+        ):
+            continue
+        raw_ticker = str(row.get("Ticker") or "").strip().upper()
         if not raw_ticker or raw_ticker == "-":
             continue
         ticker = _US_TICKER_ALIASES.get(raw_ticker, raw_ticker.replace(".", "-"))
         if ticker in seen:
             continue
-        exchange = row.get("Exchange", "").strip()
+        exchange = str(row.get("Exchange") or "").strip()
+        country = str(row.get("Location") or "").strip() or index.country
         constituents.append(
             IndexConstituentRead(
-                name=row.get("Name", "").strip() or ticker,
+                name=str(row.get("Name") or "").strip() or ticker,
                 ticker=ticker,
-                mic=_EXCHANGE_MICS.get(exchange.upper(), "XNAS"),
-                trading_location=exchange or "États-Unis",
-                country=row.get("Location", "").strip() or "États-Unis",
-                currency=row.get("Currency", "").strip() or "USD",
+                mic=_mic_for_exchange(exchange, country, index.market),
+                trading_location=exchange or index.trading_location or index.country,
+                country=country,
+                currency=str(row.get("Currency") or "").strip() or index.currency,
             )
         )
         seen.add(ticker)
@@ -930,4 +1395,6 @@ def _summary(index: PublicIndex) -> dict[str, str | None]:
         "provider": index.provider,
         "region": index.region,
         "country": index.country,
+        "kind": index.kind,
+        "sector": index.sector,
     }

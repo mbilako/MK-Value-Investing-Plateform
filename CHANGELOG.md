@@ -4,6 +4,14 @@
 
 ### Added
 
+- Ajout de 28 indices sectoriels dans les zones géographiques : six familles
+  STOXX Europe 600 (finance, technologie, santé, énergie, industrie et biens
+  essentiels), les onze secteurs GICS du S&P 500 et les onze secteurs GICS du
+  CSI 300.
+- Ajout de la zone Chine et de l’indice général CSI 300, avec distinction des
+  cotations de Shanghai et Shenzhen.
+- Métadonnées `kind` et `sector` sur le catalogue et les compositions afin de
+  distinguer explicitement les indices généraux des indices sectoriels.
 - Première version du moteur de sélection sectoriel : classification GICS en
   11 secteurs, persistance du secteur et de l’activité, classement par
   percentiles et Top 5 expliqué dans l’interface.
@@ -17,6 +25,13 @@
 
 ### Changed
 
+- L’explorateur d’indices présente désormais, dans chaque zone, deux accordéons
+  exclusifs « Indices sectoriels » et « Indices généraux » afin de conserver
+  la navigation compacte, sans refermer le groupe après la sélection d’un indice.
+- Les secteurs américains utilisent désormais strictement l’univers S&P 500,
+  conformément au document fonctionnel, à la place des familles Russell 1000.
+- Les composantes européennes issues d’iShares conservent leur véritable place
+  de cotation lorsque celle-ci est publiée par la source.
 - L’import financier automatique conserve désormais le secteur GICS normalisé
   et l’activité remontés par la source publique.
 - L’écran de sélection permet de lancer le classement de l’univers et le

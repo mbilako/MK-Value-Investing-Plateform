@@ -899,6 +899,217 @@ describe("MK-VIP authentication", () => {
     expect(await screen.findByText("AAPL")).toBeInTheDocument();
   });
 
+  it("shows sector indices inside their geographic region", async () => {
+    const user = userEvent.setup();
+    const getIndex = vi.fn().mockImplementation(async (code: string) => ({
+      code,
+      name: code === "EUROPEHEALTH" ? "STOXX Europe 600 Health Care" : "CAC 40",
+      isin: null,
+      market: code === "EUROPEHEALTH" ? "XETR" : "XPAR",
+      provider: code === "EUROPEHEALTH" ? "iShares" : "Euronext",
+      region: "Europe",
+      country: code === "EUROPEHEALTH" ? "Europe" : "France",
+      kind: code === "EUROPEHEALTH" ? "sector" as const : "broad" as const,
+      sector: code === "EUROPEHEALTH" ? "Health Care" : null,
+      as_of: "13/Aug/2026",
+      source_url: "https://example.test",
+      constituents: code === "EUROPEHEALTH"
+        ? [{
+            name: "Novo Nordisk",
+            ticker: "NOVO-B.CO",
+            isin: "DK0062498333",
+            mic: "XCSE",
+            trading_location: "Nasdaq Copenhagen",
+            country: "Danemark",
+            currency: "DKK",
+          }]
+        : [{
+            name: "Air Liquide",
+            ticker: "AI.PA",
+            isin: "FR0000120073",
+            mic: "XPAR",
+            trading_location: "Euronext Paris",
+            country: "France",
+            currency: "EUR",
+          }],
+    }));
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "CAC40",
+              name: "CAC 40",
+              isin: null,
+              market: "XPAR",
+              provider: "Euronext",
+              region: "Europe",
+              country: "France",
+              kind: "broad",
+              sector: null,
+            },
+            {
+              code: "EUROPEHEALTH",
+              name: "STOXX Europe 600 Health Care",
+              isin: null,
+              market: "XETR",
+              provider: "iShares",
+              region: "Europe",
+              country: "Europe",
+              kind: "sector",
+              sector: "Health Care",
+            },
+          ],
+          getIndex,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    const sectorToggle = screen.getByRole("button", {
+      name: /Indices sectoriels.*1 indice.*Europe/,
+    });
+    const broadToggle = screen.getByRole("button", {
+      name: /Indices généraux.*1 indice.*1 pays/,
+    });
+    expect(sectorToggle).toHaveAttribute("aria-expanded", "true");
+    expect(broadToggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      Boolean(
+        sectorToggle.compareDocumentPosition(broadToggle)
+        & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      screen.queryByRole("tablist", { name: "Indices France" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(broadToggle);
+    expect(
+      screen.queryByRole("tablist", { name: "Indices sectoriels Europe" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("tablist", { name: "Indices France" }),
+    ).toBeInTheDocument();
+
+    await user.click(sectorToggle);
+    expect(
+      screen.queryByRole("tablist", { name: "Indices France" }),
+    ).not.toBeInTheDocument();
+    const sectorTabs = screen.getByRole("tablist", {
+      name: "Indices sectoriels Europe",
+    });
+    await user.click(
+      within(sectorTabs).getByRole("tab", {
+        name: /Santé.*STOXX Europe 600 Health Care/,
+      }),
+    );
+
+    expect(sectorToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("tablist", { name: "Indices sectoriels Europe" }),
+    ).toBeInTheDocument();
+    expect(getIndex).toHaveBeenLastCalledWith("EUROPEHEALTH");
+    expect(
+      await screen.findByRole("checkbox", { name: /Novo Nordisk/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/secteur Santé/)).toBeInTheDocument();
+  });
+
+  it("shows the CSI 300 universe and its sector indices in China", async () => {
+    const user = userEvent.setup();
+    const getIndex = vi.fn().mockImplementation(async (code: string) => ({
+      code,
+      name: code === "CNTECH" ? "CSI 300 Information Technology" : "CAC 40",
+      isin: null,
+      market: code === "CNTECH" ? "XSHG" : "XPAR",
+      provider: code === "CNTECH" ? "CSI (via iShares)" : "Euronext",
+      region: code === "CNTECH" ? "Chine" : "Europe",
+      country: code === "CNTECH" ? "Chine" : "France",
+      kind: code === "CNTECH" ? "sector" as const : "broad" as const,
+      sector: code === "CNTECH" ? "Information Technology" : null,
+      as_of: "14-Aug-2026",
+      source_url: "https://example.test",
+      constituents: code === "CNTECH"
+        ? [{
+            name: "Zhongji Innolight",
+            ticker: "300308",
+            isin: null,
+            mic: "XSHE",
+            trading_location: "Shenzhen Stock Exchange",
+            country: "China",
+            currency: "CNY",
+          }]
+        : [],
+    }));
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "CAC40",
+              name: "CAC 40",
+              isin: null,
+              market: "XPAR",
+              provider: "Euronext",
+              region: "Europe",
+              country: "France",
+              kind: "broad",
+              sector: null,
+            },
+            {
+              code: "CSI300",
+              name: "CSI 300",
+              isin: null,
+              market: "XSHG",
+              provider: "CSI (via iShares)",
+              region: "Chine",
+              country: "Chine",
+              kind: "broad",
+              sector: null,
+            },
+            {
+              code: "CNTECH",
+              name: "CSI 300 Information Technology",
+              isin: null,
+              market: "XSHG",
+              provider: "CSI (via iShares)",
+              region: "Chine",
+              country: "Chine",
+              kind: "sector",
+              sector: "Information Technology",
+            },
+          ],
+          getIndex,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Chine" }));
+
+    const sectorToggle = screen.getByRole("button", {
+      name: /Indices sectoriels.*1 indice.*Chine/,
+    });
+    expect(sectorToggle).toHaveAttribute("aria-expanded", "true");
+    const chinaSectors = screen.getByRole("tablist", {
+      name: "Indices sectoriels Chine",
+    });
+    expect(
+      within(chinaSectors).getByRole("tab", {
+        name: /Technologies de l’information.*CSI 300 Information Technology/,
+      }),
+    ).toBeInTheDocument();
+    expect(getIndex).toHaveBeenLastCalledWith("CNTECH");
+    expect(
+      await screen.findByRole("checkbox", { name: /Zhongji Innolight/ }),
+    ).toBeInTheDocument();
+  });
+
   it("groups the ATHEX Composite under Greece in Europe", async () => {
     const user = userEvent.setup();
     render(

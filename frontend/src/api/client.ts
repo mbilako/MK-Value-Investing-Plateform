@@ -33,6 +33,8 @@ export interface IndexSummary {
   provider: string;
   region?: string;
   country?: string;
+  kind?: "broad" | "sector";
+  sector?: string | null;
 }
 
 export interface IndexConstituent {
