@@ -156,6 +156,7 @@ describe("AnalysisDrawer financial institutions", () => {
       pretax_income: 160,
       market_cap: 800,
       current_assets: 1_000,
+      current_liabilities: 400,
       financial_debt: 500,
       cash: 100,
       total_assets: 1_000,
@@ -174,6 +175,7 @@ describe("AnalysisDrawer financial institutions", () => {
       pretax_income: 100,
       market_cap: 1_000,
       current_assets: 800,
+      current_liabilities: 500,
       financial_debt: 600,
       cash: 100,
       total_assets: 900,
@@ -218,6 +220,16 @@ describe("AnalysisDrawer financial institutions", () => {
     const favorablePe = comparisonView.getByText("3,2×").closest("strong");
     expect(favorablePe).toHaveClass("comparison-value--favorable");
     expect(comparisonView.getByText("2024 : 12,5×")).toBeInTheDocument();
+    const favorableCurrentRatio = comparisonView.getByText("2,5×").closest("strong");
+    expect(favorableCurrentRatio).toHaveClass("comparison-value--favorable");
+    expect(comparisonView.getByText("2024 : 1,6×")).toBeInTheDocument();
+    const favorableMarketCapToAssets = comparisonView.getByText("0,8×").closest("strong");
+    expect(favorableMarketCapToAssets).toHaveClass("comparison-value--favorable");
+    expect(comparisonView.getByText("2024 : 1,11×")).toBeInTheDocument();
+    expect(comparisonView.getByText("Current ratio")).toBeInTheDocument();
+    expect(
+      comparisonView.getByText("Capitalisation boursière / total actif"),
+    ).toBeInTheDocument();
     const unfavorableMargin = comparisonView.getByText("35 %").closest("strong");
     expect(unfavorableMargin).toHaveClass("comparison-value--unfavorable");
     const favorableNetMargin = comparisonView.getByText("25 %").closest("strong");
@@ -228,6 +240,8 @@ describe("AnalysisDrawer financial institutions", () => {
     expect(comparisonView.getByText("Seuil vert : > 40 %")).toBeInTheDocument();
     expect(comparisonView.getByText("Seuil vert : > 20 %")).toBeInTheDocument();
     expect(comparisonView.getByText("Seuil vert : < 20×")).toBeInTheDocument();
+    expect(comparisonView.getByText("Seuil vert : > 2×")).toBeInTheDocument();
+    expect(comparisonView.getByText("Seuil vert : < 1,5×")).toBeInTheDocument();
 
     const annualHistory = screen.getByRole("table", { name: "Historique fondamental" });
     expect(within(annualHistory).getByRole("columnheader", { name: /Marge brute/ })).toBeInTheDocument();

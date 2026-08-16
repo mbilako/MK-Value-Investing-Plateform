@@ -42,6 +42,8 @@ type FundamentalKey =
 type ComparisonKey =
   | "revenue"
   | "pe_ratio"
+  | "current_ratio"
+  | "market_cap_to_assets"
   | "gross_margin"
   | "net_margin"
   | "interest_burden"
@@ -88,6 +90,8 @@ const FUNDAMENTAL_ORDER: FundamentalKey[] = [
 const COMPARISON_ORDER: ComparisonKey[] = [
   "revenue",
   "pe_ratio",
+  "current_ratio",
+  "market_cap_to_assets",
   "gross_margin",
   "net_margin",
   "interest_burden",
@@ -136,6 +140,8 @@ const FUNDAMENTAL_LABELS: Record<FundamentalKey, string> = {
 const COMPARISON_LABELS: Record<ComparisonKey, string> = {
   revenue: "Revenus",
   pe_ratio: "Cours / bénéfice (PER)",
+  current_ratio: "Current ratio",
+  market_cap_to_assets: "Capitalisation boursière / total actif",
   gross_margin: "Marge brute",
   net_margin: "Marge nette",
   interest_burden: "Poids de la dette financière",
@@ -148,6 +154,8 @@ const COMPARISON_LABELS: Record<ComparisonKey, string> = {
 const COMPARISON_FORMULAS: Record<ComparisonKey, string> = {
   revenue: "Chiffre d’affaires publié",
   pe_ratio: "Capitalisation boursière / résultat net",
+  current_ratio: "Actif circulant / passif exigible",
+  market_cap_to_assets: "Capitalisation boursière / total actif",
   gross_margin: "EBITDA / chiffre d’affaires",
   net_margin: "Résultat net / chiffre d’affaires",
   interest_burden: "Charges d’intérêts / EBIT",
@@ -182,6 +190,8 @@ const THRESHOLDS: Partial<
   Record<ComparisonKey, { value: number; direction: "above" | "below" }>
 > = {
   pe_ratio: { value: 20, direction: "below" },
+  current_ratio: { value: 2, direction: "above" },
+  market_cap_to_assets: { value: 1.5, direction: "below" },
   gross_margin: { value: 0.4, direction: "above" },
   net_margin: { value: 0.2, direction: "above" },
   interest_burden: { value: 0.15, direction: "below" },
@@ -221,6 +231,10 @@ function comparisonValue(key: ComparisonKey, snapshot: FinancialAnalysis): numbe
       return snapshot.revenue;
     case "pe_ratio":
       return ratio(snapshot.market_cap, snapshot.net_income);
+    case "current_ratio":
+      return ratio(snapshot.current_assets, snapshot.current_liabilities);
+    case "market_cap_to_assets":
+      return ratio(snapshot.market_cap, snapshot.total_assets);
     case "gross_margin":
       return ratio(snapshot.ebitda, snapshot.revenue);
     case "net_margin":
@@ -251,7 +265,13 @@ function formatComparisonValue(
   currency: string,
 ): string {
   if (key === "revenue") return formatAmount(value, currency);
-  if (key === "pe_ratio" || key === "leverage" || key === "debt_level") {
+  if (
+    key === "pe_ratio"
+    || key === "current_ratio"
+    || key === "market_cap_to_assets"
+    || key === "leverage"
+    || key === "debt_level"
+  ) {
     return formatMultiple(value);
   }
   return formatRatio(value);
@@ -270,7 +290,13 @@ function formatComparisonDelta(
       signDisplay: "always",
     })} %`;
   }
-  if (key === "pe_ratio" || key === "leverage" || key === "debt_level") {
+  if (
+    key === "pe_ratio"
+    || key === "current_ratio"
+    || key === "market_cap_to_assets"
+    || key === "leverage"
+    || key === "debt_level"
+  ) {
     return `${(current - previous).toLocaleString("fr-FR", {
       maximumFractionDigits: 2,
       signDisplay: "always",
@@ -296,7 +322,11 @@ function comparisonTone(key: ComparisonKey, value: number | null): string {
 function thresholdLabel(key: ComparisonKey): string | null {
   const rule = THRESHOLDS[key];
   if (rule == null) return null;
-  const formatted = key === "pe_ratio" || key === "leverage" || key === "debt_level"
+  const formatted = key === "pe_ratio"
+    || key === "current_ratio"
+    || key === "market_cap_to_assets"
+    || key === "leverage"
+    || key === "debt_level"
     ? `${rule.value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}×`
     : `${(rule.value * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
   return `Seuil vert : ${rule.direction === "above" ? ">" : "<"} ${formatted}`;
