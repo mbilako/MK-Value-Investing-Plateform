@@ -882,7 +882,7 @@ describe("MK-VIP authentication", () => {
       await screen.findByRole("region", { name: "Indices États-Unis" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("tablist", { name: "Indices États-Unis" }),
+      screen.getByRole("tablist", { name: "Indices généraux États-Unis" }),
     ).toBeInTheDocument();
     await user.click(await screen.findByRole("checkbox", { name: /Apple Inc./ }));
     await user.click(
@@ -969,37 +969,37 @@ describe("MK-VIP authentication", () => {
       await screen.findByRole("button", { name: "Explorer les indices" }),
     );
     const sectorToggle = screen.getByRole("button", {
-      name: /Indices sectoriels.*1 indice.*Europe/,
+      name: /Indices sectoriels régionaux.*1 indice.*Europe/,
     });
-    const broadToggle = screen.getByRole("button", {
-      name: /Indices généraux.*1 indice.*1 pays/,
+    const franceToggle = screen.getByRole("button", {
+      name: /France.*1 indice général.*0 indice sectoriel/,
     });
     expect(sectorToggle).toHaveAttribute("aria-expanded", "true");
-    expect(broadToggle).toHaveAttribute("aria-expanded", "false");
+    expect(franceToggle).toHaveAttribute("aria-expanded", "true");
     expect(
       Boolean(
-        sectorToggle.compareDocumentPosition(broadToggle)
+        sectorToggle.compareDocumentPosition(franceToggle)
         & Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
     expect(
-      screen.queryByRole("tablist", { name: "Indices France" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(broadToggle);
-    expect(
-      screen.queryByRole("tablist", { name: "Indices sectoriels Europe" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("tablist", { name: "Indices France" }),
+      screen.getByRole("tablist", { name: "Indices généraux France" }),
     ).toBeInTheDocument();
 
-    await user.click(sectorToggle);
+    await user.click(franceToggle);
     expect(
-      screen.queryByRole("tablist", { name: "Indices France" }),
+      screen.getByRole("tablist", { name: "Indices sectoriels régionaux Europe" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Indices généraux France" }),
     ).not.toBeInTheDocument();
+
+    await user.click(franceToggle);
+    expect(
+      screen.getByRole("tablist", { name: "Indices généraux France" }),
+    ).toBeInTheDocument();
     const sectorTabs = screen.getByRole("tablist", {
-      name: "Indices sectoriels Europe",
+      name: "Indices sectoriels régionaux Europe",
     });
     await user.click(
       within(sectorTabs).getByRole("tab", {
@@ -1009,7 +1009,7 @@ describe("MK-VIP authentication", () => {
 
     expect(sectorToggle).toHaveAttribute("aria-expanded", "true");
     expect(
-      screen.getByRole("tablist", { name: "Indices sectoriels Europe" }),
+      screen.getByRole("tablist", { name: "Indices sectoriels régionaux Europe" }),
     ).toBeInTheDocument();
     expect(getIndex).toHaveBeenLastCalledWith("EUROPEHEALTH");
     expect(
@@ -1092,22 +1092,24 @@ describe("MK-VIP authentication", () => {
     );
     await user.click(screen.getByRole("button", { name: "Chine" }));
 
-    const sectorToggle = screen.getByRole("button", {
-      name: /Indices sectoriels.*1 indice.*Chine/,
+    const chinaToggle = screen.getByRole("button", {
+      name: /Chine.*1 indice général.*1 indice sectoriel/,
     });
-    expect(sectorToggle).toHaveAttribute("aria-expanded", "true");
+    expect(chinaToggle).toHaveAttribute("aria-expanded", "true");
     const chinaSectors = screen.getByRole("tablist", {
       name: "Indices sectoriels Chine",
     });
-    expect(
+    await user.click(
       within(chinaSectors).getByRole("tab", {
         name: /Technologies de l’information.*CSI 300 Information Technology/,
       }),
-    ).toBeInTheDocument();
+    );
     expect(getIndex).toHaveBeenLastCalledWith("CNTECH");
+    expect(chinaToggle).toHaveAttribute("aria-expanded", "true");
     expect(
       await screen.findByRole("checkbox", { name: /Zhongji Innolight/ }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Diversification limitée/)).toBeInTheDocument();
   });
 
   it("groups the ATHEX Composite under Greece in Europe", async () => {
@@ -1156,7 +1158,7 @@ describe("MK-VIP authentication", () => {
     );
 
     expect(
-      screen.getByRole("tablist", { name: "Indices Grèce" }),
+      screen.getByRole("tablist", { name: "Indices généraux Grèce" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: "ATHEX Composite" }),

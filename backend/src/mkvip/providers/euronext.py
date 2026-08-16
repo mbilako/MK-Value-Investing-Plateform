@@ -52,26 +52,133 @@ INDEXES = (
     EuronextIndex("BELSMALL", "BEL Small", "BE0389857146", "XBRU", "Belgique"),
     EuronextIndex("PSI", "PSI", "PTING0200002", "XLIS", "Portugal"),
     EuronextIndex("PSIALL", "PSI All-Share", "QS0011224308", "XLIS", "Portugal"),
-    EuronextIndex(
-        "PSIIND",
-        "PSI Industrials",
-        "QS0011225008",
-        "XLIS",
-        "Portugal",
-        "sector",
-        "Industrials",
-    ),
     EuronextIndex("ISEQ20", "ISEQ 20", "IE00B0500264", "XDUB", "Irlande"),
     EuronextIndex("ISEQALL", "ISEQ All Share", "IE0001477250", "XDUB", "Irlande"),
-    EuronextIndex(
-        "ISEQFIN",
-        "ISEQ Financial",
-        "IE0000516009",
+)
+
+
+_SECTOR_INDEXES = (
+    # Price-return indices only: gross/net return variants would duplicate them in the UI.
+    ("AEXMAT", "AEX Basic Materials", "QS0011016480", "XAMS", "Pays-Bas", "Materials"),
+    (
+        "AEXDISC",
+        "AEX Consumer Discretionary",
+        "QS0011016530",
+        "XAMS",
+        "Pays-Bas",
+        "Consumer Discretionary",
+    ),
+    ("AEXSTAP", "AEX Consumer Staples", "QS0011016563", "XAMS", "Pays-Bas", "Consumer Staples"),
+    ("AEXENER", "AEX Energy", "QS0011016472", "XAMS", "Pays-Bas", "Energy"),
+    ("AEXFIN", "AEX Financials", "QS0011016605", "XAMS", "Pays-Bas", "Financials"),
+    ("AEXHEALTH", "AEX Health Care", "QS0011016555", "XAMS", "Pays-Bas", "Health Care"),
+    ("AEXIND", "AEX Industrials", "QS0011016506", "XAMS", "Pays-Bas", "Industrials"),
+    ("AEXREAL", "AEX Real Estate", "NL0014787053", "XAMS", "Pays-Bas", "Real Estate"),
+    ("AEXTECH", "AEX Technology", "QS0011016613", "XAMS", "Pays-Bas", "Information Technology"),
+    (
+        "AEXCOMM",
+        "AEX Telecommunications",
+        "QS0011016589",
+        "XAMS",
+        "Pays-Bas",
+        "Communication Services",
+    ),
+    ("AEXUTIL", "AEX Utilities", "NL00150006J3", "XAMS", "Pays-Bas", "Utilities"),
+    ("BELMAT", "BEL Basic Materials", "QS0011224910", "XBRU", "Belgique", "Materials"),
+    (
+        "BELDISC",
+        "BEL Consumer Discretionary",
+        "QS0011225222",
+        "XBRU",
+        "Belgique",
+        "Consumer Discretionary",
+    ),
+    ("BELSTAP", "BEL Consumer Staples", "QS0011225156", "XBRU", "Belgique", "Consumer Staples"),
+    ("BELENER", "BEL Energy", "QS0011249248", "XBRU", "Belgique", "Energy"),
+    ("BELFIN", "BEL Financials", "QS0011225180", "XBRU", "Belgique", "Financials"),
+    ("BELHEALTH", "BEL Health Care", "QS0011225206", "XBRU", "Belgique", "Health Care"),
+    ("BELIND", "BEL Industrials", "QS0011225214", "XBRU", "Belgique", "Industrials"),
+    ("BELREAL", "BEL Real Estate", "BE0004643848", "XBRU", "Belgique", "Real Estate"),
+    ("BELTECH", "BEL Technology", "QS0011225172", "XBRU", "Belgique", "Information Technology"),
+    (
+        "BELCOMM",
+        "BEL Telecommunications",
+        "QS0011225198",
+        "XBRU",
+        "Belgique",
+        "Communication Services",
+    ),
+    ("BELUTIL", "BEL Utilities", "QS0011225164", "XBRU", "Belgique", "Utilities"),
+    ("CACMAT", "CAC Basic Materials", "QS0011017637", "XPAR", "France", "Materials"),
+    (
+        "CACDISC",
+        "CAC Consumer Discretionary",
+        "QS0011017686",
+        "XPAR",
+        "France",
+        "Consumer Discretionary",
+    ),
+    ("CACSTAP", "CAC Consumer Staples", "QS0011017736", "XPAR", "France", "Consumer Staples"),
+    ("CACENER", "CAC Energy", "QS0011017603", "XPAR", "France", "Energy"),
+    ("CACFIN", "CAC Financials", "QS0011017801", "XPAR", "France", "Financials"),
+    ("CACHEALTH", "CAC Health Care", "QS0011017702", "XPAR", "France", "Health Care"),
+    ("CACIND", "CAC Industrials", "QS0011017652", "XPAR", "France", "Industrials"),
+    ("CACREAL", "CAC Real Estate", "FR0013506771", "XPAR", "France", "Real Estate"),
+    ("CACTECH", "CAC Technology", "QS0011017827", "XPAR", "France", "Information Technology"),
+    (
+        "CACCOMM",
+        "CAC Telecommunications",
+        "QS0011017769",
+        "XPAR",
+        "France",
+        "Communication Services",
+    ),
+    ("CACUTIL", "CAC Utilities", "QS0011017785", "XPAR", "France", "Utilities"),
+    ("ISEQMAT", "ISEQ Basic Materials", "IE00BL6TX318", "XDUB", "Irlande", "Materials"),
+    (
+        "ISEQDISC",
+        "ISEQ Consumer Discretionary",
+        "IE00BL6TX532",
         "XDUB",
         "Irlande",
-        "sector",
-        "Financials",
+        "Consumer Discretionary",
     ),
+    ("ISEQSTAP", "ISEQ Consumer Staples", "IE00BL6TX755", "XDUB", "Irlande", "Consumer Staples"),
+    ("ISEQENER", "ISEQ Energy", "IE00BL6TXF35", "XDUB", "Irlande", "Energy"),
+    ("ISEQFIN", "ISEQ Financial", "IE0000516009", "XDUB", "Irlande", "Financials"),
+    ("ISEQHEALTH", "ISEQ Health Care", "IE00BL6TX979", "XDUB", "Irlande", "Health Care"),
+    ("ISEQIND", "ISEQ Industrials", "IE00BL6TXC04", "XDUB", "Irlande", "Industrials"),
+    ("ISEQREAL", "ISEQ Real Estate", "IE00BM7VR644", "XDUB", "Irlande", "Real Estate"),
+    ("ISEQTECH", "ISEQ Technology", "IE00BL6TXH58", "XDUB", "Irlande", "Information Technology"),
+    ("ISEQUTIL", "ISEQ Utilities", "IE00BMT9LK88", "XDUB", "Irlande", "Utilities"),
+    ("PSIMAT", "PSI Basic Materials", "QS0011224993", "XLIS", "Portugal", "Materials"),
+    (
+        "PSIDISC",
+        "PSI Consumer Discretionary",
+        "QS0011225016",
+        "XLIS",
+        "Portugal",
+        "Consumer Discretionary",
+    ),
+    ("PSISTAP", "PSI Consumer Staples", "QS0011225024", "XLIS", "Portugal", "Consumer Staples"),
+    ("PSIENER", "PSI Energy", "QS0011249503", "XLIS", "Portugal", "Energy"),
+    ("PSIFIN", "PSI Financials", "QS0011225057", "XLIS", "Portugal", "Financials"),
+    ("PSIIND", "PSI Industrials", "QS0011225008", "XLIS", "Portugal", "Industrials"),
+    ("PSITECH", "PSI Technology", "QS0011225065", "XLIS", "Portugal", "Information Technology"),
+    (
+        "PSICOMM",
+        "PSI Telecommunications",
+        "QS0011225032",
+        "XLIS",
+        "Portugal",
+        "Communication Services",
+    ),
+    ("PSIUTIL", "PSI Utilities", "QS0011225040", "XLIS", "Portugal", "Utilities"),
+)
+
+INDEXES += tuple(
+    EuronextIndex(code, name, isin, market, country, "sector", sector)
+    for code, name, isin, market, country, sector in _SECTOR_INDEXES
 )
 
 
@@ -180,9 +287,7 @@ def _decrypt_cryptojs(payload: dict[str, Any], passphrase: str) -> str:
 
 
 def _plain_text(value: str) -> str:
-    return " ".join(
-        unescape(re.sub(r"<[^>]+>", " ", value)).split()
-    )
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", value)).split())
 
 
 def _parse_composition(
@@ -191,9 +296,7 @@ def _parse_composition(
     html: str,
 ) -> IndexCompositionRead:
     date_match = re.search(r"<h6[^>]*>\s*([^<]+)\s*</h6>", html, re.I)
-    row_pattern = re.compile(
-        r"<tr[^>]*>(?P<row>.*?)</tr>", re.I | re.S
-    )
+    row_pattern = re.compile(r"<tr[^>]*>(?P<row>.*?)</tr>", re.I | re.S)
     link_pattern = re.compile(
         r'href="[^"]*/equities/(?P<isin>[A-Z0-9]{12})-(?P<mic>[A-Z]{4})"[^>]*>'
         r"(?P<name>.*?)</a>",
@@ -227,9 +330,7 @@ def _parse_composition(
         )
         seen.add(isin)
     if not constituents:
-        raise ProviderDataError(
-            f"La composition {index.name} reçue est vide ou illisible."
-        )
+        raise ProviderDataError(f"La composition {index.name} reçue est vide ou illisible.")
     return IndexCompositionRead(
         code=index.code,
         name=index.name,
@@ -238,6 +339,8 @@ def _parse_composition(
         provider="Euronext",
         region="Europe",
         country=index.country,
+        kind=index.kind,
+        sector=index.sector,
         as_of=date_match.group(1).strip() if date_match else None,
         source_url=source_url,
         constituents=constituents,

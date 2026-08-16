@@ -56,8 +56,7 @@ def _blackrock_url(product_id: int) -> str:
 
 
 _SP500_HOLDINGS_URL = (
-    "https://www.ishares.com/us/products/239726/"
-    "ishares-core-s-p-500-etf/latest-holdings.csv"
+    "https://www.ishares.com/us/products/239726/ishares-core-s-p-500-etf/latest-holdings.csv"
 )
 
 _CSI300_HOLDINGS_URL = (
@@ -160,8 +159,7 @@ INDEXES = (
         market="XMAD",
         provider="BME",
         source_url=(
-            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/"
-            "constituents.html"
+            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/constituents.html"
         ),
         region="Europe",
         country="Espagne",
@@ -175,8 +173,7 @@ INDEXES = (
         market="XMAD",
         provider="BME",
         source_url=(
-            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/"
-            "constituents.html"
+            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/constituents.html"
         ),
         region="Europe",
         country="Espagne",
@@ -235,9 +232,7 @@ INDEXES = (
         name="FTSE Italia Mid Cap",
         market="XMIL",
         provider="Borsa Italiana",
-        source_url=(
-            "https://www.borsaitaliana.it/borsa/azioni/mid-cap/lista.html?lang=en"
-        ),
+        source_url=("https://www.borsaitaliana.it/borsa/azioni/mid-cap/lista.html?lang=en"),
         region="Europe",
         country="Italie",
         source_kind="borsa_italiana",
@@ -248,9 +243,7 @@ INDEXES = (
         name="FTSE Italia Small Cap",
         market="XMIL",
         provider="Borsa Italiana",
-        source_url=(
-            "https://www.borsaitaliana.it/borsa/azioni/small-cap/lista.html?lang=en"
-        ),
+        source_url=("https://www.borsaitaliana.it/borsa/azioni/small-cap/lista.html?lang=en"),
         region="Europe",
         country="Italie",
         source_kind="borsa_italiana",
@@ -749,6 +742,157 @@ INDEXES = (
     ),
 )
 
+
+_SECTOR_SPECS = {
+    "MAT": ("Materials", "Materials"),
+    "DISC": ("Consumer Discretionary", "Consumer Discretionary"),
+    "STAP": ("Consumer Staples", "Consumer Staples"),
+    "ENER": ("Energy", "Energy"),
+    "FIN": ("Financials", "Financials"),
+    "HEALTH": ("Health Care", "Health Care"),
+    "IND": ("Industrials", "Industrials"),
+    "REAL": ("Real Estate", "Real Estate"),
+    "TECH": ("Information Technology", "Information Technology"),
+    "COMM": ("Communication Services", "Communication"),
+    "UTIL": ("Utilities", "Utilities"),
+}
+
+
+def _sector_views(
+    base_code: str,
+    prefix: str,
+    family_name: str,
+    provider: str,
+    available: tuple[str, ...],
+) -> tuple[PublicIndex, ...]:
+    base = next(index for index in INDEXES if index.code == base_code)
+    return tuple(
+        PublicIndex(
+            code=f"{prefix}{suffix}",
+            name=f"{family_name} {sector}",
+            market=base.market,
+            provider=provider,
+            source_url=base.source_url,
+            region=base.region,
+            country=base.country,
+            source_kind=base.source_kind,
+            trading_location=base.trading_location,
+            currency=base.currency,
+            kind="sector",
+            sector=sector,
+            source_sector=source_sector,
+        )
+        for suffix in available
+        for sector, source_sector in (_SECTOR_SPECS[suffix],)
+    )
+
+
+# These national views use the public composition of the broad national index and
+# its published sector classification. The narrower Euronext and ATHEX families
+# below are represented by their own official index instruments.
+INDEXES += _sector_views(
+    "DAX40",
+    "DE",
+    "DAX 40",
+    "DAX (via iShares)",
+    ("MAT", "DISC", "STAP", "FIN", "HEALTH", "IND", "REAL", "TECH", "COMM", "UTIL"),
+)
+INDEXES += _sector_views(
+    "FTSE100",
+    "UK",
+    "FTSE 100",
+    "FTSE Russell (via iShares)",
+    tuple(_SECTOR_SPECS),
+)
+INDEXES += _sector_views(
+    "FTSEMIB",
+    "IT",
+    "FTSE MIB",
+    "FTSE Russell (via iShares)",
+    ("MAT", "DISC", "STAP", "ENER", "FIN", "HEALTH", "IND", "TECH", "COMM", "UTIL"),
+)
+INDEXES += _sector_views(
+    "SPI",
+    "CH",
+    "SPI",
+    "SIX (via iShares)",
+    ("MAT", "DISC", "STAP", "FIN", "HEALTH", "IND", "REAL", "TECH", "COMM", "UTIL"),
+)
+
+INDEXES += (
+    PublicIndex(
+        code="IBEXBANKS",
+        name="IBEX 35 Banks",
+        market="XMAD",
+        provider="BME",
+        source_url="https://www.bolsasymercados.es/en/bme-exchange/indices/ibex.html",
+        region="Europe",
+        country="Espagne",
+        source_kind="static_bme",
+        trading_location="Bolsa de Madrid",
+        kind="sector",
+        sector="Financials",
+    ),
+    PublicIndex(
+        code="IBEXENERGY",
+        name="IBEX 35 Energy",
+        market="XMAD",
+        provider="BME",
+        source_url="https://www.bolsasymercados.es/en/bme-exchange/indices/ibex.html",
+        region="Europe",
+        country="Espagne",
+        source_kind="static_bme",
+        trading_location="Bolsa de Madrid",
+        kind="sector",
+        sector="Energy",
+    ),
+    PublicIndex(
+        code="IBEXCONSTR",
+        name="IBEX 35 Construction",
+        market="XMAD",
+        provider="BME",
+        source_url="https://www.bolsasymercados.es/en/bme-exchange/indices/ibex.html",
+        region="Europe",
+        country="Espagne",
+        source_kind="static_bme",
+        trading_location="Bolsa de Madrid",
+        kind="sector",
+        sector="Industrials",
+    ),
+)
+
+INDEXES += tuple(
+    PublicIndex(
+        code=code,
+        name=name,
+        market="XATH",
+        provider="FTSE/ATHEX",
+        source_url=f"https://www.athexgroup.gr/en/market-data/instruments/indices/{symbol}",
+        region="Europe",
+        country="Grèce",
+        source_kind="athex",
+        trading_location="Euronext Athens",
+        kind="sector",
+        sector=sector,
+    )
+    for code, symbol, name, sector in (
+        (
+            "ATHEXTECH",
+            "FTSE_TT",
+            "FTSE/ATHEX Technology & Telecommunications",
+            "Information Technology",
+        ),
+        ("ATHEXHEALTH", "FTSE_HC", "FTSE/ATHEX Health Care", "Health Care"),
+        ("ATHEXFIN", "FTSE_FS", "FTSE/ATHEX Financial Services", "Financials"),
+        ("ATHEXREAL", "FTSE_RE", "FTSE/ATHEX Real Estate", "Real Estate"),
+        ("ATHEXDISC", "FTSE_CD", "FTSE/ATHEX Consumer Discretionary", "Consumer Discretionary"),
+        ("ATHEXSTAP", "FTSE_CS", "FTSE/ATHEX Consumer Staples", "Consumer Staples"),
+        ("ATHEXIND", "FTSE_IN", "FTSE/ATHEX Industrials", "Industrials"),
+        ("ATHEXMAT", "FTSE_BM", "FTSE/ATHEX Basic Materials", "Materials"),
+        ("ATHEXENER", "FTSE_EU", "FTSE/ATHEX Energy & Utilities", "Energy"),
+    )
+)
+
 _EXCHANGE_MICS = {
     "BORSA ITALIANA": "XMIL",
     "BOLSA DE MADRID": "XMAD",
@@ -795,6 +939,7 @@ def _mic_for_exchange(exchange: object, country: object, fallback: str) -> str:
         str(exchange or "").strip().upper(),
         _COUNTRY_MICS.get(str(country or "").strip(), fallback),
     )
+
 
 _US_TICKER_ALIASES = {
     "BFB": "BF-B",
@@ -905,10 +1050,31 @@ _IBEX_SMALL_CONSTITUENTS = (
     ("EZE", "Grupo Ezentis"),
 )
 
+_IBEX_BANK_CONSTITUENTS = tuple(
+    constituent
+    for constituent in _IBEX35_CONSTITUENTS
+    if constituent[0] in {"BBVA", "BKT", "CABK", "SAB", "SAN", "UNI"}
+)
+
+_IBEX_ENERGY_CONSTITUENTS = tuple(
+    constituent
+    for constituent in _IBEX35_CONSTITUENTS
+    if constituent[0] in {"ANE", "ELE", "ENG", "IBE", "NTGY", "RED", "REP", "SLR"}
+)
+
+_IBEX_CONSTRUCTION_CONSTITUENTS = tuple(
+    constituent
+    for constituent in _IBEX35_CONSTITUENTS
+    if constituent[0] in {"ACS", "ANA", "FER", "SCYR"}
+)
+
 _BME_CONSTITUENTS = {
     "IBEX35": _IBEX35_CONSTITUENTS,
     "IBEXMEDIUM": _IBEX_MEDIUM_CONSTITUENTS,
     "IBEXSMALL": _IBEX_SMALL_CONSTITUENTS,
+    "IBEXBANKS": _IBEX_BANK_CONSTITUENTS,
+    "IBEXENERGY": _IBEX_ENERGY_CONSTITUENTS,
+    "IBEXCONSTR": _IBEX_CONSTRUCTION_CONSTITUENTS,
 }
 
 
@@ -1084,20 +1250,26 @@ def _parse_blackrock_composition(
         .get("dataPointsByNameMap", {})
     )
     values = {key: point.get("value") for key, point in data.items()}
+    tickers = values.get("ticker") or []
     rows = zip(
-        values.get("ticker") or [],
+        tickers,
         values.get("issueName") or [],
         values.get("assetClass") or [],
         values.get("isin") or [],
         values.get("countryOfRisk") or [],
         values.get("exchange") or [],
         values.get("marketCurrencyCode") or [],
+        values.get("sectorName") or [None] * len(tickers),
         strict=False,
     )
     constituents: list[IndexConstituentRead] = []
     seen: set[str] = set()
-    for ticker, name, asset_class, isin, country, exchange, currency in rows:
+    for ticker, name, asset_class, isin, country, exchange, currency, sector in rows:
         if str(asset_class).strip().casefold() != "equity":
+            continue
+        if index.source_sector and (
+            str(sector or "").strip().casefold() != index.source_sector.casefold()
+        ):
             continue
         normalized_ticker = str(ticker or "").strip().upper()
         normalized_isin = str(isin or "").strip().upper()
@@ -1127,6 +1299,10 @@ def _parse_ishares_json_composition(
     constituents: list[IndexConstituentRead] = []
     for row in payload.get("aaData") or []:
         if len(row) < 13 or str(row[3]).strip().casefold() != "equity":
+            continue
+        if index.source_sector and (
+            str(row[2] or "").strip().casefold() != index.source_sector.casefold()
+        ):
             continue
         constituents.append(
             IndexConstituentRead(
@@ -1310,8 +1486,7 @@ def _parse_ishares_composition(
         if str(row.get("Asset Class") or "").strip().casefold() != "equity":
             continue
         if index.source_sector and (
-            str(row.get("Sector") or "").strip().casefold()
-            != index.source_sector.casefold()
+            str(row.get("Sector") or "").strip().casefold() != index.source_sector.casefold()
         ):
             continue
         raw_ticker = str(row.get("Ticker") or "").strip().upper()
