@@ -147,7 +147,7 @@ const COMPARISON_LABELS: Record<ComparisonKey, string> = {
   interest_burden: "Poids de la dette financière",
   discount: "Décote",
   stock_bond_yield: "Rendement de l’action-obligation",
-  leverage: "Effet de levier",
+  leverage: "Effet de levier ajusté",
   debt_level: "Niveau d’endettement",
 };
 
@@ -160,7 +160,7 @@ const COMPARISON_FORMULAS: Record<ComparisonKey, string> = {
   net_margin: "Résultat net / chiffre d’affaires",
   interest_burden: "Charges d’intérêts / EBIT",
   discount: "Capitalisation boursière / actif circulant",
-  stock_bond_yield: "EBITDA / capitalisation boursière",
+  stock_bond_yield: "Résultat avant impôt / capitalisation boursière totale",
   leverage: "Passif total / (capitaux propres + réserve d’actions propres)",
   debt_level: "Dette financière nette / EBITDA",
 };
@@ -181,7 +181,7 @@ const HISTORY_LABELS: Record<HistoryColumnKey, string> = {
   interest_burden: "Poids dette financière",
   discount: "Décote",
   stock_bond_yield: "Rendement action-obligation",
-  leverage: "Effet de levier",
+  leverage: "Effet de levier ajusté",
   debt_level: "Niveau d’endettement",
   mk_score: "MK Score",
 };
@@ -244,7 +244,7 @@ function comparisonValue(key: ComparisonKey, snapshot: FinancialAnalysis): numbe
     case "discount":
       return ratio(snapshot.market_cap, snapshot.current_assets);
     case "stock_bond_yield":
-      return ratio(snapshot.ebitda, snapshot.market_cap);
+      return ratio(snapshot.pretax_income, snapshot.market_cap);
     case "leverage": {
       const totalLiabilities = snapshot.total_assets - snapshot.total_equity;
       if (totalLiabilities < 0) return null;

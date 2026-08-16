@@ -127,8 +127,8 @@ def test_ranks_scored_companies_before_the_unscored_universe(
         (item["company_id"], item["global_score"], item["signal"])
         for item in body["companies"]
     ] == [
-        (favorable_id, 100, "favorable"),
-        (caution_id, 33.19, "caution"),
+        (favorable_id, 93.75, "favorable"),
+        (caution_id, 26.94, "caution"),
         (unscored_id, None, "unscored"),
     ]
     caution = body["companies"][1]

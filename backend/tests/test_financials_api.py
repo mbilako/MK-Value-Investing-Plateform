@@ -84,9 +84,9 @@ def test_import_financials_calculates_rules_and_marks_company_ready(
     body = response.json()
     assert body["company_id"] == company_id
     assert body["fiscal_year"] == 2025
-    assert body["mk_score"] == 100.0
+    assert body["mk_score"] == 90.0
     assert body["quality_score"] == 100.0
-    assert body["safety_score"] == 100.0
+    assert body["safety_score"] == 75.0
     assert {indicator["key"]: indicator["value"] for indicator in body["indicators"]} == {
         "free_cash_flow": 260.0,
         "free_cash_flow_margin": 0.26,
@@ -102,18 +102,22 @@ def test_import_financials_calculates_rules_and_marks_company_ready(
         "capex_to_net_income": 0.16,
         "pe_ratio": 18.0,
         "net_margin": 0.25,
-        "financial_leverage": 0.6,
+        "financial_leverage": 3.0,
         "current_ratio": 2.4,
         "market_cap_to_assets": 1.125,
         "net_debt_to_ebitda": 1.111111,
     }
-    assert {metric["status"] for metric in body["metrics"]} == {"pass"}
+    assert {metric["status"] for metric in body["metrics"]} == {"pass", "fail"}
+    leverage = next(
+        metric for metric in body["metrics"] if metric["key"] == "financial_leverage"
+    )
+    assert leverage["label"] == "Effet de levier ajusté"
 
     companies = client.get("/api/v1/companies").json()
     assert companies[0]["status"] == "ready"
-    assert companies[0]["latest_mk_score"] == 100.0
+    assert companies[0]["latest_mk_score"] == 90.0
     assert companies[0]["latest_quality_score"] == 100.0
-    assert companies[0]["latest_safety_score"] == 100.0
+    assert companies[0]["latest_safety_score"] == 75.0
 
 
 def test_import_financials_rejects_unknown_company(client: TestClient) -> None:
@@ -253,7 +257,7 @@ def test_automatic_import_creates_latest_available_analysis(
     body = response.json()
     assert body["company_id"] == company_id
     assert body["snapshots"][0]["source"] == ("Public Test Data · AI.PA · exercice 2025")
-    assert body["snapshots"][0]["mk_score"] == 100.0
+    assert body["snapshots"][0]["mk_score"] == 90.0
     company = client.get("/api/v1/companies").json()[0]
     assert company["sector"] == "Industrials"
     assert company["industry"] == "Specialty Chemicals"

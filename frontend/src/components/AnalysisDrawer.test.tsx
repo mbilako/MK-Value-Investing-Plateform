@@ -234,9 +234,21 @@ describe("AnalysisDrawer financial institutions", () => {
     expect(unfavorableMargin).toHaveClass("comparison-value--unfavorable");
     const favorableNetMargin = comparisonView.getByText("25 %").closest("strong");
     expect(favorableNetMargin).toHaveClass("comparison-value--favorable");
-    expect(comparisonView.getByText("43,8 %")).toBeInTheDocument();
+    const stockBondYieldCard = comparisonView
+      .getByText("Rendement de l’action-obligation")
+      .closest("article");
+    expect(stockBondYieldCard).not.toBeNull();
+    expect(stockBondYieldCard).toHaveAttribute(
+      "title",
+      "Résultat avant impôt / capitalisation boursière totale",
+    );
+    expect(within(stockBondYieldCard as HTMLElement).getByText("20 %")).toBeInTheDocument();
+    expect(
+      within(stockBondYieldCard as HTMLElement).getByText("2024 : 10 %"),
+    ).toBeInTheDocument();
     const unfavorableLeverage = comparisonView.getByText("1,2×").closest("strong");
     expect(unfavorableLeverage).toHaveClass("comparison-value--unfavorable");
+    expect(comparisonView.getByText("Effet de levier ajusté")).toBeInTheDocument();
     expect(comparisonView.getByText("Seuil vert : > 40 %")).toBeInTheDocument();
     expect(comparisonView.getByText("Seuil vert : > 20 %")).toBeInTheDocument();
     expect(comparisonView.getByText("Seuil vert : < 20×")).toBeInTheDocument();
@@ -249,7 +261,9 @@ describe("AnalysisDrawer financial institutions", () => {
     expect(within(annualHistory).getByRole("columnheader", { name: /Poids dette financière/ })).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Décote/ })).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Rendement action-obligation/ })).toBeInTheDocument();
-    expect(within(annualHistory).getByRole("columnheader", { name: /Effet de levier/ })).toBeInTheDocument();
+    expect(
+      within(annualHistory).getByRole("columnheader", { name: /Effet de levier ajusté/ }),
+    ).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Niveau d’endettement/ })).toBeInTheDocument();
     expect(
       within(annualHistory).getByText("35 %", {
