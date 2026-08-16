@@ -2295,6 +2295,118 @@ a:focus-visible {
   font-size: 12px;
 }
 
+.price-history {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.price-history__head {
+  align-items: flex-start;
+}
+
+.price-history__head > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.price-history__ranges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.price-history__ranges button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--subtle);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.price-history__ranges button:hover,
+.price-history__ranges button:focus-visible,
+.price-history__ranges button.is-active {
+  border-color: var(--emerald);
+  color: #fff;
+  background: var(--emerald);
+}
+
+.price-history__summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+}
+
+.price-history__summary strong {
+  color: var(--navy);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 27px;
+}
+
+.price-history__summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.price-history__summary .is-positive {
+  color: var(--emerald);
+  font-weight: 750;
+}
+
+.price-history__summary .is-negative {
+  color: #b42318;
+  font-weight: 750;
+}
+
+.price-history__chart {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.price-history__chart svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  min-height: 230px;
+}
+
+.price-history__grid {
+  stroke: #dfe5e2;
+  stroke-dasharray: 4 6;
+}
+
+.price-history__axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.price-history__line {
+  fill: none;
+  stroke: var(--emerald);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.price-history__cursor {
+  stroke: rgba(18, 53, 44, 0.35);
+  stroke-dasharray: 3 4;
+}
+
+.price-history__dot {
+  fill: #fff;
+  stroke: var(--emerald);
+  stroke-width: 3;
+}
+
 .indicator-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3504,6 +3616,15 @@ section[id] {
 
   .score-card {
     min-height: 110px;
+  }
+
+  .price-history__head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .price-history__ranges {
+    justify-content: flex-start;
   }
 }
 

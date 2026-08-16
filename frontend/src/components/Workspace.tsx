@@ -146,6 +146,21 @@ export function Workspace({
       setFinancialHistory(history);
       setValuations(valuationHistory);
       setScoringAnalyses(scoreHistory);
+      const priceHistoryUpdatedAt = history.price_history?.updated_at
+        ? new Date(history.price_history.updated_at).getTime()
+        : 0;
+      const priceHistoryNeedsRefresh = !history.price_history
+        || Date.now() - priceHistoryUpdatedAt >= 24 * 60 * 60 * 1000;
+      if (priceHistoryNeedsRefresh) {
+        try {
+          const priceHistory = await client.importPriceHistoryAutomatically(company.id);
+          setFinancialHistory((current) => current && current.company_id === company.id
+            ? { ...current, price_history: priceHistory }
+            : current);
+        } catch {
+          // L'analyse fondamentale reste disponible si la source de cours est indisponible.
+        }
+      }
     } catch (caughtError) {
       setAnalysisError(
         caughtError instanceof Error

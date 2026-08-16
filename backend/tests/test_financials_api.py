@@ -335,6 +335,7 @@ def test_automatic_import_builds_history_and_refreshes_existing_years(
                 ProviderPricePoint(
                     timestamp=f"{year}-12-31T00:00:00",
                     close=45 if year == 2025 else 40,
+                    adjusted_close=44 if year == 2025 else 38,
                 )
                 for year in years
             ]
@@ -356,6 +357,16 @@ def test_automatic_import_builds_history_and_refreshes_existing_years(
     assert len(second.json()["snapshots"]) == 2
     assert second.json()["snapshots"][0]["closing_price"] == 45
     assert second.json()["snapshots"][0]["shares_outstanding"] == 100
+    assert second.json()["price_history"]["currency"] == "EUR"
+    assert second.json()["price_history"]["source"] == "Yahoo Finance"
+    assert second.json()["price_history"]["points"] == [
+        {"date": "2024-12-31", "close": 40.0, "adjusted_close": 38.0},
+        {"date": "2025-12-31", "close": 45.0, "adjusted_close": 44.0},
+    ]
+
+    cached = client.get(f"/api/v1/companies/{company_id}/financials")
+    assert cached.status_code == 200
+    assert cached.json()["price_history"]["points"][-1]["adjusted_close"] == 44
 
 
 def test_automatic_import_rejects_a_company_already_in_flight(

@@ -5,6 +5,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mkvip.analysis.rules import RuleStatus
+from mkvip.schemas.price import PriceHistoryRead
 
 
 class FinancialProfile(StrEnum):
@@ -98,3 +99,4 @@ class FinancialHistoryRead(BaseModel):
     company_id: uuid.UUID
     snapshots: list[FinancialAnalysisRead]
     trend: FinancialTrendRead
+    price_history: PriceHistoryRead | None = None

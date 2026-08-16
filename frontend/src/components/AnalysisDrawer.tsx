@@ -12,6 +12,7 @@ import type {
 } from "../api/client";
 import { ScorePanel } from "./ScorePanel";
 import { ValuationPanel } from "./ValuationPanel";
+import { PriceHistoryChart } from "./PriceHistoryChart";
 
 interface AnalysisDrawerProps {
   company: Company;
@@ -549,6 +550,8 @@ export function AnalysisDrawer({
                 <span>{history.snapshots.length} exercice{history.snapshots.length > 1 ? "s" : ""} disponible{history.snapshots.length > 1 ? "s" : ""}</span>
                 <span>{trend?.first_year}–{trend?.last_year}</span>
               </div>
+
+              <PriceHistoryChart history={history.price_history} />
 
               <section className="mk-score-summary" aria-label="Dernier MK Score">
                 <div>

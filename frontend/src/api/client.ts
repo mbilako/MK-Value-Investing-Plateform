@@ -193,6 +193,21 @@ export interface FinancialHistory {
   company_id: string;
   snapshots: FinancialAnalysis[];
   trend: FinancialTrend;
+  price_history?: PriceHistory | null;
+}
+
+export interface PricePoint {
+  date: string;
+  close: number;
+  adjusted_close: number | null;
+}
+
+export interface PriceHistory {
+  company_id: string;
+  currency: string;
+  source: string;
+  points: PricePoint[];
+  updated_at: string | null;
 }
 
 export interface ValuationAssumptions {
@@ -477,6 +492,7 @@ export interface CompanyClient {
   ): Promise<FinancialAnalysis>;
   importFinancialsAutomatically(companyId: string): Promise<FinancialHistory>;
   getFinancialHistory(companyId: string): Promise<FinancialHistory>;
+  importPriceHistoryAutomatically(companyId: string): Promise<PriceHistory>;
   listValuations(companyId: string): Promise<ValuationAnalysis[]>;
   createValuation(
     companyId: string,
@@ -671,6 +687,11 @@ export function createApiClient(): CompanyClient {
       ),
     getFinancialHistory: (companyId) =>
       request<FinancialHistory>(`/companies/${companyId}/financials`),
+    importPriceHistoryAutomatically: (companyId) =>
+      request<PriceHistory>(
+        `/companies/${companyId}/financials/prices/automatic`,
+        { method: "POST" },
+      ),
     listValuations: (companyId) =>
       request<ValuationAnalysis[]>(`/companies/${companyId}/valuations`),
     createValuation: (companyId, payload) =>

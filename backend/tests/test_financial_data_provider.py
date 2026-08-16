@@ -358,7 +358,7 @@ async def test_yahoo_provider_maps_daily_closing_prices() -> None:
         ) -> dict[datetime, dict[str, float]]:
             assert orient == "index"
             return {
-                datetime(2024, 1, 2): {"Close": 170.5},
+                datetime(2024, 1, 2): {"Close": 170.5, "Adj Close": 168.25},
                 datetime(2024, 1, 3): {"Close": 171.2},
             }
 
@@ -383,6 +383,7 @@ async def test_yahoo_provider_maps_daily_closing_prices() -> None:
         ProviderPricePoint(
             timestamp="2024-01-02T00:00:00",
             close=170.5,
+            adjusted_close=168.25,
         ),
         ProviderPricePoint(
             timestamp="2024-01-03T00:00:00",

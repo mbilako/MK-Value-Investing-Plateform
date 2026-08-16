@@ -86,6 +86,9 @@ export function createTestClient(
     getFinancialHistory: async () => {
       throw new Error("Historique financier non configuré dans ce test.");
     },
+    importPriceHistoryAutomatically: async () => {
+      throw new Error("Historique des cours non configuré dans ce test.");
+    },
     listValuations: async () => [],
     createValuation: async () => {
       throw new Error("Valorisation non configurée dans ce test.");

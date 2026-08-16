@@ -503,15 +503,24 @@ class YahooFinanceProvider:
                 timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
             )
             normalized_close = float(close)
+            adjusted_close = values.get("Adj Close")
+            normalized_adjusted_close = (
+                float(adjusted_close)
+                if adjusted_close is not None and math.isfinite(float(adjusted_close))
+                else None
+            )
             if fx_by_date:
                 rate = fx_by_date.get(iso_timestamp[:10])
                 if rate is None:
                     continue
                 normalized_close *= rate
+                if normalized_adjusted_close is not None:
+                    normalized_adjusted_close *= rate
             prices.append(
                 ProviderPricePoint(
                     timestamp=iso_timestamp,
                     close=normalized_close,
+                    adjusted_close=normalized_adjusted_close,
                 )
             )
         return sorted(prices, key=lambda point: point.timestamp)

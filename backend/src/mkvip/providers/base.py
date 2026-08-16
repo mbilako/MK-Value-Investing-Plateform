@@ -77,6 +77,7 @@ class ProviderCashFlow:
 class ProviderPricePoint:
     timestamp: str
     close: float
+    adjusted_close: float | None = None
 
 
 class FinancialDataProvider(Protocol):

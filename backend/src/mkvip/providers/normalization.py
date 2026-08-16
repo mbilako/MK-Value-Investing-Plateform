@@ -10,6 +10,7 @@ from mkvip.providers.base import (
     ProviderDataError,
     ProviderDataIncompleteError,
     ProviderIncomeStatement,
+    ProviderPricePoint,
 )
 from mkvip.schemas.financial import FinancialProfile, FinancialSnapshotCreate
 
@@ -21,12 +22,20 @@ class NormalizedFinancialData:
     snapshots: list[FinancialSnapshotCreate]
     sector: str | None
     industry: str | None
+    price_points: list[ProviderPricePoint]
 
 
 @dataclass(frozen=True)
 class NormalizedCompanyClassification:
     sector: str | None
     industry: str | None
+
+
+@dataclass(frozen=True)
+class NormalizedPriceHistory:
+    points: list[ProviderPricePoint]
+    currency: str
+    source: str
 
 
 def _to_millions(value: float) -> float:
@@ -48,6 +57,42 @@ def _financial_profile(sector: str | None, industry: str | None) -> FinancialPro
     if any(marker in classification for marker in financial_markers):
         return FinancialProfile.FINANCIAL
     return FinancialProfile.STANDARD
+
+
+async def load_price_history(
+    provider: FinancialDataProvider,
+    ticker: str,
+    *,
+    isin: str | None = None,
+    cik: str | None = None,
+    lei: str | None = None,
+) -> NormalizedPriceHistory:
+    candidates = getattr(provider, "providers", None) or (provider,)
+    errors: list[str] = []
+    for candidate in candidates:
+        try:
+            candidate_ticker = ticker
+            resolver = getattr(candidate, "resolve_identifier", None)
+            if resolver is not None:
+                candidate_ticker = await resolver(
+                    ticker,
+                    isin=isin,
+                    cik=cik,
+                    lei=lei,
+                )
+            profile = await candidate.get_profile(candidate_ticker)
+            points = await candidate.get_price_history(candidate_ticker)
+            if points:
+                return NormalizedPriceHistory(
+                    points=points,
+                    currency=profile.currency,
+                    source=candidate.name,
+                )
+        except ProviderDataError as error:
+            errors.append(f"{candidate.name}: {error}")
+    raise ProviderDataIncompleteError(
+        "Aucun historique de cours public n'est disponible. " + " | ".join(errors)
+    )
 
 
 async def load_company_classification(
@@ -164,6 +209,7 @@ async def load_historical_data(
     errors: list[str] = []
     sector = None
     industry = None
+    price_points: list[ProviderPricePoint] = []
     for candidate in candidates:
         try:
             candidate_ticker = ticker
@@ -182,6 +228,8 @@ async def load_historical_data(
             )
             sector = sector or data.sector
             industry = industry or data.industry
+            if len(data.price_points) > len(price_points):
+                price_points = data.price_points
             for snapshot in data.snapshots:
                 snapshots_by_year.setdefault(snapshot.fiscal_year, snapshot)
         except ProviderDataError as error:
@@ -200,6 +248,7 @@ async def load_historical_data(
         )[:limit],
         sector=sector,
         industry=industry,
+        price_points=price_points,
     )
 
 
@@ -317,6 +366,7 @@ async def _load_historical_data(
             snapshots=snapshots,
             sector=normalize_gics_sector(profile.sector),
             industry=profile.industry.strip() if profile.industry else None,
+            price_points=price_points,
         )
     detail = " | ".join(validation_errors) or "aucun exercice compatible"
     raise ProviderDataIncompleteError(
