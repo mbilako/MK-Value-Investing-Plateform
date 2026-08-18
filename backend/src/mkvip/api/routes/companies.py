@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from mkvip.api.dependencies import get_company_repository
 from mkvip.repositories.company import CompanyRepository, DuplicateTickerError
-from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyUpdate
+from mkvip.schemas.company import (
+    CompanyBulkDeleteRequest,
+    CompanyBulkDeleteResult,
+    CompanyCreate,
+    CompanyRead,
+    CompanyUpdate,
+)
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 Repository = Annotated[CompanyRepository, Depends(get_company_repository)]
@@ -41,6 +47,16 @@ async def create_company(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Le ticker {payload.ticker} existe déjà.",
         ) from error
+
+
+@router.post("/bulk-delete", response_model=CompanyBulkDeleteResult)
+async def delete_companies(
+    payload: CompanyBulkDeleteRequest,
+    repository: Repository,
+) -> CompanyBulkDeleteResult:
+    return CompanyBulkDeleteResult(
+        deleted_ids=await repository.delete_many(payload.company_ids),
+    )
 
 
 @router.patch("/{company_id}", response_model=CompanyRead)

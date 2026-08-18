@@ -37,6 +37,10 @@ export interface IndexSummary {
   sector?: string | null;
 }
 
+export interface CompanyBulkDeleteResult {
+  deleted_ids: string[];
+}
+
 export interface IndexConstituent {
   name: string;
   isin?: string | null;
@@ -483,6 +487,7 @@ export interface CompanyClient {
   archiveCompany(id: string): Promise<Company>;
   restoreCompany(id: string): Promise<Company>;
   deleteCompany(id: string): Promise<void>;
+  deleteCompanies(ids: string[]): Promise<CompanyBulkDeleteResult>;
   listIndices(): Promise<IndexSummary[]>;
   getIndex(code: string): Promise<IndexComposition>;
   addIndexCompanies(companies: IndexCompanySelection[]): Promise<IndexBulkAddResult>;
@@ -668,6 +673,11 @@ export function createApiClient(): CompanyClient {
       request<Company>(`/companies/${id}/restore`, { method: "POST" }),
     deleteCompany: (id) =>
       request<void>(`/companies/${id}`, { method: "DELETE" }),
+    deleteCompanies: (ids) =>
+      request<CompanyBulkDeleteResult>("/companies/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ company_ids: ids }),
+      }),
     listIndices: () => request<IndexSummary[]>("/indices"),
     getIndex: (code) => request<IndexComposition>(`/indices/${code}`),
     addIndexCompanies: (companies) =>

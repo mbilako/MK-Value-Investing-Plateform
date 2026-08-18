@@ -310,6 +310,14 @@ export function Workspace({
             onToggleFavorite={(company, isFavorite) =>
               void toggleFavorite(company, isFavorite)
             }
+            onDeleteSelected={async (companyIds) => {
+              const result = await client.deleteCompanies(companyIds);
+              const deletedIds = new Set(result.deleted_ids);
+              setCompanies((current) =>
+                current.filter((company) => !deletedIds.has(company.id)),
+              );
+              await Promise.all([refreshDashboard(), refreshScreener()]);
+            }}
           />
           <FavoritesSection
             companies={companies}

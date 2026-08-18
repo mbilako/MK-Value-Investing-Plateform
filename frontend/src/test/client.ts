@@ -72,6 +72,7 @@ export function createTestClient(
       archived_at: null,
     }),
     deleteCompany: async () => undefined,
+    deleteCompanies: async (ids) => ({ deleted_ids: ids }),
     listIndices: async () => [],
     getIndex: async () => {
       throw new Error("Indice non configuré dans ce test.");

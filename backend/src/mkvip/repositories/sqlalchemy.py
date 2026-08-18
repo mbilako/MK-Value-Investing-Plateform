@@ -176,6 +176,24 @@ class SqlAlchemyCompanyRepository:
         await self._session.commit()
         return True
 
+    async def delete_many(self, company_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]:
+        requested_ids = list(dict.fromkeys(company_ids))
+        if not requested_ids:
+            return []
+        records = list(
+            await self._session.scalars(
+                select(CompanyOrm).where(
+                    CompanyOrm.owner_id == self._owner_id,
+                    CompanyOrm.id.in_(requested_ids),
+                )
+            )
+        )
+        for record in records:
+            await self._session.delete(record)
+        await self._session.commit()
+        deleted = {record.id for record in records}
+        return [company_id for company_id in requested_ids if company_id in deleted]
+
     async def get_financial_analysis(
         self,
         company_id: uuid.UUID,

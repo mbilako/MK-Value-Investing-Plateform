@@ -655,6 +655,83 @@ describe("MK-VIP authentication", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("selects and deletes every company displayed in the investment universe", async () => {
+    const user = userEvent.setup();
+    const companies = [
+      {
+        id: "company-air-liquide",
+        name: "Air Liquide",
+        ticker: "AI.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "pending" as const,
+      },
+      {
+        id: "company-sanofi",
+        name: "Sanofi",
+        ticker: "SAN.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "pending" as const,
+      },
+      {
+        id: "company-favorite",
+        name: "L'Oréal",
+        ticker: "OR.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "ready" as const,
+        is_favorite: true,
+      },
+    ];
+    const deleteCompanies = vi.fn().mockResolvedValue({
+      deleted_ids: ["company-air-liquide", "company-sanofi"],
+    });
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => companies,
+          deleteCompanies,
+        })}
+      />,
+    );
+
+    const universe = await screen.findByRole("region", {
+      name: "Univers d’investissement",
+    });
+    await user.click(
+      within(universe).getByRole("checkbox", {
+        name: "Sélectionner toutes les valeurs affichées",
+      }),
+    );
+
+    expect(within(universe).getByText("2 valeurs sélectionnées")).toBeInTheDocument();
+    await user.click(
+      within(universe).getByRole("button", { name: "Supprimer la sélection" }),
+    );
+    expect(within(universe).getByRole("alert")).toHaveTextContent(
+      "Supprimer définitivement 2 valeurs",
+    );
+    expect(deleteCompanies).not.toHaveBeenCalled();
+
+    await user.click(
+      within(universe).getByRole("button", {
+        name: "Confirmer la suppression groupée",
+      }),
+    );
+
+    expect(deleteCompanies).toHaveBeenCalledWith([
+      "company-air-liquide",
+      "company-sanofi",
+    ]);
+    expect(within(universe).queryByText("Air Liquide")).not.toBeInTheDocument();
+    expect(within(universe).queryByText("Sanofi")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Favoris" })).toHaveTextContent("L'Oréal");
+  });
+
   it("keeps a scored company in the persistent favorites space", async () => {
     const user = userEvent.setup();
     const company = {
@@ -806,7 +883,7 @@ describe("MK-VIP authentication", () => {
     await user.click(
       await screen.findByRole("button", { name: "Explorer les indices" }),
     );
-    await user.click(await screen.findByRole("checkbox"));
+    await user.click(await screen.findByRole("checkbox", { name: /ABIVAX/ }));
     await user.click(
       screen.getByRole("button", { name: "Ajouter 1 à l’univers" }),
     );

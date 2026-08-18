@@ -129,3 +129,16 @@ class CompanyRead(CompanyCreate):
     archived_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CompanyBulkDeleteRequest(BaseModel):
+    company_ids: list[uuid.UUID] = Field(min_length=1, max_length=5000)
+
+    @field_validator("company_ids")
+    @classmethod
+    def unique_company_ids(cls, value: list[uuid.UUID]) -> list[uuid.UUID]:
+        return list(dict.fromkeys(value))
+
+
+class CompanyBulkDeleteResult(BaseModel):
+    deleted_ids: list[uuid.UUID]

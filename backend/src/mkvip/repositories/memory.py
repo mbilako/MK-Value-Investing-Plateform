@@ -121,6 +121,13 @@ class InMemoryCompanyRepository:
         self._prices.pop(company_id, None)
         return True
 
+    async def delete_many(self, company_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]:
+        deleted_ids = []
+        for company_id in dict.fromkeys(company_ids):
+            if await self.delete(company_id):
+                deleted_ids.append(company_id)
+        return deleted_ids
+
     async def list_price_history(
         self,
         company_id: uuid.UUID,

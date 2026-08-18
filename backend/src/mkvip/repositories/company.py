@@ -35,6 +35,8 @@ class CompanyRepository(Protocol):
 
     async def delete(self, company_id: uuid.UUID) -> bool: ...
 
+    async def delete_many(self, company_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]: ...
+
     async def get_financial_analysis(
         self,
         company_id: uuid.UUID,
