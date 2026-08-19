@@ -15,6 +15,9 @@ const company: Company = {
   exchange: "Euronext Paris",
   country: "France",
   currency: "EUR",
+  sector: "Financials",
+  industry: "Banks - Diversified",
+  business_summary: "BNP Paribas provides retail banking, corporate financing, investment, insurance, and asset-management services to individuals and businesses.",
   isin: "FR0000131104",
   cik: null,
   lei: null,
@@ -86,6 +89,31 @@ const history: FinancialHistory = {
 describe("AnalysisDrawer financial institutions", () => {
   beforeEach(() => window.localStorage.clear());
   afterEach(cleanup);
+
+  it("shows the business summary card before the stock-price history", () => {
+    render(
+      <AnalysisDrawer
+        company={company}
+        history={history}
+        valuations={[]}
+        scores={[]}
+        loading={false}
+        error={null}
+        onCreateValuation={async () => {
+          throw new Error("not expected");
+        }}
+        onCreateScore={async () => {
+          throw new Error("not expected");
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    const summary = screen.getByRole("heading", { name: "Résumé de l’activité" });
+    const prices = screen.getByRole("heading", { name: "Historique du cours de bourse" });
+    expect(screen.getByText(/provides retail banking/)).toBeInTheDocument();
+    expect(summary.compareDocumentPosition(prices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 
   it("uses the same movable fundamental layout for every sector", () => {
     render(

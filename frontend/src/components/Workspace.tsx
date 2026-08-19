@@ -150,13 +150,24 @@ export function Workspace({
         ? new Date(history.price_history.updated_at).getTime()
         : 0;
       const priceHistoryNeedsRefresh = !history.price_history
-        || Date.now() - priceHistoryUpdatedAt >= 24 * 60 * 60 * 1000;
+        || Date.now() - priceHistoryUpdatedAt >= 24 * 60 * 60 * 1000
+        || !company.business_summary;
       if (priceHistoryNeedsRefresh) {
         try {
           const priceHistory = await client.importPriceHistoryAutomatically(company.id);
           setFinancialHistory((current) => current && current.company_id === company.id
             ? { ...current, price_history: priceHistory }
             : current);
+          const refreshedCompanies = await client.listCompanies();
+          const refreshedCompany = refreshedCompanies.find(
+            (record) => record.id === company.id,
+          );
+          setCompanies(refreshedCompanies);
+          if (refreshedCompany) {
+            setAnalysisCompany((current) => current?.id === company.id
+              ? refreshedCompany
+              : current);
+          }
         } catch {
           // L'analyse fondamentale reste disponible si la source de cours est indisponible.
         }

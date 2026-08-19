@@ -21,6 +21,7 @@ class CompanyCreate(BaseModel):
     currency: str = Field(min_length=3, max_length=3)
     sector: str | None = Field(default=None, max_length=100)
     industry: str | None = Field(default=None, max_length=150)
+    business_summary: str | None = Field(default=None, max_length=5000)
     isin: str | None = Field(default=None, min_length=12, max_length=12)
     cik: str | None = Field(default=None, min_length=1, max_length=10)
     lei: str | None = Field(default=None, min_length=20, max_length=20)
@@ -49,6 +50,14 @@ class CompanyCreate(BaseModel):
         if value is None:
             return None
         stripped = value.strip()
+        return stripped or None
+
+    @field_validator("business_summary")
+    @classmethod
+    def strip_business_summary(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = " ".join(value.split())
         return stripped or None
 
     @field_validator("ticker", "currency", "isin", "lei")
@@ -84,6 +93,7 @@ class CompanyUpdate(BaseModel):
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     sector: str | None = Field(default=None, max_length=100)
     industry: str | None = Field(default=None, max_length=150)
+    business_summary: str | None = Field(default=None, max_length=5000)
     isin: str | None = Field(default=None, min_length=12, max_length=12)
     cik: str | None = Field(default=None, min_length=1, max_length=10)
     lei: str | None = Field(default=None, min_length=20, max_length=20)
@@ -117,6 +127,9 @@ class CompanyUpdate(BaseModel):
     )
     _strip_industry = field_validator("industry")(
         lambda value: CompanyCreate.strip_industry(value)
+    )
+    _strip_business_summary = field_validator("business_summary")(
+        lambda value: CompanyCreate.strip_business_summary(value)
     )
 
 

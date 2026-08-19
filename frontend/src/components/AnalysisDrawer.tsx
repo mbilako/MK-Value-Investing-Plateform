@@ -201,6 +201,60 @@ const THRESHOLDS: Partial<
   debt_level: { value: 2.5, direction: "below" },
 };
 
+const SECTOR_LABELS: Record<string, string> = {
+  "Communication Services": "services de communication",
+  "Consumer Discretionary": "consommation discrétionnaire",
+  "Consumer Staples": "biens de consommation courante",
+  Energy: "énergie",
+  Financials: "services financiers",
+  "Health Care": "santé",
+  Industrials: "industrie",
+  "Information Technology": "technologies de l’information",
+  Materials: "matériaux",
+  "Real Estate": "immobilier",
+  Utilities: "services aux collectivités",
+};
+
+function compactBusinessSummary(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 900) return normalized;
+  const excerpt = normalized.slice(0, 900);
+  const sentenceEnd = Math.max(
+    excerpt.lastIndexOf(". "),
+    excerpt.lastIndexOf("! "),
+    excerpt.lastIndexOf("? "),
+  );
+  if (sentenceEnd >= 450) return excerpt.slice(0, sentenceEnd + 1);
+  const wordEnd = excerpt.lastIndexOf(" ");
+  return `${excerpt.slice(0, wordEnd)}…`;
+}
+
+function activitySummary(company: Company): { text: string; source: string } {
+  if (company.business_summary?.trim()) {
+    return {
+      text: compactBusinessSummary(company.business_summary),
+      source: "Profil public de l’entreprise",
+    };
+  }
+  const sector = company.sector
+    ? SECTOR_LABELS[company.sector] ?? company.sector
+    : null;
+  if (company.industry || sector) {
+    const activity = company.industry
+      ? `dans l’activité « ${company.industry} »`
+      : `dans le secteur ${sector}`;
+    const sectorDetail = company.industry && sector ? `, rattachée au secteur ${sector}` : "";
+    return {
+      text: `${company.name} exerce principalement ${activity}${sectorDetail}. L’entreprise est établie en ${company.country} et ses titres sont négociés sur ${company.exchange}.`,
+      source: "Résumé basé sur la classification disponible",
+    };
+  }
+  return {
+    text: `Le résumé détaillé de ${company.name} n’est pas encore disponible. Rechargez l’historique financier pour actualiser son profil public.`,
+    source: "Profil à actualiser",
+  };
+}
+
 function formatAmount(value: number | null | undefined, currency: string): string {
   if (value == null) return "N/A";
   return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} M ${currency}`;
@@ -514,6 +568,7 @@ export function AnalysisDrawer({
     "mkvip.analysis.history-order",
     HISTORY_ORDER,
   );
+  const activity = activitySummary(company);
 
   return (
     <div className="drawer-layer" role="presentation">
@@ -550,6 +605,22 @@ export function AnalysisDrawer({
                 <span>{history.snapshots.length} exercice{history.snapshots.length > 1 ? "s" : ""} disponible{history.snapshots.length > 1 ? "s" : ""}</span>
                 <span>{trend?.first_year}–{trend?.last_year}</span>
               </div>
+
+              <section
+                className="analysis-section business-summary"
+                aria-labelledby="business-summary-title"
+              >
+                <div className="analysis-section__head">
+                  <h3 id="business-summary-title">Résumé de l’activité</h3>
+                  <span>{activity.source}</span>
+                </div>
+                <p>{activity.text}</p>
+                <div className="business-summary__facts" aria-label="Informations sur l’activité">
+                  {company.sector && <span>{SECTOR_LABELS[company.sector] ?? company.sector}</span>}
+                  {company.industry && <span>{company.industry}</span>}
+                  <span>{company.country}</span>
+                </div>
+              </section>
 
               <PriceHistoryChart history={history.price_history} />
 

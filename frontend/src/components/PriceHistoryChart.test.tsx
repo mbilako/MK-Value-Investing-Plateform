@@ -10,6 +10,7 @@ const history: PriceHistory = {
   source: "Yahoo Finance",
   updated_at: "2026-08-16T10:00:00Z",
   points: [
+    { date: "2000-08-16", close: 55, adjusted_close: 50 },
     { date: "2021-08-16", close: 90, adjusted_close: 80 },
     { date: "2025-08-16", close: 105, adjusted_close: 100 },
     { date: "2026-08-16", close: 125, adjusted_close: 120 },
@@ -30,6 +31,12 @@ describe("PriceHistoryChart", () => {
 
     expect(screen.getByText("+20 % sur la période")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 an" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Max" }));
+
+    expect(screen.getByText("+140 % sur la période")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Max" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img")).toHaveAttribute("aria-label", expect.stringContaining("50,00"));
   });
 
   it("keeps the analysis usable when no market history is available", () => {

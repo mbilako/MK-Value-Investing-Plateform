@@ -37,6 +37,7 @@ class ProviderCompanyProfile:
     quote_currency: str | None = None
     sector: str | None = None
     industry: str | None = None
+    business_summary: str | None = None
 
 
 @dataclass(frozen=True)

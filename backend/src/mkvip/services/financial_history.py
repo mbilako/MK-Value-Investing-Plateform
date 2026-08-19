@@ -22,6 +22,7 @@ async def apply_company_classification(
         for key, value in {
             "sector": classification.sector,
             "industry": classification.industry,
+            "business_summary": classification.business_summary,
         }.items()
         if value is not None
     }
@@ -66,6 +67,7 @@ async def import_automatic_financial_history(
         NormalizedCompanyClassification(
             sector=normalized.sector,
             industry=normalized.industry,
+            business_summary=normalized.business_summary,
         ),
     )
     await repository.create_financial_analyses(
@@ -106,6 +108,15 @@ async def import_automatic_price_history(
         isin=company.isin,
         cik=company.cik,
         lei=company.lei,
+    )
+    await apply_company_classification(
+        repository,
+        company,
+        NormalizedCompanyClassification(
+            sector=normalized.sector,
+            industry=normalized.industry,
+            business_summary=normalized.business_summary,
+        ),
     )
     return await repository.replace_price_history(
         company.id,

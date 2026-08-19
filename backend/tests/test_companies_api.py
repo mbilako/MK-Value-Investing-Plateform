@@ -27,6 +27,7 @@ def test_create_company_normalizes_ticker(client: TestClient) -> None:
         "currency": "EUR",
         "sector": None,
         "industry": None,
+        "business_summary": None,
         "isin": None,
         "cik": None,
         "lei": None,

@@ -226,7 +226,7 @@ def _fetch_profile(ticker: Any) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
 
 def _fetch_price_history(ticker: Any) -> Mapping[object, Mapping[str, Any]]:
     history = ticker.history(
-        period="10y",
+        period="max",
         interval="1d",
         auto_adjust=False,
     )
@@ -372,6 +372,11 @@ class YahooFinanceProvider:
             quote_currency=quote_currency,
             sector=(str(info["sector"]) if info.get("sector") else None),
             industry=(str(info["industry"]) if info.get("industry") else None),
+            business_summary=(
+                str(info["longBusinessSummary"])
+                if info.get("longBusinessSummary")
+                else None
+            ),
         )
 
     async def get_income_statements(

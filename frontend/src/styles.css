@@ -2357,6 +2357,36 @@ a:focus-visible {
   font-size: 12px;
 }
 
+.business-summary {
+  padding: 18px;
+  border: 1px solid rgba(8, 122, 87, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f5fbf8 0%, #fff 72%);
+}
+
+.business-summary > p {
+  margin: 0;
+  color: var(--navy);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.business-summary__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.business-summary__facts span {
+  padding: 5px 9px;
+  border: 1px solid rgba(8, 122, 87, 0.18);
+  border-radius: 999px;
+  color: var(--emerald);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 750;
+}
+
 .price-history {
   padding: 18px;
   border: 1px solid var(--border);

@@ -199,6 +199,9 @@ def test_automatic_import_creates_latest_available_analysis(
                 market_cap=4_500_000_000,
                 sector="Industrials",
                 industry="Specialty Chemicals",
+                business_summary=(
+                    "Air Liquide supplies gases and services to industry and health care."
+                ),
             )
 
         async def get_income_statements(
@@ -261,6 +264,9 @@ def test_automatic_import_creates_latest_available_analysis(
     company = client.get("/api/v1/companies").json()[0]
     assert company["sector"] == "Industrials"
     assert company["industry"] == "Specialty Chemicals"
+    assert company["business_summary"] == (
+        "Air Liquide supplies gases and services to industry and health care."
+    )
 
 
 def test_automatic_import_builds_history_and_refreshes_existing_years(
@@ -367,6 +373,54 @@ def test_automatic_import_builds_history_and_refreshes_existing_years(
     cached = client.get(f"/api/v1/companies/{company_id}/financials")
     assert cached.status_code == 200
     assert cached.json()["price_history"]["points"][-1]["adjusted_close"] == 44
+
+
+def test_price_history_import_refreshes_the_company_activity_profile(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    from mkvip.providers.base import ProviderCompanyProfile, ProviderPricePoint
+
+    class PriceProvider:
+        name = "Public price test"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="Air Liquide",
+                exchange="Euronext Paris",
+                country="France",
+                currency="EUR",
+                market_cap=4_500_000_000,
+                sector="Basic Materials",
+                industry="Specialty Chemicals",
+                business_summary=(
+                    "Air Liquide supplies gases and services to industry and health care."
+                ),
+            )
+
+        async def get_price_history(self, _ticker: str) -> list[ProviderPricePoint]:
+            return [
+                ProviderPricePoint(timestamp="2000-01-03", close=30),
+                ProviderPricePoint(timestamp="2026-08-18", close=180),
+            ]
+
+    app.dependency_overrides[get_financial_data_provider] = PriceProvider
+    try:
+        response = client.post(
+            f"/api/v1/companies/{company_id}/financials/prices/automatic",
+        )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+
+    assert response.status_code == 200
+    assert response.json()["points"][0]["date"] == "2000-01-03"
+    company = client.get("/api/v1/companies").json()[0]
+    assert company["sector"] == "Materials"
+    assert company["industry"] == "Specialty Chemicals"
+    assert company["business_summary"] == (
+        "Air Liquide supplies gases and services to industry and health care."
+    )
 
 
 def test_automatic_import_rejects_a_company_already_in_flight(

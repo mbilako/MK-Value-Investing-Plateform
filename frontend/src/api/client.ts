@@ -8,6 +8,7 @@ export interface CompanyPayload {
   currency: string;
   sector?: string | null;
   industry?: string | null;
+  business_summary?: string | null;
   isin?: string | null;
   cik?: string | null;
   lei?: string | null;

@@ -281,6 +281,9 @@ async def test_yahoo_provider_builds_company_profile() -> None:
                 "fullExchangeName": "Euronext Paris",
                 "country": "France",
                 "financialCurrency": "EUR",
+                "longBusinessSummary": (
+                    "Air Liquide supplies gases and services to industry and health care."
+                ),
             }
 
     provider = YahooFinanceProvider(ticker_factory=lambda _ticker: YahooTicker())
@@ -295,6 +298,7 @@ async def test_yahoo_provider_builds_company_profile() -> None:
         currency="EUR",
         market_cap=50_000_000_000,
         quote_currency="EUR",
+        business_summary="Air Liquide supplies gases and services to industry and health care.",
     )
 
 
@@ -370,7 +374,7 @@ async def test_yahoo_provider_maps_daily_closing_prices() -> None:
             interval: str,
             auto_adjust: bool,
         ) -> PriceHistory:
-            assert period == "10y"
+            assert period == "max"
             assert interval == "1d"
             assert auto_adjust is False
             return PriceHistory()

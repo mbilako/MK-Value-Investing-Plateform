@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mkvip.db.base import Base
@@ -22,6 +22,7 @@ class CompanyOrm(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     sector: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     industry: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    business_summary: Mapped[str | None] = mapped_column(Text(), nullable=True)
     isin: Mapped[str | None] = mapped_column(String(12), nullable=True, index=True)
     cik: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
     lei: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
