@@ -894,7 +894,7 @@ describe("MK-VIP authentication", () => {
     expect(await screen.findByText("ABVX.PA")).toBeInTheDocument();
   });
 
-  it("groups US indices and adds a company from its official ticker", async () => {
+  it("groups United States indices under the America zone", async () => {
     const user = userEvent.setup();
     const addIndexCompanies = vi.fn().mockResolvedValue({
       created: [
@@ -922,7 +922,7 @@ describe("MK-VIP authentication", () => {
               isin: null,
               market: "XNAS",
               provider: "Nasdaq",
-              region: "États-Unis",
+              region: "Amérique",
               country: "États-Unis",
             },
           ],
@@ -932,7 +932,7 @@ describe("MK-VIP authentication", () => {
             isin: null,
             market: "XNAS",
             provider: "Nasdaq",
-            region: "États-Unis",
+            region: "Amérique",
             country: "États-Unis",
             as_of: "Aug 4, 2026",
             source_url: "https://api.nasdaq.com/example",
@@ -956,8 +956,13 @@ describe("MK-VIP authentication", () => {
       await screen.findByRole("button", { name: "Explorer les indices" }),
     );
     expect(
-      await screen.findByRole("region", { name: "Indices États-Unis" }),
+      await screen.findByRole("region", { name: "Indices Amérique" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /États-Unis.*1 indice général.*0 indice sectoriel/,
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByRole("tablist", { name: "Indices généraux États-Unis" }),
     ).toBeInTheDocument();
@@ -1095,7 +1100,7 @@ describe("MK-VIP authentication", () => {
     expect(screen.getByText(/secteur Santé/)).toBeInTheDocument();
   });
 
-  it("shows the CSI 300 universe and its sector indices in China", async () => {
+  it("groups China and its CSI indices under the Asia zone", async () => {
     const user = userEvent.setup();
     const getIndex = vi.fn().mockImplementation(async (code: string) => ({
       code,
@@ -1103,7 +1108,7 @@ describe("MK-VIP authentication", () => {
       isin: null,
       market: code === "CNTECH" ? "XSHG" : "XPAR",
       provider: code === "CNTECH" ? "CSI (via iShares)" : "Euronext",
-      region: code === "CNTECH" ? "Chine" : "Europe",
+      region: code === "CNTECH" ? "Asie" : "Europe",
       country: code === "CNTECH" ? "Chine" : "France",
       kind: code === "CNTECH" ? "sector" as const : "broad" as const,
       sector: code === "CNTECH" ? "Information Technology" : null,
@@ -1142,7 +1147,7 @@ describe("MK-VIP authentication", () => {
               isin: null,
               market: "XSHG",
               provider: "CSI (via iShares)",
-              region: "Chine",
+              region: "Asie",
               country: "Chine",
               kind: "broad",
               sector: null,
@@ -1153,7 +1158,7 @@ describe("MK-VIP authentication", () => {
               isin: null,
               market: "XSHG",
               provider: "CSI (via iShares)",
-              region: "Chine",
+              region: "Asie",
               country: "Chine",
               kind: "sector",
               sector: "Information Technology",
@@ -1167,7 +1172,11 @@ describe("MK-VIP authentication", () => {
     await user.click(
       await screen.findByRole("button", { name: "Explorer les indices" }),
     );
-    await user.click(screen.getByRole("button", { name: "Chine" }));
+    await user.click(screen.getByRole("button", { name: "Asie" }));
+
+    expect(
+      screen.getByRole("region", { name: "Indices Asie" }),
+    ).toBeInTheDocument();
 
     const chinaToggle = screen.getByRole("button", {
       name: /Chine.*1 indice général.*1 indice sectoriel/,
@@ -1267,7 +1276,7 @@ describe("MK-VIP authentication", () => {
               isin: null,
               market: "XNYS",
               provider: "S&P Dow Jones Indices",
-              region: "\u00c9tats-Unis",
+              region: "Amérique",
               country: "\u00c9tats-Unis",
             },
           ],
@@ -1305,10 +1314,10 @@ describe("MK-VIP authentication", () => {
     expect(await screen.findByRole("checkbox", { name: /Airbus/ })).toBeInTheDocument();
 
     const europe = screen.getByRole("button", { name: "Europe" });
-    const unitedStates = screen.getByRole("button", { name: "\u00c9tats-Unis" });
-    await user.click(unitedStates);
+    const america = screen.getByRole("button", { name: "Amérique" });
+    await user.click(america);
     expect(europe).toHaveAttribute("aria-expanded", "false");
-    expect(unitedStates).toHaveAttribute("aria-expanded", "true");
+    expect(america).toHaveAttribute("aria-expanded", "true");
 
     await user.click(screen.getByRole("tab", { name: "S&P 500" }));
     expect(await screen.findByRole("checkbox", { name: /Apple Inc./ })).toBeInTheDocument();

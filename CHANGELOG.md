@@ -6,10 +6,10 @@
 
 - Ajout de 28 indices sectoriels dans les zones géographiques : six familles
   STOXX Europe 600 (finance, technologie, santé, énergie, industrie et biens
-  essentiels), les onze secteurs GICS du S&P 500 et les onze secteurs GICS du
-  CSI 300.
-- Ajout de la zone Chine et de l’indice général CSI 300, avec distinction des
-  cotations de Shanghai et Shenzhen.
+  essentiels), les onze secteurs GICS du S&P 500 pour les États-Unis en zone
+  Amérique et les onze secteurs GICS du CSI 300 pour la Chine en zone Asie.
+- Ajout de la Chine et de l’indice général CSI 300 dans la zone Asie, avec
+  distinction des cotations de Shanghai et Shenzhen.
 - Métadonnées `kind` et `sector` sur le catalogue et les compositions afin de
   distinguer explicitement les indices généraux des indices sectoriels.
 - Première version du moteur de sélection sectoriel : classification GICS en
@@ -25,6 +25,9 @@
 
 ### Changed
 
+- Les États-Unis et la Chine sont désormais traités comme des pays, rangés
+  respectivement dans les zones Amérique et Asie, afin de préparer l’ajout de
+  nouveaux pays dans ces deux zones.
 - L’explorateur d’indices présente désormais, dans chaque zone, deux accordéons
   exclusifs « Indices sectoriels » et « Indices généraux » afin de conserver
   la navigation compacte, sans refermer le groupe après la sélection d’un indice.

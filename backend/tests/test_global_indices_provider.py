@@ -70,13 +70,31 @@ def test_lists_public_indices_by_country() -> None:
     ]
 
 
+def test_groups_united_states_and_china_under_continental_regions() -> None:
+    indices = {
+        index.code: index
+        for index in PublicIndexProvider().list_indices()
+        if index.code in {"DOWJONES", "SP500", "NASDAQ100", "CSI300"}
+    }
+
+    assert {
+        code: (index.region, index.country)
+        for code, index in indices.items()
+    } == {
+        "DOWJONES": ("Amérique", "États-Unis"),
+        "SP500": ("Amérique", "États-Unis"),
+        "NASDAQ100": ("Amérique", "États-Unis"),
+        "CSI300": ("Asie", "Chine"),
+    }
+
+
 def test_lists_sector_indices_in_each_geographic_region() -> None:
     indices = [index for index in PublicIndexProvider().list_indices() if index.kind == "sector"]
 
     assert {
         region: len([index for index in indices if index.region == region])
         for region in {index.region for index in indices}
-    } == {"Europe": 59, "États-Unis": 11, "Chine": 11}
+    } == {"Europe": 59, "Amérique": 11, "Asie": 11}
     assert {index.sector for index in indices if index.region == "Europe"} == {
         "Communication Services",
         "Consumer Discretionary",
@@ -90,7 +108,7 @@ def test_lists_sector_indices_in_each_geographic_region() -> None:
         "Real Estate",
         "Utilities",
     }
-    assert {index.sector for index in indices if index.region == "États-Unis"} == {
+    assert {index.sector for index in indices if index.region == "Amérique"} == {
         "Communication Services",
         "Consumer Discretionary",
         "Consumer Staples",
@@ -103,7 +121,7 @@ def test_lists_sector_indices_in_each_geographic_region() -> None:
         "Real Estate",
         "Utilities",
     }
-    assert {index.sector for index in indices if index.region == "Chine"} == {
+    assert {index.sector for index in indices if index.region == "Asie"} == {
         "Communication Services",
         "Consumer Discretionary",
         "Consumer Staples",
@@ -117,7 +135,7 @@ def test_lists_sector_indices_in_each_geographic_region() -> None:
         "Utilities",
     }
     assert all(
-        index.name.startswith("S&P 500 ") for index in indices if index.region == "États-Unis"
+        index.name.startswith("S&P 500 ") for index in indices if index.region == "Amérique"
     )
     assert all("Russell" not in index.name for index in indices)
 

@@ -119,8 +119,11 @@ Pour les États-Unis :
 - **S&P 500** depuis le fichier public iShares ;
 - **Nasdaq-100** depuis l’API publique Nasdaq.
 
-Les indices sont présentés par zone puis par pays. Euro Stoxx 50, STOXX Europe
-600 et les familles Russell restent volontairement hors périmètre.
+Les indices sont présentés par zone puis par pays : les États-Unis sont rangés
+dans la zone Amérique et la Chine dans la zone Asie. Cette hiérarchie permet
+d’ajouter ultérieurement d’autres pays américains et asiatiques sans modifier
+la navigation. Euro Stoxx 50, STOXX Europe 600 et les familles Russell restent
+volontairement hors périmètre.
 
 Au 9 août 2026, l’audit des douze nouveaux paniers hors Euronext retourne
 786 composantes uniques et celui des huit nouveaux paniers Euronext 142. Les

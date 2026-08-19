@@ -16,9 +16,10 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - explorateur classé par zone et par pays avec trois indices pour chacun des
   onze pays européens couverts, plus Dow Jones, S&P 500, Nasdaq-100 et CSI 300,
   sans saisie manuelle de ticker ;
-- catalogue sectoriel intégré aux zones Europe, États-Unis et Chine : six
-  familles STOXX Europe 600, les onze secteurs GICS du S&P 500 et les onze
-  secteurs GICS du CSI 300, avec compositions publiques actualisées ;
+- catalogue sectoriel intégré aux zones Europe, Amérique et Asie : les pays
+  États-Unis et Chine regroupent respectivement les onze secteurs GICS du
+  S&P 500 et du CSI 300, aux côtés des familles STOXX Europe 600 et des indices
+  nationaux européens, avec compositions publiques actualisées ;
 - audit reproductible de la couverture des composantes d’indices ;
 - modification, archivage ou suppression d’une entreprise dans les deux vues ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;

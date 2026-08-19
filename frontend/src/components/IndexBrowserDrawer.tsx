@@ -17,7 +17,13 @@ interface IndexBrowserDrawerProps {
 const constituentKey = (company: IndexComposition["constituents"][number]) =>
   company.isin ?? company.ticker ?? company.name;
 
-const regionOrder = ["Europe", "États-Unis", "Chine"];
+const regionOrder = ["Europe", "Amérique", "Asie"];
+
+const regionKeys: Record<string, string> = {
+  Europe: "europe",
+  Amérique: "america",
+  Asie: "asia",
+};
 
 const byFrenchName = (left: string, right: string) =>
   left.localeCompare(right, "fr", { sensitivity: "base" });
@@ -50,7 +56,7 @@ export function IndexBrowserDrawer({
   const [expandedRegion, setExpandedRegion] = useState("Europe");
   const [expandedCountryByRegion, setExpandedCountryByRegion] = useState<
     Record<string, string>
-  >({ Europe: "France", "États-Unis": "États-Unis", Chine: "Chine" });
+  >({ Europe: "France", Amérique: "États-Unis", Asie: "Chine" });
   const [expandedRegionalSectors, setExpandedRegionalSectors] = useState<
     Record<string, boolean>
   >({ Europe: true });
@@ -206,11 +212,9 @@ export function IndexBrowserDrawer({
               const areRegionalSectorsExpanded = Boolean(
                 expandedRegionalSectors[region],
               );
-              const regionKey = region === "Europe"
-                ? "europe"
-                : region === "États-Unis"
-                  ? "us"
-                  : "china";
+              const regionKey = regionKeys[region] ?? region
+                .toLocaleLowerCase("fr")
+                .replace(/[^a-z0-9]+/g, "-");
               return (
                 <section key={region} aria-label={`Indices ${region}`}>
                   <button
