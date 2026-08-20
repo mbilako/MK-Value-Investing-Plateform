@@ -25,6 +25,9 @@
 
 ### Changed
 
+- Le proxy de l’interface attend désormais jusqu’à six minutes les imports API
+  par lot, afin de ne plus retourner un 504 pendant que le backend poursuit le
+  chargement des historiques.
 - Les États-Unis et la Chine sont désormais traités comme des pays, rangés
   respectivement dans les zones Amérique et Asie, afin de préparer l’ajout de
   nouveaux pays dans ces deux zones.
