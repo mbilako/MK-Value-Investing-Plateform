@@ -148,10 +148,35 @@ async def import_financials_automatically(
                     detail=("L’import automatique a dépassé le délai autorisé."),
                 ) from error
             except ProviderDataError as error:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=str(error),
-                ) from error
+                try:
+                    price_history = await import_automatic_price_history(
+                        repository,
+                        provider,
+                        company,
+                    )
+                except ProviderBusyError as fallback_error:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=str(fallback_error),
+                        headers={"Retry-After": "1"},
+                    ) from fallback_error
+                except (ProviderTimeoutError, TimeoutError) as fallback_error:
+                    raise HTTPException(
+                        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                        detail="Le chargement des données disponibles a dépassé le délai autorisé.",
+                    ) from fallback_error
+                except ProviderDataError:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=str(error),
+                    ) from error
+                snapshots = await repository.list_financial_analyses(company_id)
+                history = FinancialHistoryRead(
+                    company_id=company_id,
+                    snapshots=snapshots,
+                    trend=calculate_financial_trend(snapshots),
+                    price_history=price_history,
+                )
             return history
     except YahooImportInProgressError as error:
         raise HTTPException(

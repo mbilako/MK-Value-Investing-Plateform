@@ -416,11 +416,65 @@ def test_price_history_import_refreshes_the_company_activity_profile(
     assert response.status_code == 200
     assert response.json()["points"][0]["date"] == "2000-01-03"
     company = client.get("/api/v1/companies").json()[0]
+    assert company["status"] == "partial"
     assert company["sector"] == "Materials"
     assert company["industry"] == "Specialty Chemicals"
     assert company["business_summary"] == (
         "Air Liquide supplies gases and services to industry and health care."
     )
+
+
+def test_automatic_import_falls_back_to_public_profile_and_prices(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    from mkvip.providers.base import ProviderCompanyProfile, ProviderPricePoint
+
+    class PriceOnlyProvider:
+        name = "Public price-only test"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="Air Liquide",
+                exchange="Euronext Paris",
+                country="France",
+                currency="EUR",
+                market_cap=4_500_000_000,
+                sector="Basic Materials",
+                industry="Specialty Chemicals",
+                business_summary="Air Liquide supplies gases and services.",
+            )
+
+        async def get_income_statements(self, _ticker: str) -> list:
+            return []
+
+        async def get_balance_sheet(self, _ticker: str) -> list:
+            return []
+
+        async def get_cash_flow(self, _ticker: str) -> list:
+            return []
+
+        async def get_price_history(self, _ticker: str) -> list[ProviderPricePoint]:
+            return [
+                ProviderPricePoint(timestamp="2025-12-31", close=165),
+                ProviderPricePoint(timestamp="2026-08-18", close=180),
+            ]
+
+    app.dependency_overrides[get_financial_data_provider] = PriceOnlyProvider
+    try:
+        response = client.post(
+            f"/api/v1/companies/{company_id}/financials/automatic",
+        )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+
+    assert response.status_code == 201
+    assert response.json()["snapshots"] == []
+    assert response.json()["price_history"]["points"][-1]["close"] == 180
+    company = client.get("/api/v1/companies").json()[0]
+    assert company["status"] == "partial"
+    assert company["business_summary"] == "Air Liquide supplies gases and services."
 
 
 def test_automatic_import_rejects_a_company_already_in_flight(

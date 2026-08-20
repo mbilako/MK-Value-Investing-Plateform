@@ -102,27 +102,28 @@ export function Workspace({
     history: FinancialHistory,
   ) => {
     const analysis = history.snapshots[0];
-    if (!analysis) return;
-    const readyCompany = {
-      ...company,
-      status: "ready" as const,
-      latest_mk_score: analysis.mk_score,
-      latest_quality_score: analysis.quality_score,
-      latest_safety_score: analysis.safety_score,
-    };
+    const displayedCompany = analysis
+      ? {
+          ...company,
+          status: "ready" as const,
+          latest_mk_score: analysis.mk_score,
+          latest_quality_score: analysis.quality_score,
+          latest_safety_score: analysis.safety_score,
+        }
+      : company;
     setCompanies((current) =>
       current.map((record) =>
-        record.id === company.id ? readyCompany : record,
+        record.id === company.id ? displayedCompany : record,
       ),
     );
-    if (analysis.mk_score !== null) {
+    if (analysis?.mk_score != null) {
       setScores((current) => ({
         ...current,
         [company.id]: analysis.mk_score as number,
       }));
     }
     setFinancialCompany(null);
-    setAnalysisCompany(readyCompany);
+    setAnalysisCompany(displayedCompany);
     setFinancialHistory(history);
     setValuations([]);
     setScoringAnalyses([]);

@@ -1,4 +1,4 @@
-export type CompanyStatus = "pending" | "ready" | "error";
+export type CompanyStatus = "pending" | "partial" | "ready" | "error";
 
 export interface CompanyPayload {
   name: string;

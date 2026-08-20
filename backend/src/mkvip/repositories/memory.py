@@ -142,7 +142,7 @@ class InMemoryCompanyRepository:
         currency: str,
         source: str,
     ) -> PriceHistoryRead:
-        await self.get_by_id(company_id)
+        company = await self.get_by_id(company_id)
         history = PriceHistoryRead(
             company_id=company_id,
             currency=currency,
@@ -154,6 +154,10 @@ class InMemoryCompanyRepository:
             updated_at=datetime.now(UTC),
         )
         self._prices[company_id] = history
+        if company is not None and company.status != CompanyStatus.READY:
+            self._companies[company.ticker] = company.model_copy(
+                update={"status": CompanyStatus.PARTIAL}
+            )
         return history
 
     async def list_valuation_analyses(

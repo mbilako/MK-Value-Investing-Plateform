@@ -9,6 +9,7 @@ from mkvip.analysis.sector import normalize_gics_sector
 
 class CompanyStatus(StrEnum):
     PENDING = "pending"
+    PARTIAL = "partial"
     READY = "ready"
     ERROR = "error"
 

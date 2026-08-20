@@ -1632,6 +1632,69 @@ describe("MK-VIP dashboard", () => {
     expect(await screen.findByText("1 exercice disponible")).toBeInTheDocument();
   });
 
+  it("opens the available profile and prices when annual accounts are unavailable", async () => {
+    const user = userEvent.setup();
+    const pendingCompany = {
+      id: "company-price-only",
+      name: "REVOIL S.A.",
+      ticker: "REVOIL.AT",
+      exchange: "Athens",
+      country: "Grèce",
+      currency: "EUR",
+      status: "pending" as const,
+    };
+    const partialCompany = {
+      ...pendingCompany,
+      status: "partial" as const,
+      sector: "Energy",
+      industry: "Oil & Gas Refining & Marketing",
+      business_summary: "REVOIL distributes petroleum products in Greece.",
+    };
+    const listCompanies = vi
+      .fn()
+      .mockResolvedValueOnce([pendingCompany])
+      .mockResolvedValue([partialCompany]);
+    const client = createTestClient({
+      listCompanies,
+      importFinancialsAutomatically: async () => ({
+        company_id: pendingCompany.id,
+        snapshots: [],
+        trend: {
+          periods: 0,
+          first_year: null,
+          last_year: null,
+          revenue_cagr: null,
+          net_income_cagr: null,
+          free_cash_flow_cagr: null,
+        },
+        price_history: {
+          company_id: pendingCompany.id,
+          currency: "EUR",
+          source: "Yahoo Finance",
+          points: [
+            { date: "2025-12-31", close: 1.7, adjusted_close: 1.7 },
+            { date: "2026-08-18", close: 1.9, adjusted_close: 1.9 },
+          ],
+          updated_at: "2026-08-18T00:00:00Z",
+        },
+      }),
+    });
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Importer les données financières pour REVOIL S.A.",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Charger l’historique" }));
+
+    expect(
+      await screen.findByText(/Les cours et le profil public sont disponibles/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("REVOIL distributes petroleum products in Greece.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Historique du cours de bourse" })).toBeInTheDocument();
+  });
+
   it("opens the financial engine analysis for a ready company", async () => {
     const user = userEvent.setup();
     const client = createTestClient({

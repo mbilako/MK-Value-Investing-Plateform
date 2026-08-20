@@ -1219,6 +1219,12 @@ a:focus-visible {
   gap: 6px;
 }
 
+.company-partial-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .row-manage,
 .row-favorite {
   display: grid;
@@ -1429,6 +1435,16 @@ a:focus-visible {
 
 .company-status--ready .status-dot {
   background: var(--emerald);
+}
+
+.company-status--partial {
+  color: #8a6400;
+  background: #fff8df;
+  border-color: #ead795;
+}
+
+.company-status--partial .status-dot {
+  background: #d39d23;
 }
 
 .company-analysis {
@@ -2255,6 +2271,14 @@ a:focus-visible {
 .analysis-message {
   margin: 0;
   color: var(--muted);
+}
+
+.analysis-message--partial {
+  padding: 14px 16px;
+  border: 1px solid #ead795;
+  border-radius: 8px;
+  color: #6f5300;
+  background: #fff8df;
 }
 
 .analysis-context {

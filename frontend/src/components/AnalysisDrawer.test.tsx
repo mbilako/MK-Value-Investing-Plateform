@@ -115,6 +115,55 @@ describe("AnalysisDrawer financial institutions", () => {
     expect(summary.compareDocumentPosition(prices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("shows public profile and prices when structured accounts are unavailable", () => {
+    const partialHistory: FinancialHistory = {
+      company_id: company.id,
+      snapshots: [],
+      trend: {
+        periods: 0,
+        first_year: null,
+        last_year: null,
+        revenue_cagr: null,
+        net_income_cagr: null,
+        free_cash_flow_cagr: null,
+      },
+      price_history: {
+        company_id: company.id,
+        currency: "EUR",
+        source: "Yahoo Finance",
+        points: [
+          { date: "2025-12-31", close: 14.2, adjusted_close: 14.2 },
+          { date: "2026-08-18", close: 15.1, adjusted_close: 15.1 },
+        ],
+        updated_at: "2026-08-18T00:00:00Z",
+      },
+    };
+
+    render(
+      <AnalysisDrawer
+        company={{ ...company, status: "partial" }}
+        history={partialHistory}
+        valuations={[]}
+        scores={[]}
+        loading={false}
+        error={null}
+        onCreateValuation={async () => {
+          throw new Error("not expected");
+        }}
+        onCreateScore={async () => {
+          throw new Error("not expected");
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/Les cours et le profil public sont disponibles/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Résumé de l’activité" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Historique du cours de bourse" })).toBeInTheDocument();
+    expect(screen.queryByText("Aucune analyse disponible.")).not.toBeInTheDocument();
+    expect(screen.queryByText("MK Score", { selector: "span" })).not.toBeInTheDocument();
+  });
+
   it("uses the same movable fundamental layout for every sector", () => {
     render(
       <AnalysisDrawer

@@ -596,8 +596,30 @@ export function AnalysisDrawer({
         <div className="analysis-drawer__body">
           {loading && <p className="analysis-message">Chargement de l’analyse…</p>}
           {error && <p className="form-error" role="alert">{error}</p>}
-          {!loading && !error && !latest && (
-            <p className="analysis-message">Aucune analyse disponible.</p>
+          {!loading && !error && !latest && history && (
+            <>
+              <p className="analysis-message analysis-message--partial">
+                Les cours et le profil public sont disponibles. Les comptes annuels
+                structurés ne sont pas fournis par les sources gratuites connectées ;
+                aucun ratio ni MK Score n’est donc calculé avec des données incomplètes.
+              </p>
+              <section
+                className="analysis-section business-summary"
+                aria-labelledby="business-summary-title"
+              >
+                <div className="analysis-section__head">
+                  <h3 id="business-summary-title">Résumé de l’activité</h3>
+                  <span>{activity.source}</span>
+                </div>
+                <p>{activity.text}</p>
+                <div className="business-summary__facts" aria-label="Informations sur l’activité">
+                  {company.sector && <span>{SECTOR_LABELS[company.sector] ?? company.sector}</span>}
+                  {company.industry && <span>{company.industry}</span>}
+                  <span>{company.country}</span>
+                </div>
+              </section>
+              <PriceHistoryChart history={history.price_history} />
+            </>
           )}
           {latest && history && (
             <>

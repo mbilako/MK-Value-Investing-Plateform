@@ -255,16 +255,7 @@ export function CompanyUniverse({
                 <span>{company.exchange}</span>
                 <span>{company.country}</span>
                 <div className="company-row-actions">
-                  {company.status === "pending" ? (
-                    <button
-                      className="company-action"
-                      onClick={() => onFinancialImport(company)}
-                      aria-label={`Importer les données financières pour ${company.name}`}
-                    >
-                      <FileUp aria-hidden="true" size={16} />
-                      Charger l’historique
-                    </button>
-                  ) : (
+                  {company.status === "ready" ? (
                     <button
                       className="company-status company-status--ready company-analysis"
                       onClick={() => onAnalysis(company)}
@@ -275,6 +266,34 @@ export function CompanyUniverse({
                       {scoreFor(company) != null && (
                         <strong>MK Score {scoreFor(company)}</strong>
                       )}
+                    </button>
+                  ) : company.status === "partial" ? (
+                    <div className="company-partial-actions">
+                      <button
+                        className="company-status company-status--partial company-analysis"
+                        onClick={() => onAnalysis(company)}
+                        aria-label={`Voir les données disponibles pour ${company.name}`}
+                      >
+                        <span className="status-dot" aria-hidden="true" />
+                        <span>Données partielles</span>
+                      </button>
+                      <button
+                        className="row-manage"
+                        onClick={() => onFinancialImport(company)}
+                        aria-label={`Réessayer l’import financier pour ${company.name}`}
+                        title="Réessayer l’import financier"
+                      >
+                        <FileUp aria-hidden="true" size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="company-action"
+                      onClick={() => onFinancialImport(company)}
+                      aria-label={`Importer les données financières pour ${company.name}`}
+                    >
+                      <FileUp aria-hidden="true" size={16} />
+                      Charger l’historique
                     </button>
                   )}
                   <button

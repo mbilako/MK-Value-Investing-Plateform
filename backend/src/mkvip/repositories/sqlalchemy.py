@@ -339,7 +339,7 @@ class SqlAlchemyCompanyRepository:
         currency: str,
         source: str,
     ) -> PriceHistoryRead:
-        await self._get_owned_company_record(company_id)
+        company = await self._get_owned_company_record(company_id)
         existing_records = list(
             await self._session.scalars(
                 select(PricePointOrm).where(PricePointOrm.company_id == company_id)
@@ -363,6 +363,8 @@ class SqlAlchemyCompanyRepository:
             record.updated_at = refreshed_at
             records.append(record)
         self._session.add_all(records)
+        if company.status != CompanyStatus.READY.value:
+            company.status = CompanyStatus.PARTIAL.value
         await self._session.commit()
         return PriceHistoryRead(
             company_id=company_id,
