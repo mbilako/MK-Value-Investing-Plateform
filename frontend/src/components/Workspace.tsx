@@ -102,27 +102,28 @@ export function Workspace({
     history: FinancialHistory,
   ) => {
     const analysis = history.snapshots[0];
-    if (!analysis) return;
-    const readyCompany = {
-      ...company,
-      status: "ready" as const,
-      latest_mk_score: analysis.mk_score,
-      latest_quality_score: analysis.quality_score,
-      latest_safety_score: analysis.safety_score,
-    };
+    const displayedCompany = analysis
+      ? {
+          ...company,
+          status: "ready" as const,
+          latest_mk_score: analysis.mk_score,
+          latest_quality_score: analysis.quality_score,
+          latest_safety_score: analysis.safety_score,
+        }
+      : company;
     setCompanies((current) =>
       current.map((record) =>
-        record.id === company.id ? readyCompany : record,
+        record.id === company.id ? displayedCompany : record,
       ),
     );
-    if (analysis.mk_score !== null) {
+    if (analysis?.mk_score != null) {
       setScores((current) => ({
         ...current,
         [company.id]: analysis.mk_score as number,
       }));
     }
     setFinancialCompany(null);
-    setAnalysisCompany(readyCompany);
+    setAnalysisCompany(displayedCompany);
     setFinancialHistory(history);
     setValuations([]);
     setScoringAnalyses([]);
@@ -146,6 +147,32 @@ export function Workspace({
       setFinancialHistory(history);
       setValuations(valuationHistory);
       setScoringAnalyses(scoreHistory);
+      const priceHistoryUpdatedAt = history.price_history?.updated_at
+        ? new Date(history.price_history.updated_at).getTime()
+        : 0;
+      const priceHistoryNeedsRefresh = !history.price_history
+        || Date.now() - priceHistoryUpdatedAt >= 24 * 60 * 60 * 1000
+        || !company.business_summary;
+      if (priceHistoryNeedsRefresh) {
+        try {
+          const priceHistory = await client.importPriceHistoryAutomatically(company.id);
+          setFinancialHistory((current) => current && current.company_id === company.id
+            ? { ...current, price_history: priceHistory }
+            : current);
+          const refreshedCompanies = await client.listCompanies();
+          const refreshedCompany = refreshedCompanies.find(
+            (record) => record.id === company.id,
+          );
+          setCompanies(refreshedCompanies);
+          if (refreshedCompany) {
+            setAnalysisCompany((current) => current?.id === company.id
+              ? refreshedCompany
+              : current);
+          }
+        } catch {
+          // L'analyse fondamentale reste disponible si la source de cours est indisponible.
+        }
+      }
     } catch (caughtError) {
       setAnalysisError(
         caughtError instanceof Error
@@ -295,6 +322,14 @@ export function Workspace({
             onToggleFavorite={(company, isFavorite) =>
               void toggleFavorite(company, isFavorite)
             }
+            onDeleteSelected={async (companyIds) => {
+              const result = await client.deleteCompanies(companyIds);
+              const deletedIds = new Set(result.deleted_ids);
+              setCompanies((current) =>
+                current.filter((company) => !deletedIds.has(company.id)),
+              );
+              await Promise.all([refreshDashboard(), refreshScreener()]);
+            }}
           />
           <FavoritesSection
             companies={companies}

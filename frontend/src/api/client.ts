@@ -1,4 +1,4 @@
-export type CompanyStatus = "pending" | "ready" | "error";
+export type CompanyStatus = "pending" | "partial" | "ready" | "error";
 
 export interface CompanyPayload {
   name: string;
@@ -8,6 +8,7 @@ export interface CompanyPayload {
   currency: string;
   sector?: string | null;
   industry?: string | null;
+  business_summary?: string | null;
   isin?: string | null;
   cik?: string | null;
   lei?: string | null;
@@ -33,6 +34,12 @@ export interface IndexSummary {
   provider: string;
   region?: string;
   country?: string;
+  kind?: "broad" | "sector";
+  sector?: string | null;
+}
+
+export interface CompanyBulkDeleteResult {
+  deleted_ids: string[];
 }
 
 export interface IndexConstituent {
@@ -191,6 +198,21 @@ export interface FinancialHistory {
   company_id: string;
   snapshots: FinancialAnalysis[];
   trend: FinancialTrend;
+  price_history?: PriceHistory | null;
+}
+
+export interface PricePoint {
+  date: string;
+  close: number;
+  adjusted_close: number | null;
+}
+
+export interface PriceHistory {
+  company_id: string;
+  currency: string;
+  source: string;
+  points: PricePoint[];
+  updated_at: string | null;
 }
 
 export interface ValuationAssumptions {
@@ -466,6 +488,7 @@ export interface CompanyClient {
   archiveCompany(id: string): Promise<Company>;
   restoreCompany(id: string): Promise<Company>;
   deleteCompany(id: string): Promise<void>;
+  deleteCompanies(ids: string[]): Promise<CompanyBulkDeleteResult>;
   listIndices(): Promise<IndexSummary[]>;
   getIndex(code: string): Promise<IndexComposition>;
   addIndexCompanies(companies: IndexCompanySelection[]): Promise<IndexBulkAddResult>;
@@ -475,6 +498,7 @@ export interface CompanyClient {
   ): Promise<FinancialAnalysis>;
   importFinancialsAutomatically(companyId: string): Promise<FinancialHistory>;
   getFinancialHistory(companyId: string): Promise<FinancialHistory>;
+  importPriceHistoryAutomatically(companyId: string): Promise<PriceHistory>;
   listValuations(companyId: string): Promise<ValuationAnalysis[]>;
   createValuation(
     companyId: string,
@@ -650,6 +674,11 @@ export function createApiClient(): CompanyClient {
       request<Company>(`/companies/${id}/restore`, { method: "POST" }),
     deleteCompany: (id) =>
       request<void>(`/companies/${id}`, { method: "DELETE" }),
+    deleteCompanies: (ids) =>
+      request<CompanyBulkDeleteResult>("/companies/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ company_ids: ids }),
+      }),
     listIndices: () => request<IndexSummary[]>("/indices"),
     getIndex: (code) => request<IndexComposition>(`/indices/${code}`),
     addIndexCompanies: (companies) =>
@@ -669,6 +698,11 @@ export function createApiClient(): CompanyClient {
       ),
     getFinancialHistory: (companyId) =>
       request<FinancialHistory>(`/companies/${companyId}/financials`),
+    importPriceHistoryAutomatically: (companyId) =>
+      request<PriceHistory>(
+        `/companies/${companyId}/financials/prices/automatic`,
+        { method: "POST" },
+      ),
     listValuations: (companyId) =>
       request<ValuationAnalysis[]>(`/companies/${companyId}/valuations`),
     createValuation: (companyId, payload) =>

@@ -72,6 +72,7 @@ export function createTestClient(
       archived_at: null,
     }),
     deleteCompany: async () => undefined,
+    deleteCompanies: async (ids) => ({ deleted_ids: ids }),
     listIndices: async () => [],
     getIndex: async () => {
       throw new Error("Indice non configuré dans ce test.");
@@ -85,6 +86,9 @@ export function createTestClient(
     },
     getFinancialHistory: async () => {
       throw new Error("Historique financier non configuré dans ce test.");
+    },
+    importPriceHistoryAutomatically: async () => {
+      throw new Error("Historique des cours non configuré dans ce test.");
     },
     listValuations: async () => [],
     createValuation: async () => {

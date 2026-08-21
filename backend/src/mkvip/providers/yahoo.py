@@ -226,7 +226,7 @@ def _fetch_profile(ticker: Any) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
 
 def _fetch_price_history(ticker: Any) -> Mapping[object, Mapping[str, Any]]:
     history = ticker.history(
-        period="10y",
+        period="max",
         interval="1d",
         auto_adjust=False,
     )
@@ -372,6 +372,11 @@ class YahooFinanceProvider:
             quote_currency=quote_currency,
             sector=(str(info["sector"]) if info.get("sector") else None),
             industry=(str(info["industry"]) if info.get("industry") else None),
+            business_summary=(
+                str(info["longBusinessSummary"])
+                if info.get("longBusinessSummary")
+                else None
+            ),
         )
 
     async def get_income_statements(
@@ -503,15 +508,24 @@ class YahooFinanceProvider:
                 timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
             )
             normalized_close = float(close)
+            adjusted_close = values.get("Adj Close")
+            normalized_adjusted_close = (
+                float(adjusted_close)
+                if adjusted_close is not None and math.isfinite(float(adjusted_close))
+                else None
+            )
             if fx_by_date:
                 rate = fx_by_date.get(iso_timestamp[:10])
                 if rate is None:
                     continue
                 normalized_close *= rate
+                if normalized_adjusted_close is not None:
+                    normalized_adjusted_close *= rate
             prices.append(
                 ProviderPricePoint(
                     timestamp=iso_timestamp,
                     close=normalized_close,
+                    adjusted_close=normalized_adjusted_close,
                 )
             )
         return sorted(prices, key=lambda point: point.timestamp)

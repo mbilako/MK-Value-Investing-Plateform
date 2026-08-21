@@ -10,6 +10,7 @@ from mkvip.providers.base import (
     ProviderDataError,
     ProviderDataIncompleteError,
     ProviderIncomeStatement,
+    ProviderPricePoint,
 )
 from mkvip.schemas.financial import FinancialProfile, FinancialSnapshotCreate
 
@@ -21,12 +22,25 @@ class NormalizedFinancialData:
     snapshots: list[FinancialSnapshotCreate]
     sector: str | None
     industry: str | None
+    business_summary: str | None
+    price_points: list[ProviderPricePoint]
 
 
 @dataclass(frozen=True)
 class NormalizedCompanyClassification:
     sector: str | None
     industry: str | None
+    business_summary: str | None = None
+
+
+@dataclass(frozen=True)
+class NormalizedPriceHistory:
+    points: list[ProviderPricePoint]
+    currency: str
+    source: str
+    sector: str | None
+    industry: str | None
+    business_summary: str | None
 
 
 def _to_millions(value: float) -> float:
@@ -35,6 +49,13 @@ def _to_millions(value: float) -> float:
 
 def _optional_millions(value: float | None) -> float | None:
     return _to_millions(value) if value is not None else None
+
+
+def _business_summary(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = " ".join(value.split())
+    return normalized[:5000] or None
 
 
 def _financial_profile(sector: str | None, industry: str | None) -> FinancialProfile:
@@ -50,6 +71,45 @@ def _financial_profile(sector: str | None, industry: str | None) -> FinancialPro
     return FinancialProfile.STANDARD
 
 
+async def load_price_history(
+    provider: FinancialDataProvider,
+    ticker: str,
+    *,
+    isin: str | None = None,
+    cik: str | None = None,
+    lei: str | None = None,
+) -> NormalizedPriceHistory:
+    candidates = getattr(provider, "providers", None) or (provider,)
+    errors: list[str] = []
+    for candidate in candidates:
+        try:
+            candidate_ticker = ticker
+            resolver = getattr(candidate, "resolve_identifier", None)
+            if resolver is not None:
+                candidate_ticker = await resolver(
+                    ticker,
+                    isin=isin,
+                    cik=cik,
+                    lei=lei,
+                )
+            profile = await candidate.get_profile(candidate_ticker)
+            points = await candidate.get_price_history(candidate_ticker)
+            if points:
+                return NormalizedPriceHistory(
+                    points=points,
+                    currency=profile.currency,
+                    source=candidate.name,
+                    sector=normalize_gics_sector(profile.sector),
+                    industry=profile.industry.strip() if profile.industry else None,
+                    business_summary=_business_summary(profile.business_summary),
+                )
+        except ProviderDataError as error:
+            errors.append(f"{candidate.name}: {error}")
+    raise ProviderDataIncompleteError(
+        "Aucun historique de cours public n'est disponible. " + " | ".join(errors)
+    )
+
+
 async def load_company_classification(
     provider: FinancialDataProvider,
     ticker: str,
@@ -61,6 +121,7 @@ async def load_company_classification(
     candidates = getattr(provider, "providers", None) or (provider,)
     errors: list[str] = []
     fallback_industry = None
+    fallback_business_summary = None
     profile_loaded = False
     for candidate in candidates:
         try:
@@ -79,15 +140,22 @@ async def load_company_classification(
             continue
         profile_loaded = True
         industry = profile.industry.strip() if profile.industry else None
+        business_summary = _business_summary(profile.business_summary)
         fallback_industry = fallback_industry or industry
+        fallback_business_summary = fallback_business_summary or business_summary
         sector = normalize_gics_sector(profile.sector)
         if sector is not None:
-            return NormalizedCompanyClassification(sector=sector, industry=industry)
+            return NormalizedCompanyClassification(
+                sector=sector,
+                industry=industry,
+                business_summary=business_summary,
+            )
 
     if profile_loaded:
         return NormalizedCompanyClassification(
             sector=None,
             industry=fallback_industry,
+            business_summary=fallback_business_summary,
         )
     raise ProviderDataIncompleteError(
         "Aucune source publique n'a fourni de classification exploitable. "
@@ -164,6 +232,8 @@ async def load_historical_data(
     errors: list[str] = []
     sector = None
     industry = None
+    business_summary = None
+    price_points: list[ProviderPricePoint] = []
     for candidate in candidates:
         try:
             candidate_ticker = ticker
@@ -182,6 +252,9 @@ async def load_historical_data(
             )
             sector = sector or data.sector
             industry = industry or data.industry
+            business_summary = business_summary or data.business_summary
+            if len(data.price_points) > len(price_points):
+                price_points = data.price_points
             for snapshot in data.snapshots:
                 snapshots_by_year.setdefault(snapshot.fiscal_year, snapshot)
         except ProviderDataError as error:
@@ -200,6 +273,8 @@ async def load_historical_data(
         )[:limit],
         sector=sector,
         industry=industry,
+        business_summary=business_summary,
+        price_points=price_points,
     )
 
 
@@ -317,6 +392,8 @@ async def _load_historical_data(
             snapshots=snapshots,
             sector=normalize_gics_sector(profile.sector),
             industry=profile.industry.strip() if profile.industry else None,
+            business_summary=_business_summary(profile.business_summary),
+            price_points=price_points,
         )
     detail = " | ".join(validation_errors) or "aucun exercice compatible"
     raise ProviderDataIncompleteError(

@@ -214,6 +214,14 @@ def _market_suffixes(mic: str) -> tuple[str, ...]:
         "XMIL": (".MI",),
         "XSWX": (".SW",),
         "XATH": (".AT",),
+        "XCSE": (".CO",),
+        "XHEL": (".HE",),
+        "XOSL": (".OL",),
+        "XSTO": (".ST",),
+        "XWAR": (".WA",),
+        "XWBO": (".VI",),
+        "XSHG": (".SS",),
+        "XSHE": (".SZ",),
     }.get(mic.upper(), ())
 
 

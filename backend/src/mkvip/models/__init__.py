@@ -4,6 +4,7 @@ from mkvip.models.auth_rate_limit import AuthRateLimitOrm
 from mkvip.models.company import CompanyOrm
 from mkvip.models.financial import FinancialSnapshotOrm
 from mkvip.models.mfa import MfaRecoveryCodeOrm
+from mkvip.models.price import PricePointOrm
 from mkvip.models.scoring import ScoringAnalysisOrm
 from mkvip.models.session import SessionOrm
 from mkvip.models.user import UserOrm
@@ -18,6 +19,7 @@ __all__ = [
     "CompanyOrm",
     "FinancialSnapshotOrm",
     "MfaRecoveryCodeOrm",
+    "PricePointOrm",
     "ScoringAnalysisOrm",
     "SessionOrm",
     "UserOrm",

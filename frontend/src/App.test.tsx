@@ -655,6 +655,83 @@ describe("MK-VIP authentication", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("selects and deletes every company displayed in the investment universe", async () => {
+    const user = userEvent.setup();
+    const companies = [
+      {
+        id: "company-air-liquide",
+        name: "Air Liquide",
+        ticker: "AI.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "pending" as const,
+      },
+      {
+        id: "company-sanofi",
+        name: "Sanofi",
+        ticker: "SAN.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "pending" as const,
+      },
+      {
+        id: "company-favorite",
+        name: "L'Oréal",
+        ticker: "OR.PA",
+        exchange: "Euronext Paris",
+        country: "France",
+        currency: "EUR",
+        status: "ready" as const,
+        is_favorite: true,
+      },
+    ];
+    const deleteCompanies = vi.fn().mockResolvedValue({
+      deleted_ids: ["company-air-liquide", "company-sanofi"],
+    });
+    render(
+      <App
+        client={createTestClient({
+          listCompanies: async () => companies,
+          deleteCompanies,
+        })}
+      />,
+    );
+
+    const universe = await screen.findByRole("region", {
+      name: "Univers d’investissement",
+    });
+    await user.click(
+      within(universe).getByRole("checkbox", {
+        name: "Sélectionner toutes les valeurs affichées",
+      }),
+    );
+
+    expect(within(universe).getByText("2 valeurs sélectionnées")).toBeInTheDocument();
+    await user.click(
+      within(universe).getByRole("button", { name: "Supprimer la sélection" }),
+    );
+    expect(within(universe).getByRole("alert")).toHaveTextContent(
+      "Supprimer définitivement 2 valeurs",
+    );
+    expect(deleteCompanies).not.toHaveBeenCalled();
+
+    await user.click(
+      within(universe).getByRole("button", {
+        name: "Confirmer la suppression groupée",
+      }),
+    );
+
+    expect(deleteCompanies).toHaveBeenCalledWith([
+      "company-air-liquide",
+      "company-sanofi",
+    ]);
+    expect(within(universe).queryByText("Air Liquide")).not.toBeInTheDocument();
+    expect(within(universe).queryByText("Sanofi")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Favoris" })).toHaveTextContent("L'Oréal");
+  });
+
   it("keeps a scored company in the persistent favorites space", async () => {
     const user = userEvent.setup();
     const company = {
@@ -806,7 +883,7 @@ describe("MK-VIP authentication", () => {
     await user.click(
       await screen.findByRole("button", { name: "Explorer les indices" }),
     );
-    await user.click(await screen.findByRole("checkbox"));
+    await user.click(await screen.findByRole("checkbox", { name: /ABIVAX/ }));
     await user.click(
       screen.getByRole("button", { name: "Ajouter 1 à l’univers" }),
     );
@@ -817,7 +894,7 @@ describe("MK-VIP authentication", () => {
     expect(await screen.findByText("ABVX.PA")).toBeInTheDocument();
   });
 
-  it("groups US indices and adds a company from its official ticker", async () => {
+  it("groups United States indices under the America zone", async () => {
     const user = userEvent.setup();
     const addIndexCompanies = vi.fn().mockResolvedValue({
       created: [
@@ -845,7 +922,7 @@ describe("MK-VIP authentication", () => {
               isin: null,
               market: "XNAS",
               provider: "Nasdaq",
-              region: "États-Unis",
+              region: "Amérique",
               country: "États-Unis",
             },
           ],
@@ -855,7 +932,7 @@ describe("MK-VIP authentication", () => {
             isin: null,
             market: "XNAS",
             provider: "Nasdaq",
-            region: "États-Unis",
+            region: "Amérique",
             country: "États-Unis",
             as_of: "Aug 4, 2026",
             source_url: "https://api.nasdaq.com/example",
@@ -879,10 +956,15 @@ describe("MK-VIP authentication", () => {
       await screen.findByRole("button", { name: "Explorer les indices" }),
     );
     expect(
-      await screen.findByRole("region", { name: "Indices États-Unis" }),
+      await screen.findByRole("region", { name: "Indices Amérique" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("tablist", { name: "Indices États-Unis" }),
+      screen.getByRole("button", {
+        name: /États-Unis.*1 indice général.*0 indice sectoriel/,
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("tablist", { name: "Indices généraux États-Unis" }),
     ).toBeInTheDocument();
     await user.click(await screen.findByRole("checkbox", { name: /Apple Inc./ }));
     await user.click(
@@ -897,6 +979,223 @@ describe("MK-VIP authentication", () => {
       }),
     ]);
     expect(await screen.findByText("AAPL")).toBeInTheDocument();
+  });
+
+  it("shows sector indices inside their geographic region", async () => {
+    const user = userEvent.setup();
+    const getIndex = vi.fn().mockImplementation(async (code: string) => ({
+      code,
+      name: code === "EUROPEHEALTH" ? "STOXX Europe 600 Health Care" : "CAC 40",
+      isin: null,
+      market: code === "EUROPEHEALTH" ? "XETR" : "XPAR",
+      provider: code === "EUROPEHEALTH" ? "iShares" : "Euronext",
+      region: "Europe",
+      country: code === "EUROPEHEALTH" ? "Europe" : "France",
+      kind: code === "EUROPEHEALTH" ? "sector" as const : "broad" as const,
+      sector: code === "EUROPEHEALTH" ? "Health Care" : null,
+      as_of: "13/Aug/2026",
+      source_url: "https://example.test",
+      constituents: code === "EUROPEHEALTH"
+        ? [{
+            name: "Novo Nordisk",
+            ticker: "NOVO-B.CO",
+            isin: "DK0062498333",
+            mic: "XCSE",
+            trading_location: "Nasdaq Copenhagen",
+            country: "Danemark",
+            currency: "DKK",
+          }]
+        : [{
+            name: "Air Liquide",
+            ticker: "AI.PA",
+            isin: "FR0000120073",
+            mic: "XPAR",
+            trading_location: "Euronext Paris",
+            country: "France",
+            currency: "EUR",
+          }],
+    }));
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "CAC40",
+              name: "CAC 40",
+              isin: null,
+              market: "XPAR",
+              provider: "Euronext",
+              region: "Europe",
+              country: "France",
+              kind: "broad",
+              sector: null,
+            },
+            {
+              code: "EUROPEHEALTH",
+              name: "STOXX Europe 600 Health Care",
+              isin: null,
+              market: "XETR",
+              provider: "iShares",
+              region: "Europe",
+              country: "Europe",
+              kind: "sector",
+              sector: "Health Care",
+            },
+          ],
+          getIndex,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    const sectorToggle = screen.getByRole("button", {
+      name: /Indices sectoriels régionaux.*1 indice.*Europe/,
+    });
+    const franceToggle = screen.getByRole("button", {
+      name: /France.*1 indice général.*0 indice sectoriel/,
+    });
+    expect(sectorToggle).toHaveAttribute("aria-expanded", "true");
+    expect(franceToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      Boolean(
+        sectorToggle.compareDocumentPosition(franceToggle)
+        & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      screen.getByRole("tablist", { name: "Indices généraux France" }),
+    ).toBeInTheDocument();
+
+    await user.click(franceToggle);
+    expect(
+      screen.getByRole("tablist", { name: "Indices sectoriels régionaux Europe" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Indices généraux France" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(franceToggle);
+    expect(
+      screen.getByRole("tablist", { name: "Indices généraux France" }),
+    ).toBeInTheDocument();
+    const sectorTabs = screen.getByRole("tablist", {
+      name: "Indices sectoriels régionaux Europe",
+    });
+    await user.click(
+      within(sectorTabs).getByRole("tab", {
+        name: /Santé.*STOXX Europe 600 Health Care/,
+      }),
+    );
+
+    expect(sectorToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("tablist", { name: "Indices sectoriels régionaux Europe" }),
+    ).toBeInTheDocument();
+    expect(getIndex).toHaveBeenLastCalledWith("EUROPEHEALTH");
+    expect(
+      await screen.findByRole("checkbox", { name: /Novo Nordisk/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/secteur Santé/)).toBeInTheDocument();
+  });
+
+  it("groups China and its CSI indices under the Asia zone", async () => {
+    const user = userEvent.setup();
+    const getIndex = vi.fn().mockImplementation(async (code: string) => ({
+      code,
+      name: code === "CNTECH" ? "CSI 300 Information Technology" : "CAC 40",
+      isin: null,
+      market: code === "CNTECH" ? "XSHG" : "XPAR",
+      provider: code === "CNTECH" ? "CSI (via iShares)" : "Euronext",
+      region: code === "CNTECH" ? "Asie" : "Europe",
+      country: code === "CNTECH" ? "Chine" : "France",
+      kind: code === "CNTECH" ? "sector" as const : "broad" as const,
+      sector: code === "CNTECH" ? "Information Technology" : null,
+      as_of: "14-Aug-2026",
+      source_url: "https://example.test",
+      constituents: code === "CNTECH"
+        ? [{
+            name: "Zhongji Innolight",
+            ticker: "300308",
+            isin: null,
+            mic: "XSHE",
+            trading_location: "Shenzhen Stock Exchange",
+            country: "China",
+            currency: "CNY",
+          }]
+        : [],
+    }));
+    render(
+      <App
+        client={createTestClient({
+          listIndices: async () => [
+            {
+              code: "CAC40",
+              name: "CAC 40",
+              isin: null,
+              market: "XPAR",
+              provider: "Euronext",
+              region: "Europe",
+              country: "France",
+              kind: "broad",
+              sector: null,
+            },
+            {
+              code: "CSI300",
+              name: "CSI 300",
+              isin: null,
+              market: "XSHG",
+              provider: "CSI (via iShares)",
+              region: "Asie",
+              country: "Chine",
+              kind: "broad",
+              sector: null,
+            },
+            {
+              code: "CNTECH",
+              name: "CSI 300 Information Technology",
+              isin: null,
+              market: "XSHG",
+              provider: "CSI (via iShares)",
+              region: "Asie",
+              country: "Chine",
+              kind: "sector",
+              sector: "Information Technology",
+            },
+          ],
+          getIndex,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Explorer les indices" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Asie" }));
+
+    expect(
+      screen.getByRole("region", { name: "Indices Asie" }),
+    ).toBeInTheDocument();
+
+    const chinaToggle = screen.getByRole("button", {
+      name: /Chine.*1 indice général.*1 indice sectoriel/,
+    });
+    expect(chinaToggle).toHaveAttribute("aria-expanded", "true");
+    const chinaSectors = screen.getByRole("tablist", {
+      name: "Indices sectoriels Chine",
+    });
+    await user.click(
+      within(chinaSectors).getByRole("tab", {
+        name: /Technologies de l’information.*CSI 300 Information Technology/,
+      }),
+    );
+    expect(getIndex).toHaveBeenLastCalledWith("CNTECH");
+    expect(chinaToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      await screen.findByRole("checkbox", { name: /Zhongji Innolight/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Diversification limitée/)).toBeInTheDocument();
   });
 
   it("groups the ATHEX Composite under Greece in Europe", async () => {
@@ -945,7 +1244,7 @@ describe("MK-VIP authentication", () => {
     );
 
     expect(
-      screen.getByRole("tablist", { name: "Indices Grèce" }),
+      screen.getByRole("tablist", { name: "Indices généraux Grèce" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: "ATHEX Composite" }),
@@ -977,7 +1276,7 @@ describe("MK-VIP authentication", () => {
               isin: null,
               market: "XNYS",
               provider: "S&P Dow Jones Indices",
-              region: "\u00c9tats-Unis",
+              region: "Amérique",
               country: "\u00c9tats-Unis",
             },
           ],
@@ -1015,10 +1314,10 @@ describe("MK-VIP authentication", () => {
     expect(await screen.findByRole("checkbox", { name: /Airbus/ })).toBeInTheDocument();
 
     const europe = screen.getByRole("button", { name: "Europe" });
-    const unitedStates = screen.getByRole("button", { name: "\u00c9tats-Unis" });
-    await user.click(unitedStates);
+    const america = screen.getByRole("button", { name: "Amérique" });
+    await user.click(america);
     expect(europe).toHaveAttribute("aria-expanded", "false");
-    expect(unitedStates).toHaveAttribute("aria-expanded", "true");
+    expect(america).toHaveAttribute("aria-expanded", "true");
 
     await user.click(screen.getByRole("tab", { name: "S&P 500" }));
     expect(await screen.findByRole("checkbox", { name: /Apple Inc./ })).toBeInTheDocument();
@@ -1331,6 +1630,69 @@ describe("MK-VIP dashboard", () => {
     );
 
     expect(await screen.findByText("1 exercice disponible")).toBeInTheDocument();
+  });
+
+  it("opens the available profile and prices when annual accounts are unavailable", async () => {
+    const user = userEvent.setup();
+    const pendingCompany = {
+      id: "company-price-only",
+      name: "REVOIL S.A.",
+      ticker: "REVOIL.AT",
+      exchange: "Athens",
+      country: "Grèce",
+      currency: "EUR",
+      status: "pending" as const,
+    };
+    const partialCompany = {
+      ...pendingCompany,
+      status: "partial" as const,
+      sector: "Energy",
+      industry: "Oil & Gas Refining & Marketing",
+      business_summary: "REVOIL distributes petroleum products in Greece.",
+    };
+    const listCompanies = vi
+      .fn()
+      .mockResolvedValueOnce([pendingCompany])
+      .mockResolvedValue([partialCompany]);
+    const client = createTestClient({
+      listCompanies,
+      importFinancialsAutomatically: async () => ({
+        company_id: pendingCompany.id,
+        snapshots: [],
+        trend: {
+          periods: 0,
+          first_year: null,
+          last_year: null,
+          revenue_cagr: null,
+          net_income_cagr: null,
+          free_cash_flow_cagr: null,
+        },
+        price_history: {
+          company_id: pendingCompany.id,
+          currency: "EUR",
+          source: "Yahoo Finance",
+          points: [
+            { date: "2025-12-31", close: 1.7, adjusted_close: 1.7 },
+            { date: "2026-08-18", close: 1.9, adjusted_close: 1.9 },
+          ],
+          updated_at: "2026-08-18T00:00:00Z",
+        },
+      }),
+    });
+    render(<App client={client} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Importer les données financières pour REVOIL S.A.",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Charger l’historique" }));
+
+    expect(
+      await screen.findByText(/Les cours et le profil public sont disponibles/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("REVOIL distributes petroleum products in Greece.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Historique du cours de bourse" })).toBeInTheDocument();
   });
 
   it("opens the financial engine analysis for a ready company", async () => {

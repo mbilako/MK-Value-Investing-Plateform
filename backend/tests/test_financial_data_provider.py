@@ -281,6 +281,9 @@ async def test_yahoo_provider_builds_company_profile() -> None:
                 "fullExchangeName": "Euronext Paris",
                 "country": "France",
                 "financialCurrency": "EUR",
+                "longBusinessSummary": (
+                    "Air Liquide supplies gases and services to industry and health care."
+                ),
             }
 
     provider = YahooFinanceProvider(ticker_factory=lambda _ticker: YahooTicker())
@@ -295,6 +298,7 @@ async def test_yahoo_provider_builds_company_profile() -> None:
         currency="EUR",
         market_cap=50_000_000_000,
         quote_currency="EUR",
+        business_summary="Air Liquide supplies gases and services to industry and health care.",
     )
 
 
@@ -358,7 +362,7 @@ async def test_yahoo_provider_maps_daily_closing_prices() -> None:
         ) -> dict[datetime, dict[str, float]]:
             assert orient == "index"
             return {
-                datetime(2024, 1, 2): {"Close": 170.5},
+                datetime(2024, 1, 2): {"Close": 170.5, "Adj Close": 168.25},
                 datetime(2024, 1, 3): {"Close": 171.2},
             }
 
@@ -370,7 +374,7 @@ async def test_yahoo_provider_maps_daily_closing_prices() -> None:
             interval: str,
             auto_adjust: bool,
         ) -> PriceHistory:
-            assert period == "10y"
+            assert period == "max"
             assert interval == "1d"
             assert auto_adjust is False
             return PriceHistory()
@@ -383,6 +387,7 @@ async def test_yahoo_provider_maps_daily_closing_prices() -> None:
         ProviderPricePoint(
             timestamp="2024-01-02T00:00:00",
             close=170.5,
+            adjusted_close=168.25,
         ),
         ProviderPricePoint(
             timestamp="2024-01-03T00:00:00",

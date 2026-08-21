@@ -21,6 +21,7 @@ from mkvip.schemas.financial import (
     FinancialMetricRead,
     FinancialSnapshotCreate,
 )
+from mkvip.schemas.price import PriceHistoryRead, PricePointCreate, PricePointRead
 from mkvip.schemas.scoring import (
     ScoringAnalysisRead,
     ScoringComponentRead,
@@ -39,6 +40,7 @@ class InMemoryCompanyRepository:
         self._financials: dict[tuple[uuid.UUID, int], FinancialAnalysisRead] = {}
         self._valuations: list[ValuationAnalysisRead] = []
         self._scores: list[ScoringAnalysisRead] = []
+        self._prices: dict[uuid.UUID, PriceHistoryRead] = {}
 
     async def list(self, *, include_archived: bool = False) -> list[CompanyRead]:
         return [
@@ -116,7 +118,47 @@ class InMemoryCompanyRepository:
         }
         self._valuations = [value for value in self._valuations if value.company_id != company_id]
         self._scores = [value for value in self._scores if value.company_id != company_id]
+        self._prices.pop(company_id, None)
         return True
+
+    async def delete_many(self, company_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]:
+        deleted_ids = []
+        for company_id in dict.fromkeys(company_ids):
+            if await self.delete(company_id):
+                deleted_ids.append(company_id)
+        return deleted_ids
+
+    async def list_price_history(
+        self,
+        company_id: uuid.UUID,
+    ) -> PriceHistoryRead | None:
+        return self._prices.get(company_id)
+
+    async def replace_price_history(
+        self,
+        company_id: uuid.UUID,
+        points: Sequence[PricePointCreate],
+        *,
+        currency: str,
+        source: str,
+    ) -> PriceHistoryRead:
+        company = await self.get_by_id(company_id)
+        history = PriceHistoryRead(
+            company_id=company_id,
+            currency=currency,
+            source=source,
+            points=[
+                PricePointRead(**point.model_dump())
+                for point in sorted(points, key=lambda point: point.date)
+            ],
+            updated_at=datetime.now(UTC),
+        )
+        self._prices[company_id] = history
+        if company is not None and company.status != CompanyStatus.READY:
+            self._companies[company.ticker] = company.model_copy(
+                update={"status": CompanyStatus.PARTIAL}
+            )
+        return history
 
     async def list_valuation_analyses(
         self,

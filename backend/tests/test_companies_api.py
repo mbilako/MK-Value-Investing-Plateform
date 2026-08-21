@@ -27,6 +27,7 @@ def test_create_company_normalizes_ticker(client: TestClient) -> None:
         "currency": "EUR",
         "sector": None,
         "industry": None,
+        "business_summary": None,
         "isin": None,
         "cik": None,
         "lei": None,
@@ -57,6 +58,38 @@ def test_list_companies_returns_created_company(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert [company["ticker"] for company in response.json()] == ["AI.PA"]
+
+
+def test_companies_can_be_deleted_in_one_transaction(client: TestClient) -> None:
+    company_ids = []
+    for name, ticker in (
+        ("Air Liquide", "AI.PA"),
+        ("L'Oréal", "OR.PA"),
+        ("Sanofi", "SAN.PA"),
+    ):
+        company_ids.append(
+            client.post(
+                "/api/v1/companies",
+                json={
+                    "name": name,
+                    "ticker": ticker,
+                    "exchange": "Euronext Paris",
+                    "country": "France",
+                    "currency": "EUR",
+                },
+            ).json()["id"]
+        )
+
+    response = client.post(
+        "/api/v1/companies/bulk-delete",
+        json={"company_ids": [company_ids[0], company_ids[1], company_ids[0]]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted_ids": company_ids[:2]}
+    assert [company["id"] for company in client.get("/api/v1/companies").json()] == [
+        company_ids[2]
+    ]
 
 
 def test_company_can_be_updated_archived_restored_and_deleted(

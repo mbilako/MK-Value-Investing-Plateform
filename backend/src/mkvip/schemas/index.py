@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from mkvip.schemas.company import CompanyRead
@@ -11,6 +13,8 @@ class IndexSummaryRead(BaseModel):
     provider: str
     region: str = "Europe"
     country: str = "Non renseigné"
+    kind: Literal["broad", "sector"] = "broad"
+    sector: str | None = None
 
 
 class IndexConstituentRead(BaseModel):

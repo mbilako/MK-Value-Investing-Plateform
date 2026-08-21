@@ -72,10 +72,13 @@ RULES: dict[str, RuleDefinition] = {
     ),
     "financial_leverage": RuleDefinition(
         key="financial_leverage",
-        label="Effet de levier",
+        label="Effet de levier ajusté",
         pass_when=lambda value: value < 0.80,
         fail_when=lambda value: value >= 1.50,
-        source_note="< 0,8 : favorable",
+        source_note=(
+            "Passif total / (capitaux propres + actions propres) ; "
+            "< 0,8 : favorable"
+        ),
     ),
     "current_ratio": RuleDefinition(
         key="current_ratio",
