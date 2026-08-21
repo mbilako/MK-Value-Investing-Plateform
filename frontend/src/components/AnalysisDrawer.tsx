@@ -64,8 +64,6 @@ type HistoryColumnKey =
   | "roe"
   | "equity_to_assets"
   | "operating_cash_flow"
-  | "gross_margin"
-  | "net_margin"
   | "interest_burden"
   | "discount"
   | "stock_bond_yield"
@@ -113,8 +111,6 @@ const HISTORY_ORDER: HistoryColumnKey[] = [
   "roe",
   "equity_to_assets",
   "operating_cash_flow",
-  "gross_margin",
-  "net_margin",
   "interest_burden",
   "discount",
   "stock_bond_yield",
@@ -177,8 +173,6 @@ const HISTORY_LABELS: Record<HistoryColumnKey, string> = {
   roe: "ROE",
   equity_to_assets: "Fonds propres / actif",
   operating_cash_flow: "Cash-flow d’exploitation",
-  gross_margin: "Marge brute",
-  net_margin: "Marge nette",
   interest_burden: "Poids dette financière",
   discount: "Décote",
   stock_bond_yield: "Rendement action-obligation",
@@ -514,8 +508,6 @@ function historyValue(key: HistoryColumnKey, snapshot: FinancialAnalysis): strin
       return formatRatio(ratio(snapshot.total_equity, snapshot.total_assets));
     case "operating_cash_flow":
       return formatAmount(snapshot.operating_cash_flow, snapshot.currency);
-    case "gross_margin":
-    case "net_margin":
     case "interest_burden":
     case "discount":
     case "stock_bond_yield":

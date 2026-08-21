@@ -220,7 +220,7 @@ describe("AnalysisDrawer financial institutions", () => {
     expect(cardsAfter[1]).toHaveTextContent("Revenus publiés");
   });
 
-  it("compares the last two fiscal years and adds the requested ratios to history", () => {
+  it("compares the last two fiscal years and keeps the requested ratios in history", () => {
     const latest: FinancialAnalysis = {
       ...analysis,
       id: "analysis-latest",
@@ -333,8 +333,8 @@ describe("AnalysisDrawer financial institutions", () => {
     expect(comparisonView.getByText("Seuil vert : < 1,5×")).toBeInTheDocument();
 
     const annualHistory = screen.getByRole("table", { name: "Historique fondamental" });
-    expect(within(annualHistory).getByRole("columnheader", { name: /Marge brute/ })).toBeInTheDocument();
-    expect(within(annualHistory).getByRole("columnheader", { name: /Marge nette/ })).toBeInTheDocument();
+    expect(within(annualHistory).queryByRole("columnheader", { name: /Marge brute/ })).not.toBeInTheDocument();
+    expect(within(annualHistory).queryByRole("columnheader", { name: /Marge nette/ })).not.toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Poids dette financière/ })).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Décote/ })).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Rendement action-obligation/ })).toBeInTheDocument();
@@ -342,20 +342,5 @@ describe("AnalysisDrawer financial institutions", () => {
       within(annualHistory).getByRole("columnheader", { name: /Effet de levier ajusté/ }),
     ).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Niveau d’endettement/ })).toBeInTheDocument();
-    expect(
-      within(annualHistory).getByText("35 %", {
-        selector: ".comparison-value--unfavorable",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(annualHistory).getByText("40 %", {
-        selector: ".comparison-value--unfavorable",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(annualHistory).getByText("25 %", {
-        selector: ".comparison-value--favorable",
-      }),
-    ).toBeInTheDocument();
   });
 });
