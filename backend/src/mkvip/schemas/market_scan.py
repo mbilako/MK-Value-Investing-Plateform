@@ -6,13 +6,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from mkvip.core.national_markets import get_national_market
+
 MarketScanStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
 USExchange = Literal["NASDAQ", "NYSE", "AMEX"]
 
 
 class MarketScanCriteria(BaseModel):
-    market: Literal["US", "INDEX"] = "US"
+    market: Literal["US", "INDEX", "COUNTRY"] = "US"
     index_code: str | None = Field(default=None, max_length=20)
+    country_code: str | None = Field(default=None, min_length=2, max_length=2)
     exchanges: list[USExchange] = Field(
         default_factory=lambda: ["NASDAQ", "NYSE", "AMEX"],
         min_length=1,
@@ -36,13 +39,35 @@ class MarketScanCriteria(BaseModel):
         normalized = value.strip().upper().replace("-", "").replace(" ", "")
         return normalized or None
 
+    @field_validator("country_code")
+    @classmethod
+    def normalize_country_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        return normalized or None
+
     @model_validator(mode="after")
-    def require_index_code_for_index_scan(self):
+    def require_selected_universe(self):
         if self.market == "INDEX" and self.index_code is None:
             raise ValueError("Un indice MK-VIP est requis pour ce scan.")
-        if self.market == "US":
+        if self.market == "COUNTRY" and self.country_code is None:
+            raise ValueError("Un marché national est requis pour ce scan.")
+        if self.market == "COUNTRY" and get_national_market(self.country_code) is None:
+            raise ValueError("Ce marché national n’est pas pris en charge par MK-VIP.")
+        if self.market != "INDEX":
             self.index_code = None
+        if self.market != "COUNTRY":
+            self.country_code = None
         return self
+
+
+class NationalMarketRead(BaseModel):
+    code: str
+    name: str
+    region: str
+    currency: str
+    exchanges: list[str]
 
 
 class MarketScanCreate(BaseModel):

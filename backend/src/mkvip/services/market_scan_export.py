@@ -6,6 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from mkvip.core.national_markets import get_national_market
 from mkvip.schemas.market_scan import MarketScanRead
 
 
@@ -14,11 +15,26 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
     summary = workbook.active
     summary.title = "Synthèse"
     is_index_scan = scan.criteria.market == "INDEX"
+    national_market = get_national_market(scan.criteria.country_code)
+    universe = (
+        scan.criteria.index_code
+        if is_index_scan
+        else f"Marché national — {national_market.name}"
+        if national_market is not None
+        else "Marché américain"
+    )
+    places = (
+        "Indice MK-VIP"
+        if is_index_scan
+        else ", ".join(national_market.yahoo_exchanges)
+        if national_market is not None
+        else ", ".join(scan.criteria.exchanges)
+    )
     rows = [
         ("MK-VIP — Scan de marché", None),
         ("Statut", scan.status),
-        ("Univers", scan.criteria.index_code if is_index_scan else "Marché américain"),
-        ("Places", "Indice MK-VIP" if is_index_scan else ", ".join(scan.criteria.exchanges)),
+        ("Univers", universe),
+        ("Places", places),
         ("Période", f"{scan.criteria.years} ans"),
         ("Baisse minimale", scan.criteria.minimum_decline_pct / 100),
         ("Capitalisation minimale", scan.criteria.minimum_market_cap),

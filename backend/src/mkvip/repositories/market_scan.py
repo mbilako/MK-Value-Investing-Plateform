@@ -56,6 +56,8 @@ class SqlAlchemyMarketScanRepository:
             universe_source=(
                 "Catalogue d’indices MK-VIP"
                 if criteria.market == "INDEX"
+                else "Yahoo Finance — marchés nationaux"
+                if criteria.market == "COUNTRY"
                 else "Nasdaq public screener"
             ),
             price_source="Yahoo Finance",

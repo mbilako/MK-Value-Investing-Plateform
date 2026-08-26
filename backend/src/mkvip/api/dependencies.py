@@ -16,6 +16,7 @@ from mkvip.providers.index_catalog import IndexCatalogProvider
 from mkvip.providers.market_universe import (
     MKVIPIndexUniverseProvider,
     NasdaqPublicUniverseProvider,
+    YahooNationalMarketUniverseProvider,
 )
 from mkvip.providers.sec import SecEdgarProvider
 from mkvip.providers.yahoo import YahooExecutionGuard, YahooFinanceProvider
@@ -104,14 +105,15 @@ async def execute_market_scan(scan_id, owner_id) -> None:
         scan = await repository.get(scan_id)
         if scan is None:
             return
+        yahoo_guard = YahooExecutionGuard(
+            max_concurrency=max(settings.yahoo_max_concurrency, 2),
+            response_timeout_seconds=max(
+                settings.yahoo_response_timeout_seconds,
+                60,
+            ),
+        )
         yahoo = YahooFinanceProvider(
-            execution_guard=YahooExecutionGuard(
-                max_concurrency=max(settings.yahoo_max_concurrency, 2),
-                response_timeout_seconds=max(
-                    settings.yahoo_response_timeout_seconds,
-                    60,
-                ),
-            )
+            execution_guard=yahoo_guard,
         )
         service = MarketScanService(
             repository,
@@ -121,6 +123,9 @@ async def execute_market_scan(scan_id, owner_id) -> None:
                 _get_index_provider(),
                 yahoo,
                 concurrency=settings.yahoo_max_concurrency,
+            ),
+            national_universe_provider=YahooNationalMarketUniverseProvider(
+                yahoo_guard,
             ),
             concurrency=settings.yahoo_max_concurrency,
         )

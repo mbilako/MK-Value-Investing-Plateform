@@ -422,9 +422,18 @@ export interface ScreenerPreparation {
 
 export type MarketScanStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
+export interface NationalMarket {
+  code: string;
+  name: string;
+  region: string;
+  currency: string;
+  exchanges: string[];
+}
+
 export interface MarketScanCriteria {
-  market: "US" | "INDEX";
+  market: "US" | "INDEX" | "COUNTRY";
   index_code: string | null;
+  country_code: string | null;
   exchanges: Array<"NASDAQ" | "NYSE" | "AMEX">;
   years: number;
   minimum_decline_pct: number;
@@ -537,6 +546,7 @@ export interface CompanyClient {
   }): Promise<ScreenerPreparation>;
   analyzeWithAI?(payload: AIAnalysisPayload): Promise<AIAnalysis>;
   listMarketScans?(): Promise<MarketScanListItem[]>;
+  listNationalMarkets?(): Promise<NationalMarket[]>;
   createMarketScan?(criteria: MarketScanCriteria): Promise<MarketScan>;
   createMarketScanFromQuestion?(question: string): Promise<MarketScan>;
   getMarketScan?(id: string): Promise<MarketScan>;
@@ -759,6 +769,7 @@ export function createApiClient(): CompanyClient {
         body: JSON.stringify({ company_ids: ids }),
       }),
     listMarketScans: () => request<MarketScanListItem[]>("/market-scans"),
+    listNationalMarkets: () => request<NationalMarket[]>("/market-scans/national-markets"),
     createMarketScan: (criteria) =>
       request<MarketScan>("/market-scans", {
         method: "POST",

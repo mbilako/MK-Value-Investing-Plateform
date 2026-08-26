@@ -11,6 +11,7 @@ const queuedScan: MarketScan = {
   criteria: {
     market: "US",
     index_code: null,
+    country_code: null,
     exchanges: ["NASDAQ", "NYSE", "AMEX"],
     years: 5,
     minimum_decline_pct: 80,
@@ -48,6 +49,7 @@ describe("MarketScanner", () => {
     render(
       <MarketScanner
         listIndices={vi.fn().mockResolvedValue([])}
+        listNationalMarkets={vi.fn().mockResolvedValue([])}
         listScans={listScans}
         createFromQuestion={createFromQuestion}
         createScan={vi.fn()}
@@ -58,7 +60,7 @@ describe("MarketScanner", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Scan des marchés et indices MK-VIP" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Scan des marchés nationaux et indices MK-VIP" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Lancer avec l’agent" }));
 
     expect(createFromQuestion).toHaveBeenCalledWith(
@@ -96,6 +98,7 @@ describe("MarketScanner", () => {
             kind: "broad",
           },
         ])}
+        listNationalMarkets={vi.fn().mockResolvedValue([])}
         listScans={vi.fn().mockResolvedValue([])}
         createFromQuestion={vi.fn()}
         createScan={createScan}
@@ -119,6 +122,58 @@ describe("MarketScanner", () => {
 
     expect(createScan).toHaveBeenCalledWith(
       expect.objectContaining({ market: "INDEX", index_code: "CAC40" }),
+    );
+  });
+
+  it("starts a complete national-market scan and updates the agent request", async () => {
+    const user = userEvent.setup();
+    const createScan = vi.fn().mockResolvedValue({
+      ...queuedScan,
+      criteria: {
+        ...queuedScan.criteria,
+        market: "COUNTRY",
+        country_code: "FR",
+      },
+    });
+    render(
+      <MarketScanner
+        listIndices={vi.fn().mockResolvedValue([])}
+        listNationalMarkets={vi.fn().mockResolvedValue([
+          {
+            code: "FR",
+            name: "France",
+            region: "Europe",
+            currency: "EUR",
+            exchanges: ["PAR"],
+          },
+        ])}
+        listScans={vi.fn().mockResolvedValue([])}
+        createFromQuestion={vi.fn()}
+        createScan={createScan}
+        getScan={vi.fn()}
+        retryScan={vi.fn()}
+        cancelScan={vi.fn()}
+        exportScan={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByText("Critères manuels"));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Univers de la recherche" }),
+      "COUNTRY",
+    );
+    expect(await screen.findByRole("option", { name: "France · EUR" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Demande à l’agent" })).toHaveValue(
+      "Trouve sur le marché national de France les actions ayant baissé d’au moins 80 % sur 5 ans",
+    );
+    await user.click(screen.getByRole("button", { name: "Lancer ces critères" }));
+
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        market: "COUNTRY",
+        index_code: null,
+        country_code: "FR",
+      }),
     );
   });
 });

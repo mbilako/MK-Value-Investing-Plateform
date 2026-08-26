@@ -16,7 +16,11 @@ from mkvip.providers.base import (
     ProviderDataError,
     ProviderPricePoint,
 )
-from mkvip.providers.market_universe import MarketSecurity, MKVIPIndexUniverseProvider
+from mkvip.providers.market_universe import (
+    MarketSecurity,
+    MKVIPIndexUniverseProvider,
+    YahooNationalMarketUniverseProvider,
+)
 from mkvip.repositories.market_scan import SqlAlchemyMarketScanRepository
 from mkvip.schemas.index import IndexCompositionRead, IndexConstituentRead, IndexSummaryRead
 from mkvip.schemas.market_scan import MarketScanCriteria, MarketScanRead, MarketScanResultRead
@@ -159,6 +163,17 @@ class IndexUniverse:
         return [MarketSecurity("DROP", "Drop Corporation", "XPAR", "France", "EUR", None)]
 
 
+class NationalUniverse:
+    name = "National markets"
+
+    def __init__(self) -> None:
+        self.codes = []
+
+    async def list_country_equities(self, country_code):
+        self.codes.append(country_code)
+        return [MarketSecurity("DROP.PA", "Drop SA", "Paris", "France", "EUR", 2e9)]
+
+
 @pytest.mark.asyncio
 async def test_scan_filters_and_calculates_five_year_decline() -> None:
     repository = RecordingRepository()
@@ -224,6 +239,78 @@ async def test_scan_can_use_an_mkvip_index_instead_of_the_full_us_market() -> No
     assert repository.status == "completed"
     assert repository.total == 1
     assert repository.results[0].ticker == "DROP"
+
+
+@pytest.mark.asyncio
+async def test_scan_can_use_a_complete_national_market() -> None:
+    repository = RecordingRepository()
+    national_universe = NationalUniverse()
+    service = MarketScanService(
+        repository,
+        UniverseProvider(),
+        PriceProvider(),
+        national_universe_provider=national_universe,
+        retry_delay_seconds=0,
+    )
+
+    await service.run(
+        uuid.uuid4(),
+        MarketScanCriteria(market="COUNTRY", country_code="fr"),
+    )
+
+    assert national_universe.codes == ["FR"]
+    assert repository.status == "completed"
+    assert repository.total == 1
+
+
+@pytest.mark.asyncio
+async def test_yahoo_national_universe_paginates_and_deduplicates() -> None:
+    calls = []
+
+    class ImmediateGuard:
+        async def run(self, label, operation, *args):
+            return operation(*args)
+
+    def screen_page(market, offset, size):
+        calls.append((market.code, offset, size))
+        if offset == 0:
+            return {
+                "total": 251,
+                "quotes": [
+                    {
+                        "symbol": f"TEST{index}.PA",
+                        "shortName": f"Test {index}",
+                        "exchange": "PAR",
+                        "currency": "EUR",
+                        "marketCap": 1_000_000 + index,
+                        "quoteType": "EQUITY",
+                    }
+                    for index in range(250)
+                ],
+            }
+        return {
+            "total": 251,
+            "quotes": [
+                {
+                    "symbol": "TEST0.PA",
+                    "shortName": "Duplicate",
+                    "exchange": "PAR",
+                    "currency": "EUR",
+                    "marketCap": 1_000_000,
+                    "quoteType": "EQUITY",
+                }
+            ],
+        }
+
+    provider = YahooNationalMarketUniverseProvider(
+        ImmediateGuard(),
+        screen_page=screen_page,
+    )
+    securities = await provider.list_country_equities("FR")
+
+    assert calls == [("FR", 0, 250), ("FR", 250, 250)]
+    assert len(securities) == 250
+    assert securities[0].country == "France"
 
 
 @pytest.mark.asyncio
@@ -313,6 +400,26 @@ def test_agent_question_recognizes_any_mkvip_index_name_or_code() -> None:
     assert (by_name.market, by_name.index_code) == ("INDEX", "SP500")
     assert (by_code.market, by_code.index_code) == ("INDEX", "EUROPEBANKS")
     assert by_code.years == 3
+
+
+def test_agent_question_recognizes_a_complete_national_market() -> None:
+    criteria = criteria_from_question(
+        "Trouve sur le marché français les actions en baisse de 75 % sur 7 ans"
+    )
+
+    assert criteria.market == "COUNTRY"
+    assert criteria.country_code == "FR"
+    assert criteria.years == 7
+    assert criteria.minimum_decline_pct == 75
+
+
+def test_national_market_catalog_is_available_from_the_api(client) -> None:
+    response = client.get("/api/v1/market-scans/national-markets")
+
+    assert response.status_code == 200
+    markets = {item["code"]: item for item in response.json()}
+    assert markets["CN"]["region"] == "Asie"
+    assert markets["FR"]["currency"] == "EUR"
 
 
 def test_completed_scan_can_be_exported_as_a_readable_workbook() -> None:

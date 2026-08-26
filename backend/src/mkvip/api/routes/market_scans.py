@@ -13,6 +13,7 @@ from mkvip.api.dependencies import (
     get_index_provider,
     get_market_scan_repository,
 )
+from mkvip.core.national_markets import NATIONAL_MARKETS
 from mkvip.providers.index_catalog import IndexCatalogProvider
 from mkvip.repositories.market_scan import MarketScanRepository
 from mkvip.schemas.market_scan import (
@@ -20,6 +21,7 @@ from mkvip.schemas.market_scan import (
     MarketScanCreate,
     MarketScanListItem,
     MarketScanRead,
+    NationalMarketRead,
 )
 from mkvip.services.market_scan_export import build_market_scan_workbook
 from mkvip.services.market_scans import criteria_from_question
@@ -104,6 +106,20 @@ async def list_market_scans(repository: Repository) -> list[MarketScanListItem]:
     return await repository.list()
 
 
+@router.get("/national-markets", response_model=list[NationalMarketRead])
+async def list_national_markets() -> list[NationalMarketRead]:
+    return [
+        NationalMarketRead(
+            code=market.code,
+            name=market.name,
+            region=market.region,
+            currency=market.currency,
+            exchanges=list(market.yahoo_exchanges),
+        )
+        for market in NATIONAL_MARKETS
+    ]
+
+
 @router.get("/{scan_id}", response_model=MarketScanRead)
 async def get_market_scan(scan_id: uuid.UUID, repository: Repository) -> MarketScanRead:
     scan = await repository.get(scan_id)
@@ -154,7 +170,7 @@ async def export_market_scan(scan_id: uuid.UUID, repository: Repository) -> Stre
     if scan.status != "completed":
         raise HTTPException(status_code=409, detail="Le scan doit être terminé avant son export.")
     content = build_market_scan_workbook(scan)
-    universe = scan.criteria.index_code or "US"
+    universe = scan.criteria.index_code or scan.criteria.country_code or "US"
     filename = (
         f"MK-VIP_scan_{universe}_{scan.criteria.years}ans_"
         f"{scan.criteria.minimum_decline_pct:g}pct.xlsx"

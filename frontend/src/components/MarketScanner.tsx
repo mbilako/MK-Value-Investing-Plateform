@@ -14,10 +14,12 @@ import type {
   MarketScan,
   MarketScanCriteria,
   MarketScanListItem,
+  NationalMarket,
 } from "../api/client";
 
 interface MarketScannerProps {
   listIndices(): Promise<IndexSummary[]>;
+  listNationalMarkets(): Promise<NationalMarket[]>;
   listScans(): Promise<MarketScanListItem[]>;
   createFromQuestion(question: string): Promise<MarketScan>;
   createScan(criteria: MarketScanCriteria): Promise<MarketScan>;
@@ -40,16 +42,18 @@ const statusLabels = {
 
 function buildAgentQuestion(
   universe: string,
-  market: "US" | "INDEX",
+  market: "US" | "INDEX" | "COUNTRY",
   years: number,
   decline: number,
   minimumMarketCapBillions: number,
 ) {
   const scope = market === "INDEX"
     ? `dans l’indice ${universe}`
-    : "sur le marché américain";
-  const marketCap = market === "US" && minimumMarketCapBillions > 0
-    ? ` avec une capitalisation d’au moins ${minimumMarketCapBillions.toLocaleString("fr-FR")} milliard${minimumMarketCapBillions > 1 ? "s" : ""} de dollars`
+    : market === "COUNTRY"
+      ? `sur le marché national de ${universe}`
+      : "sur le marché américain";
+  const marketCap = market !== "INDEX" && minimumMarketCapBillions > 0
+    ? ` avec une capitalisation d’au moins ${minimumMarketCapBillions.toLocaleString("fr-FR")} milliard${minimumMarketCapBillions > 1 ? "s" : ""} en devise locale`
     : "";
   return `Trouve ${scope} les actions ayant baissé d’au moins ${decline.toLocaleString("fr-FR")} % sur ${years} an${years > 1 ? "s" : ""}${marketCap}`;
 }
@@ -64,6 +68,7 @@ function formatMarketCap(value: number | null) {
 
 export function MarketScanner({
   listIndices,
+  listNationalMarkets,
   listScans,
   createFromQuestion,
   createScan,
@@ -73,9 +78,11 @@ export function MarketScanner({
   exportScan,
 }: MarketScannerProps) {
   const [question, setQuestion] = useState(defaultQuestion);
-  const [market, setMarket] = useState<"US" | "INDEX">("US");
+  const [market, setMarket] = useState<"US" | "INDEX" | "COUNTRY">("US");
   const [indexCode, setIndexCode] = useState("");
+  const [countryCode, setCountryCode] = useState("");
   const [indices, setIndices] = useState<IndexSummary[]>([]);
+  const [nationalMarkets, setNationalMarkets] = useState<NationalMarket[]>([]);
   const [years, setYears] = useState(5);
   const [decline, setDecline] = useState(80);
   const [minimumMarketCapBillions, setMinimumMarketCapBillions] = useState(0);
@@ -100,14 +107,34 @@ export function MarketScanner({
         items.sort((left, right) => left.name.localeCompare(right.name, "fr")),
       ] as const);
   }, [indices]);
+  const countryGroups = useMemo(() => {
+    const groups = new Map<string, NationalMarket[]>();
+    for (const item of nationalMarkets) {
+      groups.set(item.region, [...(groups.get(item.region) ?? []), item]);
+    }
+    return [...groups.entries()]
+      .sort(([left], [right]) => left.localeCompare(right, "fr"))
+      .map(([label, items]) => [
+        label,
+        items.sort((left, right) => left.name.localeCompare(right.name, "fr")),
+      ] as const);
+  }, [nationalMarkets]);
+  const selectedCountry = nationalMarkets.find((item) => item.code === countryCode);
+  const resultCountry = nationalMarkets.find(
+    (item) => item.code === selected?.criteria.country_code,
+  );
   const selectedUniverse = selected?.criteria.market === "INDEX"
     ? indices.find((index) => index.code === selected.criteria.index_code)?.name
       ?? selected.criteria.index_code
       ?? "Indice MK-VIP"
-    : "Marché américain";
+    : selected?.criteria.market === "COUNTRY"
+      ? `Marché national — ${resultCountry?.name ?? selected.criteria.country_code ?? "Pays"}`
+      : "Marché américain";
   const researchUniverse = market === "INDEX"
     ? indices.find((index) => index.code === indexCode)?.name ?? indexCode ?? "Indice MK-VIP"
-    : "Marché américain";
+    : market === "COUNTRY"
+      ? selectedCountry?.name ?? "Marché national"
+      : "Marché américain";
 
   useEffect(() => {
     setQuestion(
@@ -156,6 +183,20 @@ export function MarketScanner({
   }, [listIndices]);
 
   useEffect(() => {
+    let active = true;
+    listNationalMarkets()
+      .then((catalog) => {
+        if (!active) return;
+        setNationalMarkets(catalog);
+        setCountryCode((current) => current || catalog[0]?.code || "");
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [listNationalMarkets]);
+
+  useEffect(() => {
     if (!running || !selectedId) return;
     const timer = window.setInterval(() => {
       getScan(selectedId)
@@ -194,10 +235,11 @@ export function MarketScanner({
       createScan({
         market,
         index_code: market === "INDEX" ? indexCode : null,
+        country_code: market === "COUNTRY" ? countryCode : null,
         exchanges: ["NASDAQ", "NYSE", "AMEX"],
         years,
         minimum_decline_pct: decline,
-        minimum_market_cap: market === "US" &&
+        minimum_market_cap: market !== "INDEX" &&
           minimumMarketCapBillions > 0 ? minimumMarketCapBillions * 1_000_000_000 : null,
         ordinary_shares_only: true,
       }),
@@ -233,10 +275,10 @@ export function MarketScanner({
       <div className="market-scanner__head">
         <div>
           <p className="section-eyebrow"><Bot aria-hidden="true" size={17} /> Agent IA</p>
-          <h2 id="market-scan-title">Scan des marchés et indices MK-VIP</h2>
+          <h2 id="market-scan-title">Scan des marchés nationaux et indices MK-VIP</h2>
           <p>
-            L’agent transforme votre demande en critères vérifiés, puis examine soit le marché
-            américain complet, soit les composantes de l’un des indices disponibles dans MK-VIP.
+            L’agent transforme votre demande en critères vérifiés, puis examine un marché national
+            complet ou les composantes de l’un des indices disponibles dans MK-VIP.
           </p>
         </div>
         <SearchCheck aria-hidden="true" size={34} />
@@ -264,8 +306,9 @@ export function MarketScanner({
         <div className="market-scanner__criteria">
           <label className="field">
             <span>Univers de la recherche</span>
-            <select value={market} onChange={(event) => setMarket(event.target.value as "US" | "INDEX")}>
+            <select value={market} onChange={(event) => setMarket(event.target.value as "US" | "INDEX" | "COUNTRY")}>
               <option value="US">Marché américain complet</option>
+              <option value="COUNTRY">Un autre marché national complet</option>
               <option value="INDEX">Un indice MK-VIP</option>
             </select>
           </label>
@@ -285,6 +328,22 @@ export function MarketScanner({
               </select>
             </label>
           )}
+          {market === "COUNTRY" && (
+            <label className="field market-scanner__index-field">
+              <span>Pays</span>
+              <select value={countryCode} onChange={(event) => setCountryCode(event.target.value)} required>
+                {countryGroups.map(([label, items]) => (
+                  <optgroup label={label} key={label}>
+                    {items.map((item) => (
+                      <option key={item.code} value={item.code}>
+                        {item.name} · {item.currency}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="field">
             <span>Période</span>
             <select value={years} onChange={(event) => setYears(Number(event.target.value))}>
@@ -295,13 +354,13 @@ export function MarketScanner({
             <span>Baisse minimale</span>
             <input type="number" min="1" max="99.9" step="0.1" value={decline} onChange={(event) => setDecline(Number(event.target.value))} />
           </label>
-          {market === "US" && (
+          {market !== "INDEX" && (
             <label className="field">
-              <span>Capitalisation minimale (Md$)</span>
+              <span>Capitalisation minimale (Md, devise locale)</span>
               <input type="number" min="0" step="0.1" value={minimumMarketCapBillions} onChange={(event) => setMinimumMarketCapBillions(Number(event.target.value))} />
             </label>
           )}
-          <button className="button button--secondary" type="button" disabled={busy || running || (market === "INDEX" && !indexCode)} onClick={submitCriteria}>Lancer ces critères</button>
+          <button className="button button--secondary" type="button" disabled={busy || running || (market === "INDEX" && !indexCode) || (market === "COUNTRY" && !countryCode)} onClick={submitCriteria}>Lancer ces critères</button>
         </div>
       </details>
 
@@ -378,14 +437,14 @@ export function MarketScanner({
           <select value={selected?.id ?? ""} onChange={(event) => void getScan(event.target.value).then(setSelected)}>
             {scans.map((scan) => (
               <option value={scan.id} key={scan.id}>
-                {new Date(scan.created_at).toLocaleString("fr-FR")} · {scan.criteria.index_code ?? "Marché US"} · {statusLabels[scan.status]} · {scan.matched_securities} résultats
+                {new Date(scan.created_at).toLocaleString("fr-FR")} · {scan.criteria.index_code ?? nationalMarkets.find((item) => item.code === scan.criteria.country_code)?.name ?? "Marché US"} · {statusLabels[scan.status]} · {scan.matched_securities} résultats
               </option>
             ))}
           </select>
         </label>
       )}
       <p className="market-scan-note">
-        Périmètre : sociétés actuellement cotées et compositions d’indices disponibles dans MK-VIP. Les titres retirés de la cote ne figurent pas dans les univers publics courants. Les cours ajustés sont privilégiés pour tenir compte des opérations sur titres.
+        Périmètre : actions actuellement cotées sur les places nationales principales, avec une capitalisation publiée, et compositions d’indices disponibles dans MK-VIP. Les titres retirés de la cote ne figurent pas dans les univers publics courants. Les cours ajustés sont privilégiés pour tenir compte des opérations sur titres.
       </p>
     </section>
   );

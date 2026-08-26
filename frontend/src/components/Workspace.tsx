@@ -314,6 +314,7 @@ export function Workspace({
             />
           )}
           {client.listMarketScans
+            && client.listNationalMarkets
             && client.createMarketScan
             && client.createMarketScanFromQuestion
             && client.getMarketScan
@@ -322,6 +323,7 @@ export function Workspace({
             && client.exportMarketScan && (
               <MarketScanner
                 listIndices={client.listIndices}
+                listNationalMarkets={client.listNationalMarkets}
                 listScans={client.listMarketScans}
                 createScan={client.createMarketScan}
                 createFromQuestion={client.createMarketScanFromQuestion}

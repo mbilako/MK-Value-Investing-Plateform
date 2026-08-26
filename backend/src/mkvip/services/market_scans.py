@@ -7,11 +7,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from mkvip.core.national_markets import NATIONAL_MARKETS, NationalMarket
 from mkvip.providers.base import FinancialDataProvider, ProviderDataError
 from mkvip.providers.market_universe import (
     IndexUniverseProvider,
     MarketSecurity,
     MarketUniverseProvider,
+    NationalMarketUniverseProvider,
     is_ordinary_share,
 )
 from mkvip.repositories.market_scan import MarketScanRepository
@@ -37,6 +39,7 @@ class MarketScanService:
         price_provider: FinancialDataProvider,
         *,
         index_universe_provider: IndexUniverseProvider | None = None,
+        national_universe_provider: NationalMarketUniverseProvider | None = None,
         concurrency: int = 8,
         retry_delay_seconds: float = 0.25,
     ) -> None:
@@ -44,6 +47,7 @@ class MarketScanService:
         self._universe_provider = universe_provider
         self._price_provider = price_provider
         self._index_universe_provider = index_universe_provider
+        self._national_universe_provider = national_universe_provider
         self._concurrency = max(1, concurrency)
         self._retry_delay_seconds = max(0, retry_delay_seconds)
 
@@ -55,11 +59,17 @@ class MarketScanService:
                 universe = await self._index_universe_provider.list_index_equities(
                     criteria.index_code
                 )
+            elif criteria.market == "COUNTRY":
+                if self._national_universe_provider is None or criteria.country_code is None:
+                    raise ProviderDataError("Les marchés nationaux ne sont pas disponibles.")
+                universe = await self._national_universe_provider.list_country_equities(
+                    criteria.country_code
+                )
             else:
                 universe = await self._universe_provider.list_us_equities(criteria.exchanges)
             if criteria.ordinary_shares_only:
                 universe = [item for item in universe if is_ordinary_share(item)]
-            if criteria.market == "US" and criteria.minimum_market_cap is not None:
+            if criteria.market in {"US", "COUNTRY"} and criteria.minimum_market_cap is not None:
                 universe = [
                     item
                     for item in universe
@@ -222,6 +232,7 @@ class MarketScanService:
 def criteria_from_question(
     question: str,
     indices: list[IndexSummaryRead] | None = None,
+    national_markets: tuple[NationalMarket, ...] = NATIONAL_MARKETS,
 ) -> MarketScanCriteria:
     normalized = question.casefold().replace("−", "-").replace(",", ".")
     percentages = [float(value) for value in re.findall(r"(\d+(?:\.\d+)?)\s*%", normalized)]
@@ -237,9 +248,19 @@ def criteria_from_question(
     exchanges = named_exchanges or ["NASDAQ", "NYSE", "AMEX"]
     market_cap = _market_cap_from_question(normalized)
     selected_index = _index_from_question(question, indices or [])
+    selected_country = (
+        None if selected_index is not None else _country_from_question(question, national_markets)
+    )
     return MarketScanCriteria(
-        market="INDEX" if selected_index is not None else "US",
+        market=(
+            "INDEX"
+            if selected_index is not None
+            else "COUNTRY"
+            if selected_country is not None
+            else "US"
+        ),
         index_code=selected_index.code if selected_index is not None else None,
+        country_code=selected_country.code if selected_country is not None else None,
         exchanges=exchanges,
         years=years,
         minimum_decline_pct=decline,
@@ -268,6 +289,36 @@ def _index_from_question(
             compact_alias = re.sub(r"[^a-z0-9]", "", alias)
             if len(compact_alias) >= 5 and compact_alias in compact:
                 return index
+    return None
+
+
+def _country_from_question(
+    question: str,
+    markets: tuple[NationalMarket, ...],
+) -> NationalMarket | None:
+    normalized = _search_text(question)
+    aliases = {
+        "GB": ("royaume uni", "britannique", "angleterre", "uk"),
+        "CN": ("chine", "chinois", "chinoise"),
+        "DE": ("allemagne", "allemand", "allemande"),
+        "ES": ("espagne", "espagnol", "espagnole"),
+        "FR": ("france", "francais", "francaise"),
+        "GR": ("grece", "grec", "grecque"),
+        "IE": ("irlande", "irlandais", "irlandaise"),
+        "IT": ("italie", "italien", "italienne"),
+        "NL": ("pays bas", "neerlandais", "neerlandaise"),
+        "PT": ("portugal", "portugais", "portugaise"),
+        "CH": ("suisse",),
+        "BE": ("belgique", "belge"),
+    }
+    for market in markets:
+        terms = {_search_text(market.name), *aliases.get(market.code, ())}
+        if any(
+            re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", normalized)
+            for term in terms
+            if term
+        ):
+            return market
     return None
 
 

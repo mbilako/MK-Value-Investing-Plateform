@@ -3,13 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from mkvip.core.national_markets import NationalMarket, get_national_market
 from mkvip.providers.base import FinancialDataProvider, ProviderDataError
 from mkvip.providers.index_catalog import IndexCatalogProvider
+from mkvip.providers.yahoo import YahooExecutionGuard
 from mkvip.schemas.index import IndexConstituentRead
 
 
@@ -33,6 +36,12 @@ class IndexUniverseProvider(Protocol):
     name: str
 
     async def list_index_equities(self, index_code: str) -> list[MarketSecurity]: ...
+
+
+class NationalMarketUniverseProvider(Protocol):
+    name: str
+
+    async def list_country_equities(self, country_code: str) -> list[MarketSecurity]: ...
 
 
 class NasdaqPublicUniverseProvider:
@@ -94,6 +103,102 @@ class NasdaqPublicUniverseProvider:
                 )
             )
         return securities
+
+
+class YahooNationalMarketUniverseProvider:
+    name = "Yahoo Finance — marchés nationaux"
+    _page_size = 250
+
+    def __init__(
+        self,
+        execution_guard: YahooExecutionGuard,
+        *,
+        screen_page: Callable[[NationalMarket, int, int], Mapping[str, Any]] | None = None,
+    ) -> None:
+        self._execution_guard = execution_guard
+        self._screen_page = screen_page or self._fetch_page
+
+    async def list_country_equities(self, country_code: str) -> list[MarketSecurity]:
+        market = get_national_market(country_code)
+        if market is None:
+            raise ProviderDataError("Ce marché national n’est pas pris en charge par MK-VIP.")
+
+        offset = 0
+        total: int | None = None
+        by_ticker: dict[str, MarketSecurity] = {}
+        while total is None or offset < total:
+            try:
+                payload = await self._execution_guard.run(
+                    f"marché {market.name}",
+                    self._screen_page,
+                    market,
+                    offset,
+                    self._page_size,
+                )
+            except ProviderDataError:
+                raise
+            except Exception as exc:
+                raise ProviderDataError(
+                    f"Le marché {market.name} n’a pas pu être chargé depuis Yahoo Finance."
+                ) from exc
+            rows = list((payload or {}).get("quotes") or [])
+            reported_total = (payload or {}).get("total")
+            total = int(reported_total) if reported_total is not None else offset + len(rows)
+            if not rows:
+                break
+            for row in rows:
+                ticker = str(row.get("symbol") or "").strip().upper()
+                name = str(row.get("longName") or row.get("shortName") or "").strip()
+                if not ticker or not name or row.get("quoteType") not in (None, "EQUITY"):
+                    continue
+                by_ticker.setdefault(
+                    ticker,
+                    MarketSecurity(
+                        ticker=ticker,
+                        name=name,
+                        exchange=str(
+                            row.get("fullExchangeName") or row.get("exchange") or ""
+                        ).strip(),
+                        country=market.name,
+                        currency=str(row.get("currency") or market.currency).upper(),
+                        market_cap=_market_cap(row.get("marketCap")),
+                    ),
+                )
+            offset += len(rows)
+            if len(rows) < self._page_size:
+                break
+        if not by_ticker:
+            raise ProviderDataError(
+                f"Aucune action exploitable n’a été trouvée pour le marché {market.name}."
+            )
+        return sorted(by_ticker.values(), key=lambda item: (item.exchange, item.ticker))
+
+    @staticmethod
+    def _fetch_page(
+        market: NationalMarket,
+        offset: int,
+        size: int,
+    ) -> Mapping[str, Any]:
+        import yfinance as yf
+
+        exchange_filter = yf.EquityQuery(
+            "is-in",
+            ["exchange", *market.yahoo_exchanges],
+        )
+        query = yf.EquityQuery(
+            "and",
+            [
+                exchange_filter,
+                yf.EquityQuery("gt", ["intradaymarketcap", 0]),
+            ],
+        )
+        return yf.screen(
+            query,
+            offset=offset,
+            size=size,
+            sortField="ticker",
+            sortAsc=True,
+        )
 
 
 class MKVIPIndexUniverseProvider:
