@@ -9,6 +9,8 @@ from mkvip.db.base import Base
 from mkvip.models import (  # noqa: F401
     CompanyOrm,
     FinancialSnapshotOrm,
+    MarketScanOrm,
+    MarketScanResultOrm,
     ScoringAnalysisOrm,
     SessionOrm,
     UserOrm,

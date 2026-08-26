@@ -4,6 +4,7 @@ import math
 import threading
 from collections.abc import Callable, Mapping
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from datetime import date, timedelta
 from typing import Any
 
 from mkvip.providers.base import (
@@ -21,6 +22,7 @@ from mkvip.providers.base import (
 
 TickerFactory = Callable[[str], Any]
 SearchFactory = Callable[[str], Any]
+DownloadFactory = Callable[..., Any]
 
 
 class YahooExecutionGuard:
@@ -233,6 +235,63 @@ def _fetch_price_history(ticker: Any) -> Mapping[object, Mapping[str, Any]]:
     return history.to_dict(orient="index")
 
 
+def _fetch_price_histories(
+    download: DownloadFactory,
+    tickers: list[str],
+    years: int,
+) -> dict[str, list[ProviderPricePoint]]:
+    today = date.today()
+    try:
+        start = today.replace(year=today.year - years)
+    except ValueError:
+        start = today.replace(year=today.year - years, day=28)
+    start -= timedelta(days=14)
+    end = today + timedelta(days=1)
+    frame = download(
+        tickers=tickers,
+        start=start.isoformat(),
+        end=end.isoformat(),
+        interval="1d",
+        group_by="ticker",
+        auto_adjust=False,
+        progress=False,
+        threads=True,
+    )
+    histories: dict[str, list[ProviderPricePoint]] = {}
+    if frame is None or frame.empty:
+        return histories
+    multi_ticker = getattr(frame.columns, "nlevels", 1) > 1
+    for ticker in tickers:
+        try:
+            ticker_frame = frame[ticker] if multi_ticker else frame
+        except KeyError:
+            continue
+        points = []
+        for timestamp, values in ticker_frame.iterrows():
+            close = values.get("Close")
+            if close is None or not math.isfinite(float(close)):
+                continue
+            adjusted = values.get("Adj Close")
+            points.append(
+                ProviderPricePoint(
+                    timestamp=(
+                        timestamp.isoformat()
+                        if hasattr(timestamp, "isoformat")
+                        else str(timestamp)
+                    ),
+                    close=float(close),
+                    adjusted_close=(
+                        float(adjusted)
+                        if adjusted is not None and math.isfinite(float(adjusted))
+                        else None
+                    ),
+                )
+            )
+        if points:
+            histories[ticker] = points
+    return histories
+
+
 def _fetch_last_price(ticker: Any) -> float:
     return float(ticker.fast_info["last_price"])
 
@@ -265,10 +324,12 @@ class YahooFinanceProvider:
         ticker_factory: TickerFactory | None = None,
         search_factory: SearchFactory | None = None,
         execution_guard: YahooExecutionGuard | None = None,
+        download_factory: DownloadFactory | None = None,
     ) -> None:
         self._ticker_factory = ticker_factory
         self._search_factory = search_factory
         self._execution_guard = execution_guard or _YAHOO_EXECUTION_GUARD
+        self._download_factory = download_factory
         self._tickers: dict[str, Any] = {}
         self._profile_currencies: dict[str, tuple[str, str]] = {}
 
@@ -529,3 +590,23 @@ class YahooFinanceProvider:
                 )
             )
         return sorted(prices, key=lambda point: point.timestamp)
+
+    async def get_price_histories(
+        self,
+        tickers: list[str],
+        years: int,
+    ) -> dict[str, list[ProviderPricePoint]]:
+        if not tickers:
+            return {}
+        if self._download_factory is None:
+            import yfinance
+
+            self._download_factory = yfinance.download
+        return await _run_yahoo(
+            self._execution_guard,
+            f"lot de {len(tickers)} valeurs",
+            _fetch_price_histories,
+            self._download_factory,
+            tickers,
+            years,
+        )

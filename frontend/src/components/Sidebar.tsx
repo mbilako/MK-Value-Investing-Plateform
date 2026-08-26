@@ -5,6 +5,7 @@ import {
   Building2,
   Home,
   ListFilter,
+  ScanSearch,
   SlidersHorizontal,
   Star,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import {
 const navigation = [
   { label: "Vue d’ensemble", icon: Home, href: "#overview" },
   { label: "Sélection", icon: ListFilter, href: "#screener" },
+  { label: "Scan de marché", icon: ScanSearch, href: "#market-scanner" },
   { label: "Entreprises", icon: Building2, href: "#companies" },
   { label: "Favoris", icon: Star, href: "#favorites" },
   { label: "Analyses", icon: BarChart3, href: "#analyses" },

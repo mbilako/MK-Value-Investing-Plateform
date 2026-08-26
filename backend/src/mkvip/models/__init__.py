@@ -3,6 +3,7 @@ from mkvip.models.auth_action import AuthActionTokenOrm, AuthEmailRateLimitOrm
 from mkvip.models.auth_rate_limit import AuthRateLimitOrm
 from mkvip.models.company import CompanyOrm
 from mkvip.models.financial import FinancialSnapshotOrm
+from mkvip.models.market_scan import MarketScanOrm, MarketScanResultOrm
 from mkvip.models.mfa import MfaRecoveryCodeOrm
 from mkvip.models.price import PricePointOrm
 from mkvip.models.scoring import ScoringAnalysisOrm
@@ -19,6 +20,8 @@ __all__ = [
     "CompanyOrm",
     "FinancialSnapshotOrm",
     "MfaRecoveryCodeOrm",
+    "MarketScanOrm",
+    "MarketScanResultOrm",
     "PricePointOrm",
     "ScoringAnalysisOrm",
     "SessionOrm",

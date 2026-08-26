@@ -420,6 +420,58 @@ export interface ScreenerPreparation {
   }>;
 }
 
+export type MarketScanStatus = "queued" | "running" | "completed" | "failed";
+
+export interface MarketScanCriteria {
+  market: "US";
+  exchanges: Array<"NASDAQ" | "NYSE" | "AMEX">;
+  years: number;
+  minimum_decline_pct: number;
+  minimum_market_cap: number | null;
+  ordinary_shares_only: boolean;
+}
+
+export interface MarketScanResult {
+  id: string;
+  ticker: string;
+  name: string;
+  exchange: string;
+  country: string;
+  currency: string;
+  market_cap: number | null;
+  start_date: string;
+  end_date: string;
+  start_price: number;
+  end_price: number;
+  performance_pct: number;
+  price_source: string;
+}
+
+export interface MarketScan {
+  id: string;
+  status: MarketScanStatus;
+  criteria: MarketScanCriteria;
+  request_text: string | null;
+  universe_source: string;
+  price_source: string;
+  total_securities: number;
+  processed_securities: number;
+  matched_securities: number;
+  failed_securities: number;
+  insufficient_history_securities: number;
+  progress_pct: number;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  results: MarketScanResult[];
+}
+
+export type MarketScanListItem = Omit<
+  MarketScan,
+  "universe_source" | "price_source" | "results"
+>;
+
 export type AIAnalysisMode = "summary" | "comparison" | "question";
 
 export interface AIAnalysisPayload {
@@ -483,6 +535,12 @@ export interface CompanyClient {
     limit?: number;
   }): Promise<ScreenerPreparation>;
   analyzeWithAI?(payload: AIAnalysisPayload): Promise<AIAnalysis>;
+  listMarketScans?(): Promise<MarketScanListItem[]>;
+  createMarketScan?(criteria: MarketScanCriteria): Promise<MarketScan>;
+  createMarketScanFromQuestion?(question: string): Promise<MarketScan>;
+  getMarketScan?(id: string): Promise<MarketScan>;
+  retryMarketScan?(id: string): Promise<MarketScan>;
+  exportMarketScan?(id: string): Promise<void>;
   createCompany(payload: CompanyPayload): Promise<Company>;
   updateCompany(id: string, payload: Partial<CompanyPayload>): Promise<Company>;
   archiveCompany(id: string): Promise<Company>;
@@ -575,6 +633,25 @@ export function createApiClient(): CompanyClient {
       return undefined as T;
     }
     return response.json() as Promise<T>;
+  }
+
+  async function download(path: string): Promise<void> {
+    const response = await fetch(`${apiUrl}${path}`, { credentials: "include" });
+    if (!response.ok) {
+      const errorBody: unknown = await response.json().catch(() => null);
+      throw new ApiError(response.status, getErrorMessage(errorBody, response.status));
+    }
+    const disposition = response.headers.get("Content-Disposition") ?? "";
+    const filename = disposition.match(/filename="?([^";]+)"?/)?.[1]
+      ?? "MK-VIP_scan_marche.xlsx";
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   return {
@@ -679,6 +756,21 @@ export function createApiClient(): CompanyClient {
         method: "POST",
         body: JSON.stringify({ company_ids: ids }),
       }),
+    listMarketScans: () => request<MarketScanListItem[]>("/market-scans"),
+    createMarketScan: (criteria) =>
+      request<MarketScan>("/market-scans", {
+        method: "POST",
+        body: JSON.stringify({ criteria }),
+      }),
+    createMarketScanFromQuestion: (question) =>
+      request<MarketScan>("/market-scans/from-question", {
+        method: "POST",
+        body: JSON.stringify({ question }),
+      }),
+    getMarketScan: (id) => request<MarketScan>(`/market-scans/${id}`),
+    retryMarketScan: (id) =>
+      request<MarketScan>(`/market-scans/${id}/retry`, { method: "POST" }),
+    exportMarketScan: (id) => download(`/market-scans/${id}/export.xlsx`),
     listIndices: () => request<IndexSummary[]>("/indices"),
     getIndex: (code) => request<IndexComposition>(`/indices/${code}`),
     addIndexCompanies: (companies) =>

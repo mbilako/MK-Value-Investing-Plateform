@@ -25,6 +25,7 @@ import { FinancialDrawer } from "./FinancialDrawer";
 import { FavoritesSection } from "./FavoritesSection";
 import { IndexBrowserDrawer } from "./IndexBrowserDrawer";
 import { JournalSection } from "./JournalSection";
+import { MarketScanner } from "./MarketScanner";
 import { Sidebar } from "./Sidebar";
 import { SummaryStrip } from "./SummaryStrip";
 import { UserMenu } from "./UserMenu";
@@ -312,6 +313,21 @@ export function Workspace({
               }
             />
           )}
+          {client.listMarketScans
+            && client.createMarketScan
+            && client.createMarketScanFromQuestion
+            && client.getMarketScan
+            && client.retryMarketScan
+            && client.exportMarketScan && (
+              <MarketScanner
+                listScans={client.listMarketScans}
+                createScan={client.createMarketScan}
+                createFromQuestion={client.createMarketScanFromQuestion}
+                getScan={client.getMarketScan}
+                retryScan={client.retryMarketScan}
+                exportScan={client.exportMarketScan}
+              />
+            )}
           <CompanyUniverse
             companies={companies}
             scores={scores}

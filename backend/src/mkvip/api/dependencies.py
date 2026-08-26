@@ -13,12 +13,18 @@ from mkvip.providers.email import EmailSender, SmtpEmailSender
 from mkvip.providers.esef import ESEFFilingsProvider
 from mkvip.providers.fallback import FallbackFinancialDataProvider
 from mkvip.providers.index_catalog import IndexCatalogProvider
+from mkvip.providers.market_universe import NasdaqPublicUniverseProvider
 from mkvip.providers.sec import SecEdgarProvider
 from mkvip.providers.yahoo import YahooExecutionGuard, YahooFinanceProvider
 from mkvip.repositories.company import CompanyRepository
+from mkvip.repositories.market_scan import (
+    MarketScanRepository,
+    SqlAlchemyMarketScanRepository,
+)
 from mkvip.repositories.sqlalchemy import SqlAlchemyCompanyRepository
 from mkvip.schemas.auth import UserRead
 from mkvip.services.ai_usage import AIUsageService
+from mkvip.services.market_scans import MarketScanService
 from mkvip.services.yahoo_imports import YahooImportAdmission
 
 
@@ -76,6 +82,41 @@ def get_company_repository(
     current_user: CurrentUser,
 ) -> CompanyRepository:
     return SqlAlchemyCompanyRepository(session, current_user.id)
+
+
+def get_market_scan_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: CurrentUser,
+) -> MarketScanRepository:
+    return SqlAlchemyMarketScanRepository(session, current_user.id)
+
+
+async def execute_market_scan(scan_id, owner_id) -> None:
+    """Run a persisted scan with its own database session after the HTTP response."""
+    from mkvip.db.session import SessionFactory
+
+    settings = get_settings()
+    async with SessionFactory() as session:
+        repository = SqlAlchemyMarketScanRepository(session, owner_id)
+        scan = await repository.get(scan_id)
+        if scan is None:
+            return
+        yahoo = YahooFinanceProvider(
+            execution_guard=YahooExecutionGuard(
+                max_concurrency=max(settings.yahoo_max_concurrency, 2),
+                response_timeout_seconds=max(
+                    settings.yahoo_response_timeout_seconds,
+                    60,
+                ),
+            )
+        )
+        service = MarketScanService(
+            repository,
+            NasdaqPublicUniverseProvider(),
+            yahoo,
+            concurrency=settings.yahoo_max_concurrency,
+        )
+        await service.run(scan_id, scan.criteria)
 
 
 @lru_cache
