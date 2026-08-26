@@ -8,7 +8,12 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
-from mkvip.api.dependencies import CurrentUser, get_market_scan_repository
+from mkvip.api.dependencies import (
+    CurrentUser,
+    get_index_provider,
+    get_market_scan_repository,
+)
+from mkvip.providers.index_catalog import IndexCatalogProvider
 from mkvip.repositories.market_scan import MarketScanRepository
 from mkvip.schemas.market_scan import (
     AIMarketScanCreate,
@@ -21,6 +26,7 @@ from mkvip.services.market_scans import criteria_from_question
 
 router = APIRouter(prefix="/market-scans", tags=["market-scans"])
 Repository = Annotated[MarketScanRepository, Depends(get_market_scan_repository)]
+IndexProvider = Annotated[IndexCatalogProvider, Depends(get_index_provider)]
 Executor = Callable[[uuid.UUID, uuid.UUID], Awaitable[None]]
 
 
@@ -75,9 +81,10 @@ async def create_market_scan_from_question(
     current_user: CurrentUser,
     background_tasks: BackgroundTasks,
     executor: Annotated[Executor, Depends(get_market_scan_executor)],
+    index_provider: IndexProvider,
 ) -> MarketScanRead:
     try:
-        criteria = criteria_from_question(payload.question)
+        criteria = criteria_from_question(payload.question, index_provider.list_indices())
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -124,6 +131,21 @@ async def retry_market_scan(
     return reset
 
 
+@router.post("/{scan_id}/cancel", response_model=MarketScanRead)
+async def cancel_market_scan(
+    scan_id: uuid.UUID,
+    repository: Repository,
+) -> MarketScanRead:
+    scan = await repository.get(scan_id)
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Scan de marché introuvable.")
+    if scan.status not in {"queued", "running"}:
+        raise HTTPException(status_code=409, detail="Ce scan n’est plus en cours.")
+    cancelled = await repository.cancel(scan_id)
+    assert cancelled is not None
+    return cancelled
+
+
 @router.get("/{scan_id}/export.xlsx")
 async def export_market_scan(scan_id: uuid.UUID, repository: Repository) -> StreamingResponse:
     scan = await repository.get(scan_id)
@@ -132,8 +154,9 @@ async def export_market_scan(scan_id: uuid.UUID, repository: Repository) -> Stre
     if scan.status != "completed":
         raise HTTPException(status_code=409, detail="Le scan doit être terminé avant son export.")
     content = build_market_scan_workbook(scan)
+    universe = scan.criteria.index_code or "US"
     filename = (
-        f"MK-VIP_scan_US_{scan.criteria.years}ans_"
+        f"MK-VIP_scan_{universe}_{scan.criteria.years}ans_"
         f"{scan.criteria.minimum_decline_pct:g}pct.xlsx"
     )
     return StreamingResponse(

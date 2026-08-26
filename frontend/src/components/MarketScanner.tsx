@@ -6,20 +6,24 @@ import {
   Play,
   RefreshCw,
   SearchCheck,
+  Square,
 } from "lucide-react";
 
 import type {
+  IndexSummary,
   MarketScan,
   MarketScanCriteria,
   MarketScanListItem,
 } from "../api/client";
 
 interface MarketScannerProps {
+  listIndices(): Promise<IndexSummary[]>;
   listScans(): Promise<MarketScanListItem[]>;
   createFromQuestion(question: string): Promise<MarketScan>;
   createScan(criteria: MarketScanCriteria): Promise<MarketScan>;
   getScan(id: string): Promise<MarketScan>;
   retryScan(id: string): Promise<MarketScan>;
+  cancelScan(id: string): Promise<MarketScan>;
   exportScan(id: string): Promise<void>;
 }
 
@@ -31,7 +35,24 @@ const statusLabels = {
   running: "Analyse en cours",
   completed: "Terminé",
   failed: "À relancer",
+  cancelled: "Arrêté",
 };
+
+function buildAgentQuestion(
+  universe: string,
+  market: "US" | "INDEX",
+  years: number,
+  decline: number,
+  minimumMarketCapBillions: number,
+) {
+  const scope = market === "INDEX"
+    ? `dans l’indice ${universe}`
+    : "sur le marché américain";
+  const marketCap = market === "US" && minimumMarketCapBillions > 0
+    ? ` avec une capitalisation d’au moins ${minimumMarketCapBillions.toLocaleString("fr-FR")} milliard${minimumMarketCapBillions > 1 ? "s" : ""} de dollars`
+    : "";
+  return `Trouve ${scope} les actions ayant baissé d’au moins ${decline.toLocaleString("fr-FR")} % sur ${years} an${years > 1 ? "s" : ""}${marketCap}`;
+}
 
 function formatMarketCap(value: number | null) {
   if (value === null) return "—";
@@ -42,14 +63,19 @@ function formatMarketCap(value: number | null) {
 }
 
 export function MarketScanner({
+  listIndices,
   listScans,
   createFromQuestion,
   createScan,
   getScan,
   retryScan,
+  cancelScan,
   exportScan,
 }: MarketScannerProps) {
   const [question, setQuestion] = useState(defaultQuestion);
+  const [market, setMarket] = useState<"US" | "INDEX">("US");
+  const [indexCode, setIndexCode] = useState("");
+  const [indices, setIndices] = useState<IndexSummary[]>([]);
   const [years, setYears] = useState(5);
   const [decline, setDecline] = useState(80);
   const [minimumMarketCapBillions, setMinimumMarketCapBillions] = useState(0);
@@ -61,6 +87,39 @@ export function MarketScanner({
   const running = selected?.status === "queued" || selected?.status === "running";
   const selectedId = selected?.id;
   const displayedResults = useMemo(() => selected?.results.slice(0, 100) ?? [], [selected]);
+  const indexGroups = useMemo(() => {
+    const groups = new Map<string, IndexSummary[]>();
+    for (const index of indices) {
+      const label = `${index.region ?? "Autre"} · ${index.country ?? "Non renseigné"}`;
+      groups.set(label, [...(groups.get(label) ?? []), index]);
+    }
+    return [...groups.entries()]
+      .sort(([left], [right]) => left.localeCompare(right, "fr"))
+      .map(([label, items]) => [
+        label,
+        items.sort((left, right) => left.name.localeCompare(right.name, "fr")),
+      ] as const);
+  }, [indices]);
+  const selectedUniverse = selected?.criteria.market === "INDEX"
+    ? indices.find((index) => index.code === selected.criteria.index_code)?.name
+      ?? selected.criteria.index_code
+      ?? "Indice MK-VIP"
+    : "Marché américain";
+  const researchUniverse = market === "INDEX"
+    ? indices.find((index) => index.code === indexCode)?.name ?? indexCode ?? "Indice MK-VIP"
+    : "Marché américain";
+
+  useEffect(() => {
+    setQuestion(
+      buildAgentQuestion(
+        researchUniverse,
+        market,
+        years,
+        decline,
+        minimumMarketCapBillions,
+      ),
+    );
+  }, [decline, market, minimumMarketCapBillions, researchUniverse, years]);
 
   const refreshList = async () => {
     const history = await listScans();
@@ -81,6 +140,20 @@ export function MarketScanner({
       active = false;
     };
   }, [getScan, listScans]);
+
+  useEffect(() => {
+    let active = true;
+    listIndices()
+      .then((catalog) => {
+        if (!active) return;
+        setIndices(catalog);
+        setIndexCode((current) => current || catalog[0]?.code || "");
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [listIndices]);
 
   useEffect(() => {
     if (!running || !selectedId) return;
@@ -119,15 +192,40 @@ export function MarketScanner({
   const submitCriteria = () => {
     void start(() =>
       createScan({
-        market: "US",
+        market,
+        index_code: market === "INDEX" ? indexCode : null,
         exchanges: ["NASDAQ", "NYSE", "AMEX"],
         years,
         minimum_decline_pct: decline,
-        minimum_market_cap:
+        minimum_market_cap: market === "US" &&
           minimumMarketCapBillions > 0 ? minimumMarketCapBillions * 1_000_000_000 : null,
         ordinary_shares_only: true,
       }),
     );
+  };
+
+  const stop = async () => {
+    if (!selectedId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const scan = await cancelScan(selectedId);
+      setSelected(scan);
+      setQuestion(
+        buildAgentQuestion(
+          researchUniverse,
+          market,
+          years,
+          decline,
+          minimumMarketCapBillions,
+        ),
+      );
+      await refreshList();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "L’analyse n’a pas pu être arrêtée.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -135,10 +233,10 @@ export function MarketScanner({
       <div className="market-scanner__head">
         <div>
           <p className="section-eyebrow"><Bot aria-hidden="true" size={17} /> Agent IA</p>
-          <h2 id="market-scan-title">Scan du marché américain</h2>
+          <h2 id="market-scan-title">Scan des marchés et indices MK-VIP</h2>
           <p>
-            L’agent transforme votre demande en critères vérifiés, puis le moteur examine les
-            actions ordinaires du NASDAQ, du NYSE et de l’AMEX en arrière-plan.
+            L’agent transforme votre demande en critères vérifiés, puis examine soit le marché
+            américain complet, soit les composantes de l’un des indices disponibles dans MK-VIP.
           </p>
         </div>
         <SearchCheck aria-hidden="true" size={34} />
@@ -165,6 +263,29 @@ export function MarketScanner({
         <summary>Critères manuels</summary>
         <div className="market-scanner__criteria">
           <label className="field">
+            <span>Univers de la recherche</span>
+            <select value={market} onChange={(event) => setMarket(event.target.value as "US" | "INDEX")}>
+              <option value="US">Marché américain complet</option>
+              <option value="INDEX">Un indice MK-VIP</option>
+            </select>
+          </label>
+          {market === "INDEX" && (
+            <label className="field market-scanner__index-field">
+              <span>Indice</span>
+              <select value={indexCode} onChange={(event) => setIndexCode(event.target.value)} required>
+                {indexGroups.map(([label, items]) => (
+                  <optgroup label={label} key={label}>
+                    {items.map((index) => (
+                      <option key={index.code} value={index.code}>
+                        {index.name} · {index.kind === "sector" ? "sectoriel" : "général"}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="field">
             <span>Période</span>
             <select value={years} onChange={(event) => setYears(Number(event.target.value))}>
               {[1, 3, 5, 7, 10].map((value) => <option key={value} value={value}>{value} ans</option>)}
@@ -174,11 +295,13 @@ export function MarketScanner({
             <span>Baisse minimale</span>
             <input type="number" min="1" max="99.9" step="0.1" value={decline} onChange={(event) => setDecline(Number(event.target.value))} />
           </label>
-          <label className="field">
-            <span>Capitalisation minimale (Md$)</span>
-            <input type="number" min="0" step="0.1" value={minimumMarketCapBillions} onChange={(event) => setMinimumMarketCapBillions(Number(event.target.value))} />
-          </label>
-          <button className="button button--secondary" type="button" disabled={busy || running} onClick={submitCriteria}>Lancer ces critères</button>
+          {market === "US" && (
+            <label className="field">
+              <span>Capitalisation minimale (Md$)</span>
+              <input type="number" min="0" step="0.1" value={minimumMarketCapBillions} onChange={(event) => setMinimumMarketCapBillions(Number(event.target.value))} />
+            </label>
+          )}
+          <button className="button button--secondary" type="button" disabled={busy || running || (market === "INDEX" && !indexCode)} onClick={submitCriteria}>Lancer ces critères</button>
         </div>
       </details>
 
@@ -197,6 +320,11 @@ export function MarketScanner({
               </small>
             </div>
             <div className="market-scan-result__actions">
+              {running && (
+                <button className="button button--secondary" disabled={busy} onClick={() => void stop()}>
+                  <Square aria-hidden="true" size={16} /> Arrêter l’analyse
+                </button>
+              )}
               {selected.status === "failed" && (
                 <button className="button button--secondary" onClick={() => void start(() => retryScan(selected.id))}>
                   <RefreshCw aria-hidden="true" size={17} /> Relancer
@@ -214,6 +342,7 @@ export function MarketScanner({
           </div>
           <dl className="market-scan-summary">
             <div><dt>Résultats</dt><dd>{selected.matched_securities}</dd></div>
+            <div><dt>Univers analysé</dt><dd>{selectedUniverse}</dd></div>
             <div><dt>Période</dt><dd>{selected.criteria.years} ans</dd></div>
             <div><dt>Baisse</dt><dd>≥ {selected.criteria.minimum_decline_pct} %</dd></div>
             <div><dt>Historiques insuffisants</dt><dd>{selected.insufficient_history_securities}</dd></div>
@@ -249,14 +378,14 @@ export function MarketScanner({
           <select value={selected?.id ?? ""} onChange={(event) => void getScan(event.target.value).then(setSelected)}>
             {scans.map((scan) => (
               <option value={scan.id} key={scan.id}>
-                {new Date(scan.created_at).toLocaleString("fr-FR")} · {statusLabels[scan.status]} · {scan.matched_securities} résultats
+                {new Date(scan.created_at).toLocaleString("fr-FR")} · {scan.criteria.index_code ?? "Marché US"} · {statusLabels[scan.status]} · {scan.matched_securities} résultats
               </option>
             ))}
           </select>
         </label>
       )}
       <p className="market-scan-note">
-        Périmètre : sociétés actuellement cotées. Les titres retirés de la cote ne figurent pas dans l’univers public courant. Les cours ajustés sont privilégiés pour tenir compte des opérations sur titres.
+        Périmètre : sociétés actuellement cotées et compositions d’indices disponibles dans MK-VIP. Les titres retirés de la cote ne figurent pas dans les univers publics courants. Les cours ajustés sont privilégiés pour tenir compte des opérations sur titres.
       </p>
     </section>
   );

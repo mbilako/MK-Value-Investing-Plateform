@@ -23,7 +23,7 @@ class MarketScanRepository(Protocol):
     ) -> MarketScanRead: ...
     async def list(self) -> list[MarketScanListItem]: ...
     async def get(self, scan_id: uuid.UUID) -> MarketScanRead | None: ...
-    async def mark_running(self, scan_id: uuid.UUID, total: int) -> None: ...
+    async def mark_running(self, scan_id: uuid.UUID, total: int) -> bool: ...
     async def record_batch(
         self,
         scan_id: uuid.UUID,
@@ -33,9 +33,10 @@ class MarketScanRepository(Protocol):
         matched: int,
         failed: int,
         insufficient: int,
-    ) -> None: ...
+    ) -> bool: ...
     async def mark_completed(self, scan_id: uuid.UUID) -> None: ...
     async def mark_failed(self, scan_id: uuid.UUID, message: str) -> None: ...
+    async def cancel(self, scan_id: uuid.UUID) -> MarketScanRead | None: ...
     async def reset(self, scan_id: uuid.UUID) -> MarketScanRead | None: ...
 
 
@@ -52,7 +53,11 @@ class SqlAlchemyMarketScanRepository:
             status="queued",
             criteria=criteria.model_dump(mode="json"),
             request_text=request_text,
-            universe_source="Nasdaq public screener",
+            universe_source=(
+                "Catalogue d’indices MK-VIP"
+                if criteria.market == "INDEX"
+                else "Nasdaq public screener"
+            ),
             price_source="Yahoo Finance",
         )
         self._session.add(record)
@@ -80,14 +85,17 @@ class SqlAlchemyMarketScanRepository:
         )
         return self._read(record, list(results))
 
-    async def mark_running(self, scan_id: uuid.UUID, total: int) -> None:
+    async def mark_running(self, scan_id: uuid.UUID, total: int) -> bool:
         record = await self._required(scan_id)
+        if record.status == "cancelled":
+            return False
         record.status = "running"
         record.total_securities = total
         record.started_at = datetime.now(UTC)
         record.completed_at = None
         record.error_message = None
         await self._session.commit()
+        return True
 
     async def record_batch(
         self,
@@ -98,8 +106,10 @@ class SqlAlchemyMarketScanRepository:
         matched: int,
         failed: int,
         insufficient: int,
-    ) -> None:
+    ) -> bool:
         record = await self._required(scan_id)
+        if record.status == "cancelled":
+            return False
         for result in results:
             self._session.add(
                 MarketScanResultOrm(
@@ -112,19 +122,40 @@ class SqlAlchemyMarketScanRepository:
         record.failed_securities = failed
         record.insufficient_history_securities = insufficient
         await self._session.commit()
+        return True
 
     async def mark_completed(self, scan_id: uuid.UUID) -> None:
         record = await self._required(scan_id)
+        if record.status == "cancelled":
+            return
         record.status = "completed"
         record.completed_at = datetime.now(UTC)
         await self._session.commit()
 
     async def mark_failed(self, scan_id: uuid.UUID, message: str) -> None:
         record = await self._required(scan_id)
+        if record.status == "cancelled":
+            return
         record.status = "failed"
         record.error_message = message[:2000]
         record.completed_at = datetime.now(UTC)
         await self._session.commit()
+
+    async def cancel(self, scan_id: uuid.UUID) -> MarketScanRead | None:
+        record = await self._owned(scan_id)
+        if record is None:
+            return None
+        if record.status in {"queued", "running"}:
+            record.status = "cancelled"
+            record.completed_at = datetime.now(UTC)
+            record.error_message = None
+            await self._session.commit()
+        results = await self._session.scalars(
+            select(MarketScanResultOrm)
+            .where(MarketScanResultOrm.scan_id == scan_id)
+            .order_by(MarketScanResultOrm.performance_pct)
+        )
+        return self._read(record, list(results))
 
     async def reset(self, scan_id: uuid.UUID) -> MarketScanRead | None:
         record = await self._owned(scan_id)
@@ -151,7 +182,7 @@ class SqlAlchemyMarketScanRepository:
             select(MarketScanOrm).where(
                 MarketScanOrm.id == scan_id,
                 MarketScanOrm.owner_id == self._owner_id,
-            )
+            ).execution_options(populate_existing=True)
         )
 
     async def _required(self, scan_id: uuid.UUID) -> MarketScanOrm:

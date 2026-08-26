@@ -86,6 +86,10 @@
   flex: 1 1 180px;
 }
 
+.market-scanner__criteria .market-scanner__index-field {
+  flex-basis: 320px;
+}
+
 .market-scan-result {
   background: var(--subtle);
   border: 1px solid var(--border);
@@ -133,6 +137,11 @@
 .market-scan-status--failed {
   background: #fde5e2;
   color: #9f2f26;
+}
+
+.market-scan-status--cancelled {
+  background: #e8ebef;
+  color: #435067;
 }
 
 .market-scan-progress {

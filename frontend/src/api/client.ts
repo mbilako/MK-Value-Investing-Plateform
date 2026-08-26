@@ -420,10 +420,11 @@ export interface ScreenerPreparation {
   }>;
 }
 
-export type MarketScanStatus = "queued" | "running" | "completed" | "failed";
+export type MarketScanStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface MarketScanCriteria {
-  market: "US";
+  market: "US" | "INDEX";
+  index_code: string | null;
   exchanges: Array<"NASDAQ" | "NYSE" | "AMEX">;
   years: number;
   minimum_decline_pct: number;
@@ -540,6 +541,7 @@ export interface CompanyClient {
   createMarketScanFromQuestion?(question: string): Promise<MarketScan>;
   getMarketScan?(id: string): Promise<MarketScan>;
   retryMarketScan?(id: string): Promise<MarketScan>;
+  cancelMarketScan?(id: string): Promise<MarketScan>;
   exportMarketScan?(id: string): Promise<void>;
   createCompany(payload: CompanyPayload): Promise<Company>;
   updateCompany(id: string, payload: Partial<CompanyPayload>): Promise<Company>;
@@ -770,6 +772,8 @@ export function createApiClient(): CompanyClient {
     getMarketScan: (id) => request<MarketScan>(`/market-scans/${id}`),
     retryMarketScan: (id) =>
       request<MarketScan>(`/market-scans/${id}/retry`, { method: "POST" }),
+    cancelMarketScan: (id) =>
+      request<MarketScan>(`/market-scans/${id}/cancel`, { method: "POST" }),
     exportMarketScan: (id) => download(`/market-scans/${id}/export.xlsx`),
     listIndices: () => request<IndexSummary[]>("/indices"),
     getIndex: (code) => request<IndexComposition>(`/indices/${code}`),

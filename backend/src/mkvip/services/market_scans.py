@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import re
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
 
 from mkvip.providers.base import FinancialDataProvider, ProviderDataError
 from mkvip.providers.market_universe import (
+    IndexUniverseProvider,
     MarketSecurity,
     MarketUniverseProvider,
     is_ordinary_share,
 )
 from mkvip.repositories.market_scan import MarketScanRepository
+from mkvip.schemas.index import IndexSummaryRead
 from mkvip.schemas.market_scan import (
     MarketScanCriteria,
     MarketScanResultRead,
@@ -33,28 +36,38 @@ class MarketScanService:
         universe_provider: MarketUniverseProvider,
         price_provider: FinancialDataProvider,
         *,
+        index_universe_provider: IndexUniverseProvider | None = None,
         concurrency: int = 8,
         retry_delay_seconds: float = 0.25,
     ) -> None:
         self._repository = repository
         self._universe_provider = universe_provider
         self._price_provider = price_provider
+        self._index_universe_provider = index_universe_provider
         self._concurrency = max(1, concurrency)
         self._retry_delay_seconds = max(0, retry_delay_seconds)
 
     async def run(self, scan_id: uuid.UUID, criteria: MarketScanCriteria) -> None:
         try:
-            universe = await self._universe_provider.list_us_equities(criteria.exchanges)
+            if criteria.market == "INDEX":
+                if self._index_universe_provider is None or criteria.index_code is None:
+                    raise ProviderDataError("Le catalogue d’indices MK-VIP n’est pas disponible.")
+                universe = await self._index_universe_provider.list_index_equities(
+                    criteria.index_code
+                )
+            else:
+                universe = await self._universe_provider.list_us_equities(criteria.exchanges)
             if criteria.ordinary_shares_only:
                 universe = [item for item in universe if is_ordinary_share(item)]
-            if criteria.minimum_market_cap is not None:
+            if criteria.market == "US" and criteria.minimum_market_cap is not None:
                 universe = [
                     item
                     for item in universe
                     if item.market_cap is not None
                     and item.market_cap >= criteria.minimum_market_cap
                 ]
-            await self._repository.mark_running(scan_id, len(universe))
+            if not await self._repository.mark_running(scan_id, len(universe)):
+                return
             processed = matched = failed = insufficient = 0
             pending_results: list[MarketScanResultRead] = []
             bulk_getter = getattr(self._price_provider, "get_price_histories", None)
@@ -79,7 +92,7 @@ class MarketScanService:
                         matched += 1
                         pending_results.append(evaluation.result)
                 if pending_results or processed % 50 == 0 or processed == len(universe):
-                    await self._repository.record_batch(
+                    recorded = await self._repository.record_batch(
                         scan_id,
                         pending_results,
                         processed=processed,
@@ -87,6 +100,8 @@ class MarketScanService:
                         failed=failed,
                         insufficient=insufficient,
                     )
+                    if not recorded:
+                        return
                     pending_results = []
             await self._repository.mark_completed(scan_id)
         except Exception as exc:
@@ -204,7 +219,10 @@ class MarketScanService:
         )
 
 
-def criteria_from_question(question: str) -> MarketScanCriteria:
+def criteria_from_question(
+    question: str,
+    indices: list[IndexSummaryRead] | None = None,
+) -> MarketScanCriteria:
     normalized = question.casefold().replace("−", "-").replace(",", ".")
     percentages = [float(value) for value in re.findall(r"(\d+(?:\.\d+)?)\s*%", normalized)]
     decline = percentages[0] if percentages else 80.0
@@ -218,12 +236,45 @@ def criteria_from_question(question: str) -> MarketScanCriteria:
     ]
     exchanges = named_exchanges or ["NASDAQ", "NYSE", "AMEX"]
     market_cap = _market_cap_from_question(normalized)
+    selected_index = _index_from_question(question, indices or [])
     return MarketScanCriteria(
+        market="INDEX" if selected_index is not None else "US",
+        index_code=selected_index.code if selected_index is not None else None,
         exchanges=exchanges,
         years=years,
         minimum_decline_pct=decline,
-        minimum_market_cap=market_cap,
+        minimum_market_cap=market_cap if selected_index is None else None,
     )
+
+
+def _index_from_question(
+    question: str,
+    indices: list[IndexSummaryRead],
+) -> IndexSummaryRead | None:
+    normalized = _search_text(question)
+    compact = re.sub(r"[^a-z0-9]", "", normalized)
+    candidates = sorted(
+        indices,
+        key=lambda item: max(len(item.name), len(item.code)),
+        reverse=True,
+    )
+    for index in candidates:
+        aliases = {_search_text(index.name), _search_text(index.code)}
+        for alias in aliases:
+            if not alias:
+                continue
+            if re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", normalized):
+                return index
+            compact_alias = re.sub(r"[^a-z0-9]", "", alias)
+            if len(compact_alias) >= 5 and compact_alias in compact:
+                return index
+    return None
+
+
+def _search_text(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value.casefold())
+    without_accents = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", without_accents).split())
 
 
 def _market_cap_from_question(question: str) -> float | None:

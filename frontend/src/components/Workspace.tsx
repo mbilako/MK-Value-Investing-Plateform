@@ -318,13 +318,16 @@ export function Workspace({
             && client.createMarketScanFromQuestion
             && client.getMarketScan
             && client.retryMarketScan
+            && client.cancelMarketScan
             && client.exportMarketScan && (
               <MarketScanner
+                listIndices={client.listIndices}
                 listScans={client.listMarketScans}
                 createScan={client.createMarketScan}
                 createFromQuestion={client.createMarketScanFromQuestion}
                 getScan={client.getMarketScan}
                 retryScan={client.retryMarketScan}
+                cancelScan={client.cancelMarketScan}
                 exportScan={client.exportMarketScan}
               />
             )}

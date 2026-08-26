@@ -13,11 +13,12 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
     workbook = Workbook()
     summary = workbook.active
     summary.title = "Synthèse"
+    is_index_scan = scan.criteria.market == "INDEX"
     rows = [
         ("MK-VIP — Scan de marché", None),
         ("Statut", scan.status),
-        ("Marché", "États-Unis"),
-        ("Places", ", ".join(scan.criteria.exchanges)),
+        ("Univers", scan.criteria.index_code if is_index_scan else "Marché américain"),
+        ("Places", "Indice MK-VIP" if is_index_scan else ", ".join(scan.criteria.exchanges)),
         ("Période", f"{scan.criteria.years} ans"),
         ("Baisse minimale", scan.criteria.minimum_decline_pct / 100),
         ("Capitalisation minimale", scan.criteria.minimum_market_cap),

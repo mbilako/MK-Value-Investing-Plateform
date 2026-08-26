@@ -13,7 +13,10 @@ from mkvip.providers.email import EmailSender, SmtpEmailSender
 from mkvip.providers.esef import ESEFFilingsProvider
 from mkvip.providers.fallback import FallbackFinancialDataProvider
 from mkvip.providers.index_catalog import IndexCatalogProvider
-from mkvip.providers.market_universe import NasdaqPublicUniverseProvider
+from mkvip.providers.market_universe import (
+    MKVIPIndexUniverseProvider,
+    NasdaqPublicUniverseProvider,
+)
 from mkvip.providers.sec import SecEdgarProvider
 from mkvip.providers.yahoo import YahooExecutionGuard, YahooFinanceProvider
 from mkvip.repositories.company import CompanyRepository
@@ -114,6 +117,11 @@ async def execute_market_scan(scan_id, owner_id) -> None:
             repository,
             NasdaqPublicUniverseProvider(),
             yahoo,
+            index_universe_provider=MKVIPIndexUniverseProvider(
+                _get_index_provider(),
+                yahoo,
+                concurrency=settings.yahoo_max_concurrency,
+            ),
             concurrency=settings.yahoo_max_concurrency,
         )
         await service.run(scan_id, scan.criteria)

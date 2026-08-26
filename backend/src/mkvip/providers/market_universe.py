@@ -8,7 +8,9 @@ from typing import Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from mkvip.providers.base import ProviderDataError
+from mkvip.providers.base import FinancialDataProvider, ProviderDataError
+from mkvip.providers.index_catalog import IndexCatalogProvider
+from mkvip.schemas.index import IndexConstituentRead
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,12 @@ class MarketUniverseProvider(Protocol):
     name: str
 
     async def list_us_equities(self, exchanges: list[str]) -> list[MarketSecurity]: ...
+
+
+class IndexUniverseProvider(Protocol):
+    name: str
+
+    async def list_index_equities(self, index_code: str) -> list[MarketSecurity]: ...
 
 
 class NasdaqPublicUniverseProvider:
@@ -88,6 +96,71 @@ class NasdaqPublicUniverseProvider:
         return securities
 
 
+class MKVIPIndexUniverseProvider:
+    name = "Catalogue d’indices MK-VIP"
+
+    def __init__(
+        self,
+        catalog: IndexCatalogProvider,
+        discovery: FinancialDataProvider,
+        *,
+        concurrency: int = 8,
+    ) -> None:
+        self._catalog = catalog
+        self._discovery = discovery
+        self._semaphore = asyncio.Semaphore(max(1, concurrency))
+
+    async def list_index_equities(self, index_code: str) -> list[MarketSecurity]:
+        composition = await self._catalog.get_composition(index_code)
+        resolved = await asyncio.gather(
+            *(self._resolve(constituent) for constituent in composition.constituents)
+        )
+        by_ticker: dict[str, MarketSecurity] = {}
+        for security in resolved:
+            if security is not None:
+                by_ticker.setdefault(security.ticker, security)
+        if not by_ticker:
+            raise ProviderDataError(
+                f"Aucun symbole boursier exploitable n’a été trouvé pour {composition.name}."
+            )
+        return list(by_ticker.values())
+
+    async def _resolve(
+        self,
+        constituent: IndexConstituentRead,
+    ) -> MarketSecurity | None:
+        ticker = _public_ticker(constituent.ticker, constituent.mic)
+        if ticker is None:
+            ticker = await self._discover_ticker(constituent)
+        if ticker is None:
+            return None
+        return MarketSecurity(
+            ticker=ticker,
+            name=constituent.name,
+            exchange=constituent.trading_location or constituent.mic,
+            country=constituent.country,
+            currency=(constituent.currency or "EUR").upper(),
+            market_cap=None,
+        )
+
+    async def _discover_ticker(
+        self,
+        constituent: IndexConstituentRead,
+    ) -> str | None:
+        async with self._semaphore:
+            for query in (constituent.isin, constituent.name):
+                if not query:
+                    continue
+                try:
+                    results = await self._discovery.search_company(query)
+                except ProviderDataError:
+                    continue
+                match = _select_market_result(results, constituent.mic)
+                if match is not None:
+                    return match.ticker.upper()
+        return None
+
+
 def is_ordinary_share(security: MarketSecurity) -> bool:
     name = security.name.casefold()
     excluded_names = (
@@ -107,6 +180,61 @@ def is_ordinary_share(security: MarketSecurity) -> bool:
     if any(token in name for token in excluded_names):
         return False
     return not bool(re.search(r"(?:[./-](?:W|WS|R|U))$", security.ticker))
+
+
+def _public_ticker(ticker: str | None, mic: str) -> str | None:
+    if not ticker:
+        return None
+    normalized = ticker.strip().upper()
+    if normalized in {"-", "--", "N/A"}:
+        return None
+    normalized_mic = mic.upper()
+    if normalized_mic in {"XNAS", "XNYS", "ARCX"}:
+        return {
+            "BFB": "BF-B",
+            "BRKB": "BRK-B",
+        }.get(normalized, normalized.replace(".", "-"))
+    suffixes = _market_suffixes(normalized_mic)
+    if not suffixes or normalized.endswith(suffixes):
+        return normalized
+    local_symbol = re.sub(r"[\s./]+", "-", normalized).strip("-")
+    return f"{local_symbol}{suffixes[0]}"
+
+
+def _select_market_result(results: list, mic: str):
+    if not results:
+        return None
+    suffixes = _market_suffixes(mic)
+    if suffixes:
+        return next(
+            (result for result in results if result.ticker.upper().endswith(suffixes)),
+            None,
+        )
+    return results[0]
+
+
+def _market_suffixes(mic: str) -> tuple[str, ...]:
+    return {
+        "XPAR": (".PA",),
+        "XAMS": (".AS",),
+        "XBRU": (".BR",),
+        "XLIS": (".LS",),
+        "XDUB": (".IR",),
+        "XETR": (".DE",),
+        "XLON": (".L",),
+        "XMAD": (".MC",),
+        "XMIL": (".MI",),
+        "XSWX": (".SW",),
+        "XATH": (".AT",),
+        "XCSE": (".CO",),
+        "XHEL": (".HE",),
+        "XOSL": (".OL",),
+        "XSTO": (".ST",),
+        "XWAR": (".WA",),
+        "XWBO": (".VI",),
+        "XSHG": (".SS",),
+        "XSHE": (".SZ",),
+    }.get(mic.upper(), ())
 
 
 def _market_cap(value: object) -> float | None:

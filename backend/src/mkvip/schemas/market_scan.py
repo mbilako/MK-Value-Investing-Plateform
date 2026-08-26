@@ -4,14 +4,15 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-MarketScanStatus = Literal["queued", "running", "completed", "failed"]
+MarketScanStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
 USExchange = Literal["NASDAQ", "NYSE", "AMEX"]
 
 
 class MarketScanCriteria(BaseModel):
-    market: Literal["US"] = "US"
+    market: Literal["US", "INDEX"] = "US"
+    index_code: str | None = Field(default=None, max_length=20)
     exchanges: list[USExchange] = Field(
         default_factory=lambda: ["NASDAQ", "NYSE", "AMEX"],
         min_length=1,
@@ -26,6 +27,22 @@ class MarketScanCriteria(BaseModel):
     @classmethod
     def deduplicate_exchanges(cls, value: list[USExchange]) -> list[USExchange]:
         return list(dict.fromkeys(value))
+
+    @field_validator("index_code")
+    @classmethod
+    def normalize_index_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper().replace("-", "").replace(" ", "")
+        return normalized or None
+
+    @model_validator(mode="after")
+    def require_index_code_for_index_scan(self):
+        if self.market == "INDEX" and self.index_code is None:
+            raise ValueError("Un indice MK-VIP est requis pour ce scan.")
+        if self.market == "US":
+            self.index_code = None
+        return self
 
 
 class MarketScanCreate(BaseModel):
