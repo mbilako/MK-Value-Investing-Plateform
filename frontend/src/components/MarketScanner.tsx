@@ -42,20 +42,76 @@ const statusLabels = {
 
 function buildAgentQuestion(
   universe: string,
-  market: "US" | "INDEX" | "COUNTRY",
-  years: number,
-  decline: number,
-  minimumMarketCapBillions: number,
+  options: {
+    market: "US" | "INDEX" | "COUNTRY" | "MKVIP";
+    years: number;
+    direction: "decline" | "gain" | "any";
+    threshold: number;
+    minimumMarketCapBillions: number | "";
+    maximumMarketCapBillions: number | "";
+    maximumPe: number | "";
+    maximumPriceToBook: number | "";
+    minimumDividendYield: number | "";
+    minimumMkScore: number | "";
+    minimumAnnualizedReturn: number | "";
+    maximumVolatility: number | "";
+    minimumDrawdown: number | "";
+    sortBy: MarketScanCriteria["sort_by"];
+    sortDirection: MarketScanCriteria["sort_direction"];
+    resultLimit: number | "";
+  },
 ) {
-  const scope = market === "INDEX"
+  const scope = options.market === "INDEX"
     ? `dans l’indice ${universe}`
-    : market === "COUNTRY"
+    : options.market === "COUNTRY"
       ? `sur le marché national de ${universe}`
+      : options.market === "MKVIP"
+        ? "dans mon univers MK-VIP"
       : "sur le marché américain";
-  const marketCap = market !== "INDEX" && minimumMarketCapBillions > 0
-    ? ` avec une capitalisation d’au moins ${minimumMarketCapBillions.toLocaleString("fr-FR")} milliard${minimumMarketCapBillions > 1 ? "s" : ""} en devise locale`
+  const movement = options.direction === "decline"
+    ? ` ayant baissé d’au moins ${options.threshold.toLocaleString("fr-FR")} %`
+    : options.direction === "gain"
+      ? ` ayant progressé d’au moins ${options.threshold.toLocaleString("fr-FR")} %`
+      : "";
+  const filters = [
+    options.minimumMarketCapBillions !== "" && options.minimumMarketCapBillions > 0
+      ? `une capitalisation d’au moins ${options.minimumMarketCapBillions.toLocaleString("fr-FR")} milliard${options.minimumMarketCapBillions > 1 ? "s" : ""}`
+      : null,
+    options.maximumMarketCapBillions !== "" && options.maximumMarketCapBillions > 0
+      ? `une capitalisation d’au plus ${options.maximumMarketCapBillions.toLocaleString("fr-FR")} milliard${options.maximumMarketCapBillions > 1 ? "s" : ""}`
+      : null,
+    options.maximumPe !== "" ? `un PER inférieur à ${options.maximumPe}` : null,
+    options.maximumPriceToBook !== "" ? `un P/B inférieur à ${options.maximumPriceToBook}` : null,
+    options.minimumDividendYield !== "" ? `un rendement du dividende d’au moins ${options.minimumDividendYield} %` : null,
+    options.minimumMkScore !== "" ? `un MK Score d’au moins ${options.minimumMkScore}` : null,
+    options.minimumAnnualizedReturn !== "" ? `un rendement annualisé d’au moins ${options.minimumAnnualizedReturn} %` : null,
+    options.maximumVolatility !== "" ? `une volatilité d’au plus ${options.maximumVolatility} %` : null,
+    options.minimumDrawdown !== "" ? `un drawdown d’au moins ${options.minimumDrawdown} %` : null,
+  ].filter(Boolean);
+  const filterText = filters.length ? `, avec ${filters.join(", ")}` : "";
+  const rankingLabels: Record<MarketScanCriteria["sort_by"], string> = {
+    performance: "performance",
+    annualized_return: "rendement annualisé",
+    volatility: "volatilité",
+    max_drawdown: "drawdown maximal",
+    market_cap: "capitalisation",
+    pe_ratio: "PER",
+    price_to_book: "cours/actif net",
+    dividend_yield: "rendement du dividende",
+    mk_score: "MK Score",
+  };
+  const ranking = options.sortBy !== "performance" || options.resultLimit !== ""
+    ? `, classées par ${rankingLabels[options.sortBy]} ${options.sortDirection === "desc" ? "décroissant" : "croissant"}${options.resultLimit !== "" ? `, top ${options.resultLimit}` : ""}`
     : "";
-  return `Trouve ${scope} les actions ayant baissé d’au moins ${decline.toLocaleString("fr-FR")} % sur ${years} an${years > 1 ? "s" : ""}${marketCap}`;
+  return `Trouve ${scope} les actions${movement} sur ${options.years} an${options.years > 1 ? "s" : ""}${filterText}${ranking}`;
+}
+
+function optionalNumber(value: string): number | "" {
+  return value === "" ? "" : Number(value);
+}
+
+function formatRatio(value: number | null, suffix = "") {
+  return value === null ? "—" : `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}${suffix}`;
 }
 
 function formatMarketCap(value: number | null) {
@@ -78,14 +134,26 @@ export function MarketScanner({
   exportScan,
 }: MarketScannerProps) {
   const [question, setQuestion] = useState(defaultQuestion);
-  const [market, setMarket] = useState<"US" | "INDEX" | "COUNTRY">("US");
+  const [market, setMarket] = useState<"US" | "INDEX" | "COUNTRY" | "MKVIP">("US");
   const [indexCode, setIndexCode] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [indices, setIndices] = useState<IndexSummary[]>([]);
   const [nationalMarkets, setNationalMarkets] = useState<NationalMarket[]>([]);
   const [years, setYears] = useState(5);
-  const [decline, setDecline] = useState(80);
-  const [minimumMarketCapBillions, setMinimumMarketCapBillions] = useState(0);
+  const [performanceDirection, setPerformanceDirection] = useState<"decline" | "gain" | "any">("decline");
+  const [threshold, setThreshold] = useState(80);
+  const [minimumMarketCapBillions, setMinimumMarketCapBillions] = useState<number | "">("");
+  const [maximumMarketCapBillions, setMaximumMarketCapBillions] = useState<number | "">("");
+  const [maximumPe, setMaximumPe] = useState<number | "">("");
+  const [maximumPriceToBook, setMaximumPriceToBook] = useState<number | "">("");
+  const [minimumDividendYield, setMinimumDividendYield] = useState<number | "">("");
+  const [minimumMkScore, setMinimumMkScore] = useState<number | "">("");
+  const [minimumAnnualizedReturn, setMinimumAnnualizedReturn] = useState<number | "">("");
+  const [maximumVolatility, setMaximumVolatility] = useState<number | "">("");
+  const [minimumDrawdown, setMinimumDrawdown] = useState<number | "">("");
+  const [sortBy, setSortBy] = useState<MarketScanCriteria["sort_by"]>("performance");
+  const [sortDirection, setSortDirection] = useState<MarketScanCriteria["sort_direction"]>("asc");
+  const [resultLimit, setResultLimit] = useState<number | "">("");
   const [scans, setScans] = useState<MarketScanListItem[]>([]);
   const [selected, setSelected] = useState<MarketScan | null>(null);
   const [busy, setBusy] = useState(false);
@@ -129,24 +197,46 @@ export function MarketScanner({
       ?? "Indice MK-VIP"
     : selected?.criteria.market === "COUNTRY"
       ? `Marché national — ${resultCountry?.name ?? selected.criteria.country_code ?? "Pays"}`
+      : selected?.criteria.market === "MKVIP"
+        ? "Univers d’investissement MK-VIP"
       : "Marché américain";
   const researchUniverse = market === "INDEX"
     ? indices.find((index) => index.code === indexCode)?.name ?? indexCode ?? "Indice MK-VIP"
     : market === "COUNTRY"
       ? selectedCountry?.name ?? "Marché national"
+      : market === "MKVIP"
+        ? "Univers MK-VIP"
       : "Marché américain";
 
   useEffect(() => {
     setQuestion(
       buildAgentQuestion(
         researchUniverse,
-        market,
-        years,
-        decline,
-        minimumMarketCapBillions,
+        {
+          market,
+          years,
+          direction: performanceDirection,
+          threshold,
+          minimumMarketCapBillions,
+          maximumMarketCapBillions,
+          maximumPe,
+          maximumPriceToBook,
+          minimumDividendYield,
+          minimumMkScore,
+          minimumAnnualizedReturn,
+          maximumVolatility,
+          minimumDrawdown,
+          sortBy,
+          sortDirection,
+          resultLimit,
+        },
       ),
     );
-  }, [decline, market, minimumMarketCapBillions, researchUniverse, years]);
+  }, [market, maximumMarketCapBillions, maximumPe, maximumPriceToBook,
+    maximumVolatility, minimumAnnualizedReturn, minimumDividendYield,
+    minimumDrawdown, minimumMarketCapBillions, minimumMkScore,
+    performanceDirection, researchUniverse, resultLimit, sortBy, sortDirection,
+    threshold, years]);
 
   const refreshList = async () => {
     const history = await listScans();
@@ -238,9 +328,22 @@ export function MarketScanner({
         country_code: market === "COUNTRY" ? countryCode : null,
         exchanges: ["NASDAQ", "NYSE", "AMEX"],
         years,
-        minimum_decline_pct: decline,
-        minimum_market_cap: market !== "INDEX" &&
+        performance_direction: performanceDirection,
+        minimum_decline_pct: threshold,
+        minimum_market_cap: minimumMarketCapBillions !== "" &&
           minimumMarketCapBillions > 0 ? minimumMarketCapBillions * 1_000_000_000 : null,
+        maximum_market_cap: maximumMarketCapBillions !== "" &&
+          maximumMarketCapBillions > 0 ? maximumMarketCapBillions * 1_000_000_000 : null,
+        maximum_pe_ratio: maximumPe === "" ? null : maximumPe,
+        maximum_price_to_book: maximumPriceToBook === "" ? null : maximumPriceToBook,
+        minimum_dividend_yield_pct: minimumDividendYield === "" ? null : minimumDividendYield,
+        minimum_mk_score: minimumMkScore === "" ? null : minimumMkScore,
+        minimum_annualized_return_pct: minimumAnnualizedReturn === "" ? null : minimumAnnualizedReturn,
+        maximum_volatility_pct: maximumVolatility === "" ? null : maximumVolatility,
+        minimum_drawdown_pct: minimumDrawdown === "" ? null : minimumDrawdown,
+        sort_by: sortBy,
+        sort_direction: sortDirection,
+        result_limit: resultLimit === "" ? null : resultLimit,
         ordinary_shares_only: true,
       }),
     );
@@ -256,10 +359,24 @@ export function MarketScanner({
       setQuestion(
         buildAgentQuestion(
           researchUniverse,
-          market,
-          years,
-          decline,
-          minimumMarketCapBillions,
+          {
+            market,
+            years,
+            direction: performanceDirection,
+            threshold,
+            minimumMarketCapBillions,
+            maximumMarketCapBillions,
+            maximumPe,
+            maximumPriceToBook,
+            minimumDividendYield,
+            minimumMkScore,
+            minimumAnnualizedReturn,
+            maximumVolatility,
+            minimumDrawdown,
+            sortBy,
+            sortDirection,
+            resultLimit,
+          },
         ),
       );
       await refreshList();
@@ -275,10 +392,10 @@ export function MarketScanner({
       <div className="market-scanner__head">
         <div>
           <p className="section-eyebrow"><Bot aria-hidden="true" size={17} /> Agent IA</p>
-          <h2 id="market-scan-title">Scan des marchés nationaux et indices MK-VIP</h2>
+          <h2 id="market-scan-title">Moteur de sélection d’actions MK-VIP</h2>
           <p>
-            L’agent transforme votre demande en critères vérifiés, puis examine un marché national
-            complet ou les composantes de l’un des indices disponibles dans MK-VIP.
+            L’agent combine performance, risque, valorisation, dividende, capitalisation et MK Score
+            sur les marchés complets, les indices ou votre univers d’investissement.
           </p>
         </div>
         <SearchCheck aria-hidden="true" size={34} />
@@ -306,10 +423,11 @@ export function MarketScanner({
         <div className="market-scanner__criteria">
           <label className="field">
             <span>Univers de la recherche</span>
-            <select value={market} onChange={(event) => setMarket(event.target.value as "US" | "INDEX" | "COUNTRY")}>
+            <select value={market} onChange={(event) => setMarket(event.target.value as "US" | "INDEX" | "COUNTRY" | "MKVIP")}>
               <option value="US">Marché américain complet</option>
               <option value="COUNTRY">Un autre marché national complet</option>
               <option value="INDEX">Un indice MK-VIP</option>
+              <option value="MKVIP">Mon univers d’investissement MK-VIP</option>
             </select>
           </label>
           {market === "INDEX" && (
@@ -351,15 +469,88 @@ export function MarketScanner({
             </select>
           </label>
           <label className="field">
-            <span>Baisse minimale</span>
-            <input type="number" min="1" max="99.9" step="0.1" value={decline} onChange={(event) => setDecline(Number(event.target.value))} />
+            <span>Mouvement du cours</span>
+            <select
+              value={performanceDirection}
+              onChange={(event) => {
+                const direction = event.target.value as "decline" | "gain" | "any";
+                setPerformanceDirection(direction);
+                setSortBy("performance");
+                setSortDirection(direction === "gain" ? "desc" : "asc");
+              }}
+            >
+              <option value="decline">Baisse minimale</option>
+              <option value="gain">Hausse minimale</option>
+              <option value="any">Indifférent</option>
+            </select>
           </label>
-          {market !== "INDEX" && (
+          {performanceDirection !== "any" && (
             <label className="field">
-              <span>Capitalisation minimale (Md, devise locale)</span>
-              <input type="number" min="0" step="0.1" value={minimumMarketCapBillions} onChange={(event) => setMinimumMarketCapBillions(Number(event.target.value))} />
+              <span>Amplitude minimale (%)</span>
+              <input type="number" min="0" max="100000" step="0.1" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
             </label>
           )}
+          <label className="field">
+            <span>Capitalisation minimale (Md)</span>
+            <input type="number" min="0" step="0.1" value={minimumMarketCapBillions} onChange={(event) => setMinimumMarketCapBillions(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>Capitalisation maximale (Md)</span>
+            <input type="number" min="0" step="0.1" value={maximumMarketCapBillions} onChange={(event) => setMaximumMarketCapBillions(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>PER maximal</span>
+            <input type="number" min="0.1" step="0.1" value={maximumPe} onChange={(event) => setMaximumPe(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>Cours / actif net maximal</span>
+            <input type="number" min="0.1" step="0.1" value={maximumPriceToBook} onChange={(event) => setMaximumPriceToBook(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>Rendement du dividende minimal (%)</span>
+            <input type="number" min="0" max="100" step="0.1" value={minimumDividendYield} onChange={(event) => setMinimumDividendYield(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>MK Score minimal</span>
+            <input type="number" min="0" max="100" step="0.1" value={minimumMkScore} onChange={(event) => setMinimumMkScore(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>Rendement annualisé minimal (%)</span>
+            <input type="number" min="-100" step="0.1" value={minimumAnnualizedReturn} onChange={(event) => setMinimumAnnualizedReturn(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>Volatilité maximale (%)</span>
+            <input type="number" min="0" step="0.1" value={maximumVolatility} onChange={(event) => setMaximumVolatility(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>Drawdown minimal (%)</span>
+            <input type="number" min="0" max="100" step="0.1" value={minimumDrawdown} onChange={(event) => setMinimumDrawdown(optionalNumber(event.target.value))} />
+          </label>
+          <label className="field">
+            <span>Classer par</span>
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as MarketScanCriteria["sort_by"])}>
+              <option value="performance">Performance</option>
+              <option value="annualized_return">Rendement annualisé</option>
+              <option value="volatility">Volatilité</option>
+              <option value="max_drawdown">Drawdown maximal</option>
+              <option value="market_cap">Capitalisation</option>
+              <option value="pe_ratio">PER</option>
+              <option value="price_to_book">Cours / actif net</option>
+              <option value="dividend_yield">Rendement du dividende</option>
+              <option value="mk_score">MK Score</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Ordre</span>
+            <select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}>
+              <option value="asc">Croissant</option>
+              <option value="desc">Décroissant</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Nombre maximal de résultats</span>
+            <input type="number" min="1" max="1000" step="1" value={resultLimit} onChange={(event) => setResultLimit(optionalNumber(event.target.value))} />
+          </label>
           <button className="button button--secondary" type="button" disabled={busy || running || (market === "INDEX" && !indexCode) || (market === "COUNTRY" && !countryCode)} onClick={submitCriteria}>Lancer ces critères</button>
         </div>
       </details>
@@ -403,7 +594,7 @@ export function MarketScanner({
             <div><dt>Résultats</dt><dd>{selected.matched_securities}</dd></div>
             <div><dt>Univers analysé</dt><dd>{selectedUniverse}</dd></div>
             <div><dt>Période</dt><dd>{selected.criteria.years} ans</dd></div>
-            <div><dt>Baisse</dt><dd>≥ {selected.criteria.minimum_decline_pct} %</dd></div>
+            <div><dt>Mouvement</dt><dd>{selected.criteria.performance_direction === "decline" ? "Baisse" : selected.criteria.performance_direction === "gain" ? "Hausse" : "Indifférent"}{selected.criteria.performance_direction !== "any" ? ` ≥ ${selected.criteria.minimum_decline_pct} %` : ""}</dd></div>
             <div><dt>Historiques insuffisants</dt><dd>{selected.insufficient_history_securities}</dd></div>
           </dl>
           {selected.error_message && <p className="form-error">{selected.error_message}</p>}
@@ -411,21 +602,26 @@ export function MarketScanner({
           {displayedResults.length > 0 && (
             <div className="market-scan-table-wrap">
               <table className="market-scan-table">
-                <thead><tr><th>Place</th><th>Valeur</th><th>Capitalisation</th><th>Départ</th><th>Fin</th><th>Performance</th></tr></thead>
+                <thead><tr><th>Place</th><th>Valeur</th><th>Capitalisation</th><th>PER</th><th>P/B</th><th>Dividende</th><th>MK Score</th><th>Performance</th><th>Annualisée</th><th>Volatilité</th><th>Drawdown</th></tr></thead>
                 <tbody>
                   {displayedResults.map((item) => (
                     <tr key={item.id}>
                       <td>{item.exchange}</td>
                       <td><strong>{item.ticker}</strong><span>{item.name}</span></td>
                       <td>{formatMarketCap(item.market_cap)}</td>
-                      <td>{item.start_price.toLocaleString("fr-FR", { maximumFractionDigits: 4 })}<small>{item.start_date}</small></td>
-                      <td>{item.end_price.toLocaleString("fr-FR", { maximumFractionDigits: 4 })}<small>{item.end_date}</small></td>
+                      <td>{formatRatio(item.pe_ratio)}</td>
+                      <td>{formatRatio(item.price_to_book)}</td>
+                      <td>{formatRatio(item.dividend_yield_pct, " %")}</td>
+                      <td>{formatRatio(item.mk_score)}</td>
                       <td className="market-scan-loss">{item.performance_pct.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</td>
+                      <td>{formatRatio(item.annualized_return_pct, " %")}</td>
+                      <td>{formatRatio(item.volatility_pct, " %")}</td>
+                      <td>{formatRatio(item.max_drawdown_pct, " %")}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {selected.results.length > 100 && <p className="market-scan-note">Les 100 plus fortes baisses sont affichées. Le fichier Excel contient les {selected.results.length} résultats.</p>}
+              {selected.results.length > 100 && <p className="market-scan-note">Les 100 premiers résultats du classement sont affichés. Le fichier Excel contient les {selected.results.length} résultats retenus.</p>}
             </div>
           )}
         </div>
@@ -437,14 +633,14 @@ export function MarketScanner({
           <select value={selected?.id ?? ""} onChange={(event) => void getScan(event.target.value).then(setSelected)}>
             {scans.map((scan) => (
               <option value={scan.id} key={scan.id}>
-                {new Date(scan.created_at).toLocaleString("fr-FR")} · {scan.criteria.index_code ?? nationalMarkets.find((item) => item.code === scan.criteria.country_code)?.name ?? "Marché US"} · {statusLabels[scan.status]} · {scan.matched_securities} résultats
+                {new Date(scan.created_at).toLocaleString("fr-FR")} · {scan.criteria.index_code ?? nationalMarkets.find((item) => item.code === scan.criteria.country_code)?.name ?? (scan.criteria.market === "MKVIP" ? "Univers MK-VIP" : "Marché US")} · {statusLabels[scan.status]} · {scan.matched_securities} résultats
               </option>
             ))}
           </select>
         </label>
       )}
       <p className="market-scan-note">
-        Périmètre : actions actuellement cotées sur les places nationales principales, avec une capitalisation publiée, et compositions d’indices disponibles dans MK-VIP. Les titres retirés de la cote ne figurent pas dans les univers publics courants. Les cours ajustés sont privilégiés pour tenir compte des opérations sur titres.
+        Les critères fondamentaux ne retiennent que les valeurs disposant du ratio demandé. Le MK Score est disponible pour les entreprises déjà analysées dans MK-VIP. Les cours ajustés sont privilégiés pour tenir compte des opérations sur titres.
       </p>
     </section>
   );

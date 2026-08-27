@@ -431,13 +431,25 @@ export interface NationalMarket {
 }
 
 export interface MarketScanCriteria {
-  market: "US" | "INDEX" | "COUNTRY";
+  market: "US" | "INDEX" | "COUNTRY" | "MKVIP";
   index_code: string | null;
   country_code: string | null;
   exchanges: Array<"NASDAQ" | "NYSE" | "AMEX">;
   years: number;
+  performance_direction: "decline" | "gain" | "any";
   minimum_decline_pct: number;
   minimum_market_cap: number | null;
+  maximum_market_cap: number | null;
+  maximum_pe_ratio: number | null;
+  maximum_price_to_book: number | null;
+  minimum_dividend_yield_pct: number | null;
+  minimum_mk_score: number | null;
+  minimum_annualized_return_pct: number | null;
+  maximum_volatility_pct: number | null;
+  minimum_drawdown_pct: number | null;
+  sort_by: "performance" | "annualized_return" | "volatility" | "max_drawdown" | "market_cap" | "pe_ratio" | "price_to_book" | "dividend_yield" | "mk_score";
+  sort_direction: "asc" | "desc";
+  result_limit: number | null;
   ordinary_shares_only: boolean;
 }
 
@@ -449,11 +461,18 @@ export interface MarketScanResult {
   country: string;
   currency: string;
   market_cap: number | null;
+  pe_ratio: number | null;
+  price_to_book: number | null;
+  dividend_yield_pct: number | null;
+  mk_score: number | null;
   start_date: string;
   end_date: string;
   start_price: number;
   end_price: number;
   performance_pct: number;
+  annualized_return_pct: number | null;
+  volatility_pct: number | null;
+  max_drawdown_pct: number | null;
   price_source: string;
 }
 

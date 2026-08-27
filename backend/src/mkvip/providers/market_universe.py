@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -24,6 +25,10 @@ class MarketSecurity:
     country: str
     currency: str
     market_cap: float | None
+    pe_ratio: float | None = None
+    price_to_book: float | None = None
+    dividend_yield_pct: float | None = None
+    mk_score: float | None = None
 
 
 class MarketUniverseProvider(Protocol):
@@ -106,8 +111,13 @@ class NasdaqPublicUniverseProvider:
 
 
 class YahooNationalMarketUniverseProvider:
-    name = "Yahoo Finance — marchés nationaux"
+    name = "Yahoo Finance — marchés complets"
     _page_size = 250
+    _us_exchanges = {
+        "NASDAQ": ("NCM", "NGM", "NMS"),
+        "NYSE": ("NYQ",),
+        "AMEX": ("ASE",),
+    }
 
     def __init__(
         self,
@@ -122,7 +132,28 @@ class YahooNationalMarketUniverseProvider:
         market = get_national_market(country_code)
         if market is None:
             raise ProviderDataError("Ce marché national n’est pas pris en charge par MK-VIP.")
+        return await self._list_market(market)
 
+    async def list_us_equities(self, exchanges: list[str]) -> list[MarketSecurity]:
+        yahoo_exchanges = tuple(
+            yahoo_exchange
+            for exchange in exchanges
+            if exchange in self._us_exchanges
+            for yahoo_exchange in self._us_exchanges[exchange]
+        )
+        if not yahoo_exchanges:
+            raise ProviderDataError("Aucune place américaine valide n’a été sélectionnée.")
+        return await self._list_market(
+            NationalMarket(
+                code="US",
+                name="États-Unis",
+                region="Amérique",
+                currency="USD",
+                yahoo_exchanges=yahoo_exchanges,
+            )
+        )
+
+    async def _list_market(self, market: NationalMarket) -> list[MarketSecurity]:
         offset = 0
         total: int | None = None
         by_ticker: dict[str, MarketSecurity] = {}
@@ -162,6 +193,13 @@ class YahooNationalMarketUniverseProvider:
                         country=market.name,
                         currency=str(row.get("currency") or market.currency).upper(),
                         market_cap=_market_cap(row.get("marketCap")),
+                        pe_ratio=_optional_metric(
+                            row.get("trailingPE") or row.get("forwardPE")
+                        ),
+                        price_to_book=_optional_metric(row.get("priceToBook")),
+                        dividend_yield_pct=_percentage_metric(
+                            row.get("trailingAnnualDividendYield")
+                        ),
                     ),
                 )
             offset += len(rows)
@@ -350,3 +388,16 @@ def _market_cap(value: object) -> float | None:
         return float(normalized)
     except ValueError:
         return None
+
+
+def _optional_metric(value: object) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _percentage_metric(value: object) -> float | None:
+    number = _optional_metric(value)
+    return round(number * 100, 6) if number is not None else None

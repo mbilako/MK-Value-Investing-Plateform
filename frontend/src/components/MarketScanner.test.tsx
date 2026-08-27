@@ -14,8 +14,20 @@ const queuedScan: MarketScan = {
     country_code: null,
     exchanges: ["NASDAQ", "NYSE", "AMEX"],
     years: 5,
+    performance_direction: "decline",
     minimum_decline_pct: 80,
     minimum_market_cap: null,
+    maximum_market_cap: null,
+    maximum_pe_ratio: null,
+    maximum_price_to_book: null,
+    minimum_dividend_yield_pct: null,
+    minimum_mk_score: null,
+    minimum_annualized_return_pct: null,
+    maximum_volatility_pct: null,
+    minimum_drawdown_pct: null,
+    sort_by: "performance",
+    sort_direction: "asc",
+    result_limit: null,
     ordinary_shares_only: true,
   },
   request_text: "Actions US en baisse de 80 % sur 5 ans",
@@ -60,7 +72,7 @@ describe("MarketScanner", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Scan des marchés nationaux et indices MK-VIP" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Moteur de sélection d’actions MK-VIP" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Lancer avec l’agent" }));
 
     expect(createFromQuestion).toHaveBeenCalledWith(
@@ -68,8 +80,8 @@ describe("MarketScanner", () => {
     );
     expect(await screen.findByText("En attente")).toBeInTheDocument();
     await user.click(screen.getByText("Critères manuels"));
-    await user.clear(screen.getByRole("spinbutton", { name: "Baisse minimale" }));
-    await user.type(screen.getByRole("spinbutton", { name: "Baisse minimale" }), "70");
+    await user.clear(screen.getByRole("spinbutton", { name: "Amplitude minimale (%)" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Amplitude minimale (%)" }), "70");
     expect(screen.getByRole("textbox", { name: "Demande à l’agent" })).toHaveValue(
       "Trouve sur le marché américain les actions ayant baissé d’au moins 70 % sur 5 ans",
     );
@@ -175,5 +187,44 @@ describe("MarketScanner", () => {
         country_code: "FR",
       }),
     );
+  });
+
+  it("combines performance, valuation, dividend and ranking criteria", async () => {
+    const user = userEvent.setup();
+    const createScan = vi.fn().mockResolvedValue(queuedScan);
+    render(
+      <MarketScanner
+        listIndices={vi.fn().mockResolvedValue([])}
+        listNationalMarkets={vi.fn().mockResolvedValue([])}
+        listScans={vi.fn().mockResolvedValue([])}
+        createFromQuestion={vi.fn()}
+        createScan={createScan}
+        getScan={vi.fn()}
+        retryScan={vi.fn()}
+        cancelScan={vi.fn()}
+        exportScan={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByText("Critères manuels"));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Mouvement du cours" }), "gain");
+    await user.clear(screen.getByRole("spinbutton", { name: "Amplitude minimale (%)" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Amplitude minimale (%)" }), "50");
+    await user.type(screen.getByRole("spinbutton", { name: "PER maximal" }), "12");
+    await user.type(screen.getByRole("spinbutton", { name: "Rendement du dividende minimal (%)" }), "3");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Classer par" }), "dividend_yield");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Ordre" }), "desc");
+    await user.type(screen.getByRole("spinbutton", { name: "Nombre maximal de résultats" }), "10");
+    await user.click(screen.getByRole("button", { name: "Lancer ces critères" }));
+
+    expect(createScan).toHaveBeenCalledWith(expect.objectContaining({
+      performance_direction: "gain",
+      minimum_decline_pct: 50,
+      maximum_pe_ratio: 12,
+      minimum_dividend_yield_pct: 3,
+      sort_by: "dividend_yield",
+      sort_direction: "desc",
+      result_limit: 10,
+    }));
   });
 });

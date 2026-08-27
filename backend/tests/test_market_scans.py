@@ -4,12 +4,14 @@ from io import BytesIO
 
 import pytest
 from openpyxl import load_workbook
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from mkvip.api.dependencies import get_market_scan_repository
 from mkvip.api.routes.market_scans import get_market_scan_executor
 from mkvip.db.base import Base
 from mkvip.main import app
+from mkvip.models.market_scan import MarketScanResultOrm
 from mkvip.models.user import UserOrm
 from mkvip.providers.base import (
     ProviderCompanySearchResult,
@@ -195,6 +197,74 @@ async def test_scan_filters_and_calculates_five_year_decline() -> None:
     assert repository.insufficient == 0
     assert repository.results[0].ticker == "DROP"
     assert repository.results[0].performance_pct == -90
+    assert repository.results[0].annualized_return_pct == pytest.approx(-36.91, abs=0.1)
+    assert repository.results[0].max_drawdown_pct == -90
+
+
+@pytest.mark.asyncio
+async def test_scan_can_find_gains_and_apply_fundamental_filters() -> None:
+    class GainUniverse:
+        async def list_us_equities(self, exchanges):
+            return [
+                MarketSecurity(
+                    "GAIN",
+                    "Gain Corporation",
+                    "NASDAQ",
+                    "US",
+                    "USD",
+                    2e9,
+                    pe_ratio=9,
+                    price_to_book=1.2,
+                    dividend_yield_pct=4,
+                    mk_score=85,
+                ),
+                MarketSecurity(
+                    "EXPENSIVE",
+                    "Expensive Corporation",
+                    "NYSE",
+                    "US",
+                    "USD",
+                    3e9,
+                    pe_ratio=35,
+                    price_to_book=8,
+                    dividend_yield_pct=0,
+                    mk_score=40,
+                ),
+            ]
+
+    class GainPrices:
+        name = "Prices"
+
+        async def get_price_history(self, ticker):
+            return [
+                ProviderPricePoint("2021-08-26", 100, 100),
+                ProviderPricePoint("2026-08-26", 180, 180),
+            ]
+
+    repository = RecordingRepository()
+    service = MarketScanService(
+        repository,
+        GainUniverse(),
+        GainPrices(),
+        retry_delay_seconds=0,
+    )
+
+    await service.run(
+        uuid.uuid4(),
+        MarketScanCriteria(
+            performance_direction="gain",
+            minimum_decline_pct=50,
+            maximum_pe_ratio=12,
+            maximum_price_to_book=2,
+            minimum_dividend_yield_pct=3,
+            minimum_mk_score=70,
+        ),
+    )
+
+    assert repository.total == 1
+    assert repository.matched == 1
+    assert repository.results[0].ticker == "GAIN"
+    assert repository.results[0].performance_pct == 80
 
 
 @pytest.mark.asyncio
@@ -283,6 +353,9 @@ async def test_yahoo_national_universe_paginates_and_deduplicates() -> None:
                         "exchange": "PAR",
                         "currency": "EUR",
                         "marketCap": 1_000_000 + index,
+                        "trailingPE": 8.5,
+                        "priceToBook": 1.1,
+                        "trailingAnnualDividendYield": 0.035,
                         "quoteType": "EQUITY",
                     }
                     for index in range(250)
@@ -311,6 +384,43 @@ async def test_yahoo_national_universe_paginates_and_deduplicates() -> None:
     assert calls == [("FR", 0, 250), ("FR", 250, 250)]
     assert len(securities) == 250
     assert securities[0].country == "France"
+    assert securities[0].pe_ratio == 8.5
+    assert securities[0].price_to_book == 1.1
+    assert securities[0].dividend_yield_pct == 3.5
+
+
+@pytest.mark.asyncio
+async def test_yahoo_complete_market_provider_maps_us_exchanges() -> None:
+    calls = []
+
+    class ImmediateGuard:
+        async def run(self, label, operation, *args):
+            return operation(*args)
+
+    def screen_page(market, offset, size):
+        calls.append((market.code, market.yahoo_exchanges, offset, size))
+        return {
+            "total": 1,
+            "quotes": [
+                {
+                    "symbol": "VALUE",
+                    "shortName": "Value Inc",
+                    "exchange": "NMS",
+                    "currency": "USD",
+                    "marketCap": 2_000_000_000,
+                    "quoteType": "EQUITY",
+                }
+            ],
+        }
+
+    provider = YahooNationalMarketUniverseProvider(
+        ImmediateGuard(),
+        screen_page=screen_page,
+    )
+    securities = await provider.list_us_equities(["NASDAQ", "NYSE"])
+
+    assert calls == [("US", ("NCM", "NGM", "NMS", "NYQ"), 0, 250)]
+    assert securities[0].country == "États-Unis"
 
 
 @pytest.mark.asyncio
@@ -413,6 +523,33 @@ def test_agent_question_recognizes_a_complete_national_market() -> None:
     assert criteria.minimum_decline_pct == 75
 
 
+def test_agent_question_builds_multicriteria_value_strategy() -> None:
+    criteria = criteria_from_question(
+        "Top 15 actions françaises avec un PER inférieur à 12, un P/B inférieur à 1.5 "
+        "et un rendement du dividende d'au moins 4 % sur 5 ans"
+    )
+
+    assert criteria.market == "COUNTRY"
+    assert criteria.country_code == "FR"
+    assert criteria.performance_direction == "any"
+    assert criteria.maximum_pe_ratio == 12
+    assert criteria.maximum_price_to_book == 1.5
+    assert criteria.minimum_dividend_yield_pct == 4
+    assert criteria.sort_by == "dividend_yield"
+    assert criteria.sort_direction == "desc"
+    assert criteria.result_limit == 15
+
+
+def test_agent_question_can_rank_the_mkvip_universe_by_score() -> None:
+    criteria = criteria_from_question("Top 10 de mon univers MK-VIP par MK Score")
+
+    assert criteria.market == "MKVIP"
+    assert criteria.performance_direction == "any"
+    assert criteria.sort_by == "mk_score"
+    assert criteria.sort_direction == "desc"
+    assert criteria.result_limit == 10
+
+
 def test_national_market_catalog_is_available_from_the_api(client) -> None:
     response = client.get("/api/v1/market-scans/national-markets")
 
@@ -464,7 +601,7 @@ def test_completed_scan_can_be_exported_as_a_readable_workbook() -> None:
 
     assert workbook.sheetnames == ["Synthèse", "Résultats"]
     assert workbook["Résultats"]["C2"].value == "DROP"
-    assert workbook["Résultats"]["K2"].value == -0.9
+    assert workbook["Résultats"]["O2"].value == -0.9
 
 
 @pytest.mark.asyncio
@@ -508,6 +645,58 @@ async def test_scan_progress_and_results_are_persisted_per_owner() -> None:
         assert persisted is not None
         assert persisted.progress_pct == 50
         assert persisted.results[0].ticker == "DROP"
+    await engine.dispose()
+
+
+def test_market_scan_exchange_accepts_full_exchange_names() -> None:
+    assert MarketScanResultOrm.__table__.c.exchange.type.length == 100
+
+
+@pytest.mark.asyncio
+async def test_failed_result_commit_can_still_mark_scan_as_failed() -> None:
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        owner = UserOrm(email="failed-scan@example.com", password_hash="unused")
+        session.add(owner)
+        await session.commit()
+        repository = SqlAlchemyMarketScanRepository(session, owner.id)
+        scan = await repository.create(MarketScanCriteria(), "scan avec échec")
+        await repository.mark_running(scan.id, 2)
+        duplicate_id = uuid.uuid4()
+        duplicate_values = {
+            "id": duplicate_id,
+            "scan_id": scan.id,
+            "ticker": "DUP",
+            "name": "Duplicate Corporation",
+            "exchange": "Brussels Stock Exchange",
+            "country": "Belgium",
+            "currency": "EUR",
+            "start_date": date(2021, 8, 26),
+            "end_date": date(2026, 8, 26),
+            "start_price": 100,
+            "end_price": 10,
+            "performance_pct": -90,
+            "price_source": "Yahoo Finance",
+        }
+        session.add_all(
+            [
+                MarketScanResultOrm(**duplicate_values),
+                MarketScanResultOrm(**duplicate_values),
+            ]
+        )
+
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+        await repository.mark_failed(scan.id, "Enregistrement impossible")
+        persisted = await repository.get(scan.id)
+
+        assert persisted is not None
+        assert persisted.status == "failed"
+        assert persisted.error_message == "Enregistrement impossible"
     await engine.dispose()
 
 

@@ -14,8 +14,8 @@ from mkvip.providers.esef import ESEFFilingsProvider
 from mkvip.providers.fallback import FallbackFinancialDataProvider
 from mkvip.providers.index_catalog import IndexCatalogProvider
 from mkvip.providers.market_universe import (
+    MarketSecurity,
     MKVIPIndexUniverseProvider,
-    NasdaqPublicUniverseProvider,
     YahooNationalMarketUniverseProvider,
 )
 from mkvip.providers.sec import SecEdgarProvider
@@ -115,18 +115,49 @@ async def execute_market_scan(scan_id, owner_id) -> None:
         yahoo = YahooFinanceProvider(
             execution_guard=yahoo_guard,
         )
+        company_repository = SqlAlchemyCompanyRepository(session, owner_id)
+        companies = await company_repository.list()
+        latest_financials = {}
+        for snapshot in await company_repository.list_all_financial_analyses():
+            latest_financials.setdefault(snapshot.company_id, snapshot)
+        known_universe = []
+        for company in companies:
+            snapshot = latest_financials.get(company.id)
+            pe_ratio = (
+                snapshot.market_cap / snapshot.net_income
+                if snapshot is not None and snapshot.net_income > 0
+                else None
+            )
+            price_to_book = (
+                snapshot.market_cap / snapshot.total_equity
+                if snapshot is not None and snapshot.total_equity > 0
+                else None
+            )
+            known_universe.append(
+                MarketSecurity(
+                    ticker=company.provider_symbols.get("yahoo", company.ticker),
+                    name=company.name,
+                    exchange=company.exchange,
+                    country=company.country,
+                    currency=company.currency,
+                    market_cap=(snapshot.market_cap * 1_000_000 if snapshot else None),
+                    pe_ratio=pe_ratio,
+                    price_to_book=price_to_book,
+                    mk_score=company.latest_mk_score,
+                )
+            )
+        complete_market_provider = YahooNationalMarketUniverseProvider(yahoo_guard)
         service = MarketScanService(
             repository,
-            NasdaqPublicUniverseProvider(),
+            complete_market_provider,
             yahoo,
             index_universe_provider=MKVIPIndexUniverseProvider(
                 _get_index_provider(),
                 yahoo,
                 concurrency=settings.yahoo_max_concurrency,
             ),
-            national_universe_provider=YahooNationalMarketUniverseProvider(
-                yahoo_guard,
-            ),
+            national_universe_provider=complete_market_provider,
+            known_universe=known_universe,
             concurrency=settings.yahoo_max_concurrency,
         )
         await service.run(scan_id, scan.criteria)

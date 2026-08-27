@@ -56,9 +56,11 @@ class SqlAlchemyMarketScanRepository:
             universe_source=(
                 "Catalogue d’indices MK-VIP"
                 if criteria.market == "INDEX"
-                else "Yahoo Finance — marchés nationaux"
+                else "Univers d’investissement MK-VIP"
+                if criteria.market == "MKVIP"
+                else "Yahoo Finance — marchés complets"
                 if criteria.market == "COUNTRY"
-                else "Nasdaq public screener"
+                else "Yahoo Finance — marché américain complet"
             ),
             price_source="Yahoo Finance",
         )
@@ -135,6 +137,10 @@ class SqlAlchemyMarketScanRepository:
         await self._session.commit()
 
     async def mark_failed(self, scan_id: uuid.UUID, message: str) -> None:
+        # A failed flush leaves SQLAlchemy's transaction unusable until it is
+        # rolled back. Recover it here so the scan itself can still be marked
+        # as failed and the UI does not remain stuck in the running state.
+        await self._session.rollback()
         record = await self._required(scan_id)
         if record.status == "cancelled":
             return
@@ -215,13 +221,41 @@ class SqlAlchemyMarketScanRepository:
     def _read(
         self, record: MarketScanOrm, results: Sequence[MarketScanResultOrm]
     ) -> MarketScanRead:
+        criteria = MarketScanCriteria.model_validate(record.criteria)
+        sorted_results = _sort_results(results, criteria)
+        if criteria.result_limit is not None:
+            sorted_results = sorted_results[: criteria.result_limit]
         return MarketScanRead(
             **{
                 key: getattr(record, key)
                 for key in MarketScanRead.model_fields
                 if key not in {"criteria", "progress_pct", "results"}
             },
-            criteria=MarketScanCriteria.model_validate(record.criteria),
+            criteria=criteria,
             progress_pct=self._progress(record),
-            results=[MarketScanResultRead.model_validate(item) for item in results],
+            results=[MarketScanResultRead.model_validate(item) for item in sorted_results],
         )
+
+
+def _sort_results(
+    results: Sequence[MarketScanResultOrm],
+    criteria: MarketScanCriteria,
+) -> list[MarketScanResultOrm]:
+    field = {
+        "performance": "performance_pct",
+        "annualized_return": "annualized_return_pct",
+        "volatility": "volatility_pct",
+        "max_drawdown": "max_drawdown_pct",
+        "market_cap": "market_cap",
+        "pe_ratio": "pe_ratio",
+        "price_to_book": "price_to_book",
+        "dividend_yield": "dividend_yield_pct",
+        "mk_score": "mk_score",
+    }[criteria.sort_by]
+    available = [item for item in results if getattr(item, field) is not None]
+    missing = [item for item in results if getattr(item, field) is None]
+    available.sort(
+        key=lambda item: (getattr(item, field), item.name.casefold()),
+        reverse=criteria.sort_direction == "desc",
+    )
+    return [*available, *missing]

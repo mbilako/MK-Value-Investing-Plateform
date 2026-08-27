@@ -19,6 +19,8 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
     universe = (
         scan.criteria.index_code
         if is_index_scan
+        else "Univers d’investissement MK-VIP"
+        if scan.criteria.market == "MKVIP"
         else f"Marché national — {national_market.name}"
         if national_market is not None
         else "Marché américain"
@@ -26,6 +28,8 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
     places = (
         "Indice MK-VIP"
         if is_index_scan
+        else "Valeurs analysées dans MK-VIP"
+        if scan.criteria.market == "MKVIP"
         else ", ".join(national_market.yahoo_exchanges)
         if national_market is not None
         else ", ".join(scan.criteria.exchanges)
@@ -36,8 +40,39 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
         ("Univers", universe),
         ("Places", places),
         ("Période", f"{scan.criteria.years} ans"),
-        ("Baisse minimale", scan.criteria.minimum_decline_pct / 100),
+        ("Mouvement recherché", {
+            "decline": "Baisse",
+            "gain": "Hausse",
+            "any": "Indifférent",
+        }[scan.criteria.performance_direction]),
+        ("Amplitude minimale", scan.criteria.minimum_decline_pct / 100),
         ("Capitalisation minimale", scan.criteria.minimum_market_cap),
+        ("Capitalisation maximale", scan.criteria.maximum_market_cap),
+        ("PER maximal", scan.criteria.maximum_pe_ratio),
+        ("Cours / actif net maximal", scan.criteria.maximum_price_to_book),
+        ("Rendement du dividende minimal", (
+            scan.criteria.minimum_dividend_yield_pct / 100
+            if scan.criteria.minimum_dividend_yield_pct is not None
+            else None
+        )),
+        ("MK Score minimal", scan.criteria.minimum_mk_score),
+        ("Rendement annualisé minimal", (
+            scan.criteria.minimum_annualized_return_pct / 100
+            if scan.criteria.minimum_annualized_return_pct is not None
+            else None
+        )),
+        ("Volatilité maximale", (
+            scan.criteria.maximum_volatility_pct / 100
+            if scan.criteria.maximum_volatility_pct is not None
+            else None
+        )),
+        ("Drawdown minimal", (
+            scan.criteria.minimum_drawdown_pct / 100
+            if scan.criteria.minimum_drawdown_pct is not None
+            else None
+        )),
+        ("Classement", f"{scan.criteria.sort_by} · {scan.criteria.sort_direction}"),
+        ("Limite de résultats", scan.criteria.result_limit),
         ("Titres examinés", scan.processed_securities),
         ("Résultats", scan.matched_securities),
         ("Historiques insuffisants", scan.insufficient_history_securities),
@@ -54,7 +89,8 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
     summary.merge_cells("A1:B1")
     summary.column_dimensions["A"].width = 30
     summary.column_dimensions["B"].width = 34
-    summary["B6"].number_format = "0.0%"
+    for cell in ("B7", "B12", "B14", "B15", "B16"):
+        summary[cell].number_format = "0.0%"
     summary.freeze_panes = "A2"
 
     results = workbook.create_sheet("Résultats")
@@ -65,11 +101,18 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
         "Entreprise",
         "Capitalisation",
         "Devise",
+        "PER",
+        "Cours / actif net",
+        "Rendement du dividende",
+        "MK Score",
         "Date de départ",
         "Cours de départ",
         "Date de fin",
         "Cours de fin",
         "Performance",
+        "Rendement annualisé",
+        "Volatilité annualisée",
+        "Drawdown maximal",
         "Source",
     ]
     results.append(headers)
@@ -82,11 +125,26 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
                 item.name,
                 item.market_cap,
                 item.currency,
+                item.pe_ratio,
+                item.price_to_book,
+                (
+                    item.dividend_yield_pct / 100
+                    if item.dividend_yield_pct is not None
+                    else None
+                ),
+                item.mk_score,
                 item.start_date,
                 item.start_price,
                 item.end_date,
                 item.end_price,
                 item.performance_pct / 100,
+                (
+                    item.annualized_return_pct / 100
+                    if item.annualized_return_pct is not None
+                    else None
+                ),
+                item.volatility_pct / 100 if item.volatility_pct is not None else None,
+                item.max_drawdown_pct / 100 if item.max_drawdown_pct is not None else None,
                 item.price_source,
             ]
         )
@@ -96,14 +154,16 @@ def build_market_scan_workbook(scan: MarketScanRead) -> bytes:
         cell.alignment = Alignment(horizontal="center")
     results.freeze_panes = "A2"
     results.auto_filter.ref = results.dimensions
-    widths = [18, 12, 14, 42, 18, 10, 16, 16, 16, 16, 14, 18]
+    widths = [18, 12, 14, 42, 18, 10, 12, 18, 20, 12, 16, 16, 16, 16, 14, 20, 20, 18, 18]
     for index, width in enumerate(widths, start=1):
         results.column_dimensions[get_column_letter(index)].width = width
     for row in results.iter_rows(min_row=2):
         row[4].number_format = '#,##0'
-        row[7].number_format = '0.0000'
-        row[9].number_format = '0.0000'
-        row[10].number_format = '0.00%'
+        row[8].number_format = '0.00%'
+        row[11].number_format = '0.0000'
+        row[13].number_format = '0.0000'
+        for index in (14, 15, 16, 17):
+            row[index].number_format = '0.00%'
 
     buffer = BytesIO()
     workbook.save(buffer)
