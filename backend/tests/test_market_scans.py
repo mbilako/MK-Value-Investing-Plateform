@@ -557,6 +557,22 @@ def test_national_market_catalog_is_available_from_the_api(client) -> None:
     markets = {item["code"]: item for item in response.json()}
     assert markets["CN"]["region"] == "Asie"
     assert markets["FR"]["currency"] == "EUR"
+    assert markets["JP"] == {
+        "code": "JP",
+        "name": "Japon",
+        "region": "Asie",
+        "currency": "JPY",
+        "exchanges": ["JPX"],
+    }
+    assert markets["ZA"]["region"] == "Afrique"
+
+
+def test_agent_question_recognizes_japanese_and_south_african_markets() -> None:
+    japan = criteria_from_question("Top 20 des actions japonaises par rendement")
+    south_africa = criteria_from_question("Actions sud-africaines en baisse de 50 % sur 3 ans")
+
+    assert (japan.market, japan.country_code) == ("COUNTRY", "JP")
+    assert (south_africa.market, south_africa.country_code) == ("COUNTRY", "ZA")
 
 
 def test_completed_scan_can_be_exported_as_a_readable_workbook() -> None:

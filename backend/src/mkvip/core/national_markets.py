@@ -27,6 +27,8 @@ NATIONAL_MARKETS = (
     NationalMarket("NL", "Pays-Bas", "Europe", "EUR", ("AMS",)),
     NationalMarket("PT", "Portugal", "Europe", "EUR", ("LIS",)),
     NationalMarket("CH", "Suisse", "Europe", "CHF", ("EBS",)),
+    NationalMarket("JP", "Japon", "Asie", "JPY", ("JPX",)),
+    NationalMarket("ZA", "Afrique du Sud", "Afrique", "ZAR", ("JNB",)),
 )
 
 _BY_CODE = {market.code: market for market in NATIONAL_MARKETS}

@@ -1198,6 +1198,81 @@ describe("MK-VIP authentication", () => {
     expect(screen.getByText(/Diversification limitée/)).toBeInTheDocument();
   });
 
+  it("adds Japan to Asia and African markets to their own zone", async () => {
+    const user = userEvent.setup();
+    const indices = [
+      {
+        code: "CAC40", name: "CAC 40", isin: null, market: "XPAR", provider: "Euronext",
+        region: "Europe", country: "France", kind: "broad" as const, sector: null,
+      },
+      {
+        code: "CSI300", name: "CSI 300", isin: null, market: "XSHG", provider: "CSI",
+        region: "Asie", country: "Chine", kind: "broad" as const, sector: null,
+      },
+      {
+        code: "TOPIX", name: "TOPIX", isin: null, market: "XTKS", provider: "JPX",
+        region: "Asie", country: "Japon", kind: "broad" as const, sector: null,
+      },
+      {
+        code: "JP1617", name: "TOPIX-17 Foods", isin: null, market: "XTKS", provider: "JPX",
+        region: "Asie", country: "Japon", kind: "sector" as const,
+        sector: "Consumer Staples",
+      },
+      {
+        code: "MSCIZA", name: "MSCI South Africa 25/50", isin: null, market: "XJSE",
+        provider: "MSCI", region: "Afrique", country: "Afrique du Sud",
+        kind: "broad" as const, sector: null,
+      },
+      {
+        code: "ZAFIN", name: "MSCI South Africa 25/50 Financials", isin: null, market: "XJSE",
+        provider: "MSCI", region: "Afrique", country: "Afrique du Sud",
+        kind: "sector" as const, sector: "Financials",
+      },
+      {
+        code: "MASI", name: "MASI", isin: null, market: "XCAS", provider: "Casablanca",
+        region: "Afrique", country: "Maroc", kind: "broad" as const, sector: null,
+      },
+    ];
+    const getIndex = vi.fn().mockImplementation(async (code: string) => {
+      const index = indices.find((item) => item.code === code) ?? indices[0];
+      return {
+        ...index,
+        isin: null,
+        as_of: "2026-08-27",
+        source_url: "https://example.test",
+        constituents: [{
+          name: code === "ZAFIN" ? "FirstRand" : "Example Company",
+          ticker: code === "ZAFIN" ? "FSR" : "TEST",
+          isin: null,
+          mic: index.market,
+          trading_location: index.country,
+          country: index.country,
+          currency: code.startsWith("ZA") || code === "MSCIZA" ? "ZAR" : "JPY",
+        }],
+      };
+    });
+    render(<App client={createTestClient({ listIndices: async () => indices, getIndex })} />);
+
+    await user.click(await screen.findByRole("button", { name: "Explorer les indices" }));
+    await user.click(screen.getByRole("button", { name: "Asie" }));
+    await user.click(screen.getByRole("button", { name: /Japon.*1 indice général.*1 indice sectoriel/ }));
+    expect(screen.getByRole("tablist", { name: "Indices sectoriels Japon" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Afrique" }));
+    const southAfrica = screen.getByRole("button", {
+      name: /Afrique du Sud.*1 indice général.*1 indice sectoriel/,
+    });
+    expect(southAfrica).toHaveAttribute("aria-expanded", "true");
+    await user.click(within(screen.getByRole("tablist", {
+      name: "Indices sectoriels Afrique du Sud",
+    })).getByRole("tab", { name: /Finance/ }));
+
+    expect(getIndex).toHaveBeenLastCalledWith("ZAFIN");
+    expect(southAfrica).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByRole("checkbox", { name: /FirstRand/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Maroc.*1 indice général/ })).toBeInTheDocument();
+  });
+
   it("groups the ATHEX Composite under Greece in Europe", async () => {
     const user = userEvent.setup();
     render(

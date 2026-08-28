@@ -272,9 +272,8 @@ class MarketScanService:
             and annualized_return < criteria.minimum_annualized_return_pct
         ):
             return _Evaluation()
-        if (
-            criteria.maximum_volatility_pct is not None
-            and (volatility is None or volatility > criteria.maximum_volatility_pct)
+        if criteria.maximum_volatility_pct is not None and (
+            volatility is None or volatility > criteria.maximum_volatility_pct
         ):
             return _Evaluation()
         if (
@@ -384,9 +383,7 @@ def criteria_from_question(
     years = int(years_match.group(1)) if years_match else 5
     exchanges: list[str]
     named_exchanges = [
-        exchange
-        for exchange in ("NASDAQ", "NYSE", "AMEX")
-        if exchange.casefold() in normalized
+        exchange for exchange in ("NASDAQ", "NYSE", "AMEX") if exchange.casefold() in normalized
     ]
     exchanges = named_exchanges or ["NASDAQ", "NYSE", "AMEX"]
     minimum_market_cap, maximum_market_cap = _market_cap_bounds(normalized)
@@ -437,20 +434,23 @@ def criteria_from_question(
     )
     sort_by, sort_direction = _ranking_from_question(normalized, direction)
     result_limit = _result_limit_from_question(normalized)
-    has_non_performance_filter = any(
-        value is not None
-        for value in (
-            minimum_market_cap,
-            maximum_market_cap,
-            maximum_pe_ratio,
-            maximum_price_to_book,
-            minimum_dividend_yield,
-            minimum_mk_score,
-            minimum_annualized_return,
-            maximum_volatility,
-            minimum_drawdown,
+    has_non_performance_filter = (
+        any(
+            value is not None
+            for value in (
+                minimum_market_cap,
+                maximum_market_cap,
+                maximum_pe_ratio,
+                maximum_price_to_book,
+                minimum_dividend_yield,
+                minimum_mk_score,
+                minimum_annualized_return,
+                maximum_volatility,
+                minimum_drawdown,
+            )
         )
-    ) or sort_by != "performance"
+        or sort_by != "performance"
+    )
     if direction == "any" and not has_non_performance_filter:
         direction = "decline"
     return MarketScanCriteria(
@@ -518,6 +518,13 @@ def _country_from_question(
         "PT": ("portugal", "portugais", "portugaise"),
         "CH": ("suisse",),
         "BE": ("belgique", "belge"),
+        "JP": ("japon", "japonais", "japonaise", "japonaises"),
+        "ZA": (
+            "afrique du sud",
+            "sud africain",
+            "sud africaine",
+            "sud africaines",
+        ),
     }
     for market in markets:
         terms = {_search_text(market.name), *aliases.get(market.code, ())}

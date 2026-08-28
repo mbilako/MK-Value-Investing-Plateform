@@ -17,12 +17,13 @@ interface IndexBrowserDrawerProps {
 const constituentKey = (company: IndexComposition["constituents"][number]) =>
   company.isin ?? company.ticker ?? company.name;
 
-const regionOrder = ["Europe", "Amérique", "Asie"];
+const regionOrder = ["Europe", "Amérique", "Asie", "Afrique"];
 
 const regionKeys: Record<string, string> = {
   Europe: "europe",
   Amérique: "america",
   Asie: "asia",
+  Afrique: "africa",
 };
 
 const byFrenchName = (left: string, right: string) =>
@@ -56,7 +57,12 @@ export function IndexBrowserDrawer({
   const [expandedRegion, setExpandedRegion] = useState("Europe");
   const [expandedCountryByRegion, setExpandedCountryByRegion] = useState<
     Record<string, string>
-  >({ Europe: "France", Amérique: "États-Unis", Asie: "Chine" });
+  >({
+    Europe: "France",
+    Amérique: "États-Unis",
+    Asie: "Chine",
+    Afrique: "Afrique du Sud",
+  });
   const [expandedRegionalSectors, setExpandedRegionalSectors] = useState<
     Record<string, boolean>
   >({ Europe: true });
