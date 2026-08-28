@@ -24,7 +24,11 @@ from mkvip.schemas.financial import (
     FinancialHistoryRead,
     FinancialSnapshotCreate,
 )
-from mkvip.services.financial_history import import_automatic_financial_history
+from mkvip.schemas.price import PriceHistoryRead
+from mkvip.services.financial_history import (
+    import_automatic_financial_history,
+    import_automatic_price_history,
+)
 from mkvip.services.yahoo_imports import (
     YahooImportAdmission,
     YahooImportInProgressError,
@@ -63,6 +67,7 @@ async def list_financials(
         company_id=company_id,
         snapshots=snapshots,
         trend=calculate_financial_trend(snapshots),
+        price_history=await repository.list_price_history(company_id),
     )
 
 
@@ -143,10 +148,35 @@ async def import_financials_automatically(
                     detail=("L’import automatique a dépassé le délai autorisé."),
                 ) from error
             except ProviderDataError as error:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=str(error),
-                ) from error
+                try:
+                    price_history = await import_automatic_price_history(
+                        repository,
+                        provider,
+                        company,
+                    )
+                except ProviderBusyError as fallback_error:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=str(fallback_error),
+                        headers={"Retry-After": "1"},
+                    ) from fallback_error
+                except (ProviderTimeoutError, TimeoutError) as fallback_error:
+                    raise HTTPException(
+                        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                        detail="Le chargement des données disponibles a dépassé le délai autorisé.",
+                    ) from fallback_error
+                except ProviderDataError:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=str(error),
+                    ) from error
+                snapshots = await repository.list_financial_analyses(company_id)
+                history = FinancialHistoryRead(
+                    company_id=company_id,
+                    snapshots=snapshots,
+                    trend=calculate_financial_trend(snapshots),
+                    price_history=price_history,
+                )
             return history
     except YahooImportInProgressError as error:
         raise HTTPException(
@@ -157,5 +187,58 @@ async def import_financials_automatically(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=("La limite d’imports automatiques simultanés est atteinte."),
+            headers={"Retry-After": "1"},
+        ) from error
+
+
+@router.post("/prices/automatic", response_model=PriceHistoryRead)
+async def import_prices_automatically(
+    company_id: uuid.UUID,
+    repository: Repository,
+    provider: Provider,
+    current_user: CurrentUser,
+    admission: Admission,
+    settings: Configuration,
+) -> PriceHistoryRead:
+    company = await repository.get_by_id(company_id)
+    if company is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Entreprise introuvable.",
+        )
+    try:
+        with admission.admit(current_user.id, company_id):
+            try:
+                async with asyncio.timeout(settings.yahoo_import_timeout_seconds):
+                    return await import_automatic_price_history(
+                        repository,
+                        provider,
+                        company,
+                    )
+            except ProviderBusyError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=str(error),
+                    headers={"Retry-After": "1"},
+                ) from error
+            except (ProviderTimeoutError, TimeoutError) as error:
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail="Le chargement des cours a dépassé le délai autorisé.",
+                ) from error
+            except ProviderDataError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=str(error),
+                ) from error
+    except YahooImportInProgressError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un chargement est déjà en cours pour cette entreprise.",
+        ) from error
+    except YahooImportLimitError as error:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="La limite de chargements simultanés est atteinte.",
             headers={"Retry-After": "1"},
         ) from error

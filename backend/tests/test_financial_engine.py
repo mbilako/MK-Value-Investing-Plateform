@@ -48,7 +48,30 @@ def test_financial_engine_calculates_cash_returns_and_specialized_scores() -> No
         "net_debt": 500.0,
     }
     assert analysis.quality_score == 100.0
-    assert analysis.safety_score == 100.0
+    assert analysis.safety_score == 75.0
+    leverage = next(
+        metric for metric in analysis.metrics if metric.key == "financial_leverage"
+    )
+    assert leverage.label == "Effet de levier ajusté"
+    assert leverage.value == 3.0
+    assert leverage.status.value == "fail"
+
+
+def test_adjusted_leverage_adds_treasury_stock_back_to_equity() -> None:
+    payload = snapshot().model_copy(
+        update={
+            "total_assets": 1_000,
+            "total_equity": 400,
+            "treasury_stock_value": 100,
+        }
+    )
+
+    analysis = financials.analyse_financials(payload)
+    leverage = next(
+        metric for metric in analysis.metrics if metric.key == "financial_leverage"
+    )
+
+    assert leverage.value == 1.2
 
 
 def test_financial_trend_uses_elapsed_years_for_cagr() -> None:

@@ -15,6 +15,7 @@ from mkvip.api.routes import (
     financials,
     health,
     indices,
+    market_scans,
     rules,
     scores,
     screener,
@@ -94,6 +95,11 @@ def create_app() -> FastAPI:
     )
     application.include_router(
         indices.router,
+        prefix="/api/v1",
+        dependencies=[Depends(get_current_user)],
+    )
+    application.include_router(
+        market_scans.router,
         prefix="/api/v1",
         dependencies=[Depends(get_current_user)],
     )

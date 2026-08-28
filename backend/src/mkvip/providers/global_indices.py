@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO, StringIO
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 from zipfile import ZipFile
@@ -21,7 +21,7 @@ from mkvip.schemas.index import (
 )
 
 FetchText = Callable[[str], str]
-FetchJson = Callable[[str], dict[str, Any]]
+FetchJson = Callable[[str], Any]
 FetchBytes = Callable[[str], bytes]
 
 
@@ -38,6 +38,9 @@ class PublicIndex:
     isin: str | None = None
     trading_location: str | None = None
     currency: str = "EUR"
+    kind: Literal["broad", "sector"] = "broad"
+    sector: str | None = None
+    source_sector: str | None = None
 
 
 def _blackrock_url(product_id: int) -> str:
@@ -50,6 +53,35 @@ def _blackrock_url(product_id: int) -> str:
         f"&locale=en_GB&portfolioId={product_id}&targetSite=ishares-uk"
         "&userType=individual&excludeContent=true&asOfDate=&includeConfig=true"
     )
+
+
+_SP500_HOLDINGS_URL = (
+    "https://www.ishares.com/us/products/239726/ishares-core-s-p-500-etf/latest-holdings.csv"
+)
+
+_CSI300_HOLDINGS_URL = (
+    "https://www.blackrock.com/hk/en/products/251754/"
+    "ishares-csi-300-a-share-index-etf/1478358625333.ajax"
+    "?dataType=fund&fileName=2846_holdings&fileType=csv"
+)
+
+_JAPAN_HOLDINGS_URL = "https://www.nomura-am.co.jp/fund/monthly_holdings/{fund_code}_brd_data.xlsx"
+
+_SOUTH_AFRICA_HOLDINGS_URL = (
+    "https://www.ishares.com/us/products/239680/ishares-msci-south-africa-etf/latest-holdings.csv"
+)
+
+_CASABLANCA_COMPOSITION_URL = (
+    "https://www.casablanca-bourse.com/api/boursenova/indices/composition?code=MASI"
+)
+
+_EGX_API_BASE = "https://beta.egx.com.eg/api/bff/egx"
+
+_TUNIS_COMPOSITION_URL = "https://tunis-stockexchange.com/composition"
+
+_BRVM_QUOTES_URL = "https://www.brvm.org/fr/cours-actions/0"
+
+_VETIVA_NGX30_URL = "https://www.vetiva.com/index.php/fund-update/vetiva-griffin-30-etf"
 
 
 INDEXES = (
@@ -145,8 +177,7 @@ INDEXES = (
         market="XMAD",
         provider="BME",
         source_url=(
-            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/"
-            "constituents.html"
+            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/constituents.html"
         ),
         region="Europe",
         country="Espagne",
@@ -160,8 +191,7 @@ INDEXES = (
         market="XMAD",
         provider="BME",
         source_url=(
-            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/"
-            "constituents.html"
+            "https://www.bolsasymercados.es/en/bme-exchange/indices/ibex/constituents.html"
         ),
         region="Europe",
         country="Espagne",
@@ -220,9 +250,7 @@ INDEXES = (
         name="FTSE Italia Mid Cap",
         market="XMIL",
         provider="Borsa Italiana",
-        source_url=(
-            "https://www.borsaitaliana.it/borsa/azioni/mid-cap/lista.html?lang=en"
-        ),
+        source_url=("https://www.borsaitaliana.it/borsa/azioni/mid-cap/lista.html?lang=en"),
         region="Europe",
         country="Italie",
         source_kind="borsa_italiana",
@@ -233,9 +261,7 @@ INDEXES = (
         name="FTSE Italia Small Cap",
         market="XMIL",
         provider="Borsa Italiana",
-        source_url=(
-            "https://www.borsaitaliana.it/borsa/azioni/small-cap/lista.html?lang=en"
-        ),
+        source_url=("https://www.borsaitaliana.it/borsa/azioni/small-cap/lista.html?lang=en"),
         region="Europe",
         country="Italie",
         source_kind="borsa_italiana",
@@ -295,7 +321,7 @@ INDEXES = (
             "https://www.ssga.com/library-content/products/fund-data/etfs/us/"
             "holdings-daily-us-en-dia.xlsx"
         ),
-        region="États-Unis",
+        region="Amérique",
         country="États-Unis",
         source_kind="state_street",
         trading_location="États-Unis",
@@ -306,11 +332,8 @@ INDEXES = (
         name="S&P 500",
         market="États-Unis",
         provider="iShares",
-        source_url=(
-            "https://www.ishares.com/us/products/239726/"
-            "ishares-core-s-p-500-etf/latest-holdings.csv"
-        ),
-        region="États-Unis",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
         country="États-Unis",
         source_kind="ishares_csv",
         currency="USD",
@@ -321,21 +344,958 @@ INDEXES = (
         market="XNAS",
         provider="Nasdaq",
         source_url="https://api.nasdaq.com/api/quote/list-type/nasdaq100",
-        region="États-Unis",
+        region="Amérique",
         country="États-Unis",
         source_kind="nasdaq",
         currency="USD",
     ),
+    PublicIndex(
+        code="EUROPEBANKS",
+        name="STOXX Europe 600 Banks",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251934),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Financials",
+    ),
+    PublicIndex(
+        code="EUROPETECH",
+        name="STOXX Europe 600 Technology",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251961),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Information Technology",
+    ),
+    PublicIndex(
+        code="EUROPEHEALTH",
+        name="STOXX Europe 600 Health Care",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251946),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Health Care",
+    ),
+    PublicIndex(
+        code="EUROPEENERGY",
+        name="STOXX Europe 600 Oil & Gas",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251954),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Energy",
+    ),
+    PublicIndex(
+        code="EUROPEINDUSTRIALS",
+        name="STOXX Europe 600 Industrial Goods & Services",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251948),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Industrials",
+    ),
+    PublicIndex(
+        code="EUROPESTAPLES",
+        name="STOXX Europe 600 Food & Beverage",
+        market="XETR",
+        provider="iShares",
+        source_url=_blackrock_url(251944),
+        region="Europe",
+        country="Europe",
+        source_kind="blackrock",
+        trading_location="Europe",
+        kind="sector",
+        sector="Consumer Staples",
+    ),
+    PublicIndex(
+        code="CSI300",
+        name="CSI 300",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+    ),
+    PublicIndex(
+        code="USMATERIALS",
+        name="S&P 500 Materials",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Materials",
+        source_sector="Materials",
+    ),
+    PublicIndex(
+        code="USDISCRETIONARY",
+        name="S&P 500 Consumer Discretionary",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Consumer Discretionary",
+        source_sector="Consumer Discretionary",
+    ),
+    PublicIndex(
+        code="USSTAPLES",
+        name="S&P 500 Consumer Staples",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Consumer Staples",
+        source_sector="Consumer Staples",
+    ),
+    PublicIndex(
+        code="USENERGY",
+        name="S&P 500 Energy",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Energy",
+        source_sector="Energy",
+    ),
+    PublicIndex(
+        code="USFINANCIALS",
+        name="S&P 500 Financials",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Financials",
+        source_sector="Financials",
+    ),
+    PublicIndex(
+        code="USHEALTH",
+        name="S&P 500 Health Care",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Health Care",
+        source_sector="Health Care",
+    ),
+    PublicIndex(
+        code="USINDUSTRIALS",
+        name="S&P 500 Industrials",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Industrials",
+        source_sector="Industrials",
+    ),
+    PublicIndex(
+        code="USREALESTATE",
+        name="S&P 500 Real Estate",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Real Estate",
+        source_sector="Real Estate",
+    ),
+    PublicIndex(
+        code="USTECH",
+        name="S&P 500 Information Technology",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Information Technology",
+        source_sector="Information Technology",
+    ),
+    PublicIndex(
+        code="USCOMM",
+        name="S&P 500 Communication Services",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Communication Services",
+        source_sector="Communication",
+    ),
+    PublicIndex(
+        code="USUTILITIES",
+        name="S&P 500 Utilities",
+        market="États-Unis",
+        provider="S&P DJI (via iShares)",
+        source_url=_SP500_HOLDINGS_URL,
+        region="Amérique",
+        country="États-Unis",
+        source_kind="ishares_csv",
+        currency="USD",
+        kind="sector",
+        sector="Utilities",
+        source_sector="Utilities",
+    ),
+    PublicIndex(
+        code="CNMATERIALS",
+        name="CSI 300 Materials",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Materials",
+        source_sector="Materials",
+    ),
+    PublicIndex(
+        code="CNDISCRETIONARY",
+        name="CSI 300 Consumer Discretionary",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Consumer Discretionary",
+        source_sector="Consumer Discretionary",
+    ),
+    PublicIndex(
+        code="CNSTAPLES",
+        name="CSI 300 Consumer Staples",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Consumer Staples",
+        source_sector="Consumer Staples",
+    ),
+    PublicIndex(
+        code="CNENERGY",
+        name="CSI 300 Energy",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Energy",
+        source_sector="Energy",
+    ),
+    PublicIndex(
+        code="CNFINANCIALS",
+        name="CSI 300 Financials",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Financials",
+        source_sector="Financials",
+    ),
+    PublicIndex(
+        code="CNHEALTH",
+        name="CSI 300 Health Care",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Health Care",
+        source_sector="Health Care",
+    ),
+    PublicIndex(
+        code="CNINDUSTRIALS",
+        name="CSI 300 Industrials",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Industrials",
+        source_sector="Industrials",
+    ),
+    PublicIndex(
+        code="CNREALESTATE",
+        name="CSI 300 Real Estate",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Real Estate",
+        source_sector="Real Estate",
+    ),
+    PublicIndex(
+        code="CNTECH",
+        name="CSI 300 Information Technology",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Information Technology",
+        source_sector="Information Technology",
+    ),
+    PublicIndex(
+        code="CNCOMM",
+        name="CSI 300 Communication Services",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Communication Services",
+        source_sector="Communication",
+    ),
+    PublicIndex(
+        code="CNUTILITIES",
+        name="CSI 300 Utilities",
+        market="XSHG",
+        provider="CSI (via iShares)",
+        source_url=_CSI300_HOLDINGS_URL,
+        region="Asie",
+        country="Chine",
+        source_kind="ishares_csv",
+        trading_location="Shanghai / Shenzhen",
+        currency="CNY",
+        kind="sector",
+        sector="Utilities",
+        source_sector="Utilities",
+    ),
+    PublicIndex(
+        code="TOPIX",
+        name="TOPIX",
+        market="XTKS",
+        provider="JPX (via NEXT FUNDS)",
+        source_url=_JAPAN_HOLDINGS_URL.format(fund_code="1306"),
+        region="Asie",
+        country="Japon",
+        source_kind="nomura_xlsx",
+        trading_location="Tokyo Stock Exchange",
+        currency="JPY",
+    ),
+    PublicIndex(
+        code="NIKKEI225",
+        name="Nikkei 225",
+        market="XTKS",
+        provider="Nikkei (via NEXT FUNDS)",
+        source_url=_JAPAN_HOLDINGS_URL.format(fund_code="1321"),
+        region="Asie",
+        country="Japon",
+        source_kind="nomura_xlsx",
+        trading_location="Tokyo Stock Exchange",
+        currency="JPY",
+    ),
+    PublicIndex(
+        code="MSCIZA",
+        name="MSCI South Africa 25/50",
+        market="XJSE",
+        provider="MSCI (via iShares)",
+        source_url=_SOUTH_AFRICA_HOLDINGS_URL,
+        region="Afrique",
+        country="Afrique du Sud",
+        source_kind="ishares_csv",
+        trading_location="Johannesburg Stock Exchange",
+        currency="ZAR",
+    ),
+    PublicIndex(
+        code="MASI",
+        name="MASI",
+        market="XCAS",
+        provider="Bourse de Casablanca",
+        source_url=_CASABLANCA_COMPOSITION_URL,
+        region="Afrique",
+        country="Maroc",
+        source_kind="casablanca",
+        trading_location="Bourse de Casablanca",
+        currency="MAD",
+    ),
+    PublicIndex(
+        code="EGX30",
+        name="EGX 30",
+        market="XCAI",
+        provider="Egyptian Exchange",
+        source_url=f"{_EGX_API_BASE}/egx30-weights",
+        region="Afrique",
+        country="Égypte",
+        source_kind="egx",
+        trading_location="Egyptian Exchange",
+        currency="EGP",
+    ),
+    PublicIndex(
+        code="NGX30",
+        name="NGX 30",
+        market="XNSA",
+        provider="NGX (via Vetiva Griffin 30 ETF)",
+        source_url=_VETIVA_NGX30_URL,
+        region="Afrique",
+        country="Nigeria",
+        source_kind="vetiva",
+        trading_location="Nigerian Exchange",
+        currency="NGN",
+    ),
+    PublicIndex(
+        code="TUNINDEX",
+        name="TUNINDEX",
+        market="XTUN",
+        provider="Bourse de Tunis",
+        source_url=_TUNIS_COMPOSITION_URL,
+        region="Afrique",
+        country="Tunisie",
+        source_kind="tunis",
+        trading_location="Bourse de Tunis",
+        currency="TND",
+    ),
+    PublicIndex(
+        code="TUNINDEX20",
+        name="TUNINDEX 20",
+        market="XTUN",
+        provider="Bourse de Tunis",
+        source_url=_TUNIS_COMPOSITION_URL,
+        region="Afrique",
+        country="Tunisie",
+        source_kind="tunis",
+        trading_location="Bourse de Tunis",
+        currency="TND",
+    ),
+    PublicIndex(
+        code="BRVMCOMPOSITE",
+        name="BRVM Composite",
+        market="XBRV",
+        provider="BRVM",
+        source_url=_BRVM_QUOTES_URL,
+        region="Afrique",
+        country="BRVM / UEMOA",
+        source_kind="brvm",
+        trading_location="BRVM",
+        currency="XOF",
+    ),
+)
+
+
+_SECTOR_SPECS = {
+    "MAT": ("Materials", "Materials"),
+    "DISC": ("Consumer Discretionary", "Consumer Discretionary"),
+    "STAP": ("Consumer Staples", "Consumer Staples"),
+    "ENER": ("Energy", "Energy"),
+    "FIN": ("Financials", "Financials"),
+    "HEALTH": ("Health Care", "Health Care"),
+    "IND": ("Industrials", "Industrials"),
+    "REAL": ("Real Estate", "Real Estate"),
+    "TECH": ("Information Technology", "Information Technology"),
+    "COMM": ("Communication Services", "Communication"),
+    "UTIL": ("Utilities", "Utilities"),
+}
+
+
+def _sector_views(
+    base_code: str,
+    prefix: str,
+    family_name: str,
+    provider: str,
+    available: tuple[str, ...],
+) -> tuple[PublicIndex, ...]:
+    base = next(index for index in INDEXES if index.code == base_code)
+    return tuple(
+        PublicIndex(
+            code=f"{prefix}{suffix}",
+            name=f"{family_name} {sector}",
+            market=base.market,
+            provider=provider,
+            source_url=base.source_url,
+            region=base.region,
+            country=base.country,
+            source_kind=base.source_kind,
+            trading_location=base.trading_location,
+            currency=base.currency,
+            kind="sector",
+            sector=sector,
+            source_sector=source_sector,
+        )
+        for suffix in available
+        for sector, source_sector in (_SECTOR_SPECS[suffix],)
+    )
+
+
+# These national views use the public composition of the broad national index and
+# its published sector classification. The narrower Euronext and ATHEX families
+# below are represented by their own official index instruments.
+INDEXES += _sector_views(
+    "DAX40",
+    "DE",
+    "DAX 40",
+    "DAX (via iShares)",
+    ("MAT", "DISC", "STAP", "FIN", "HEALTH", "IND", "REAL", "TECH", "COMM", "UTIL"),
+)
+INDEXES += _sector_views(
+    "FTSE100",
+    "UK",
+    "FTSE 100",
+    "FTSE Russell (via iShares)",
+    tuple(_SECTOR_SPECS),
+)
+INDEXES += _sector_views(
+    "FTSEMIB",
+    "IT",
+    "FTSE MIB",
+    "FTSE Russell (via iShares)",
+    ("MAT", "DISC", "STAP", "ENER", "FIN", "HEALTH", "IND", "TECH", "COMM", "UTIL"),
+)
+INDEXES += _sector_views(
+    "SPI",
+    "CH",
+    "SPI",
+    "SIX (via iShares)",
+    ("MAT", "DISC", "STAP", "FIN", "HEALTH", "IND", "REAL", "TECH", "COMM", "UTIL"),
+)
+
+INDEXES += _sector_views(
+    "MSCIZA",
+    "ZA",
+    "MSCI South Africa 25/50",
+    "MSCI (via iShares)",
+    ("MAT", "DISC", "STAP", "ENER", "FIN", "HEALTH", "IND", "REAL", "COMM"),
+)
+INDEXES += _sector_views(
+    "NGX30",
+    "NG",
+    "NGX 30",
+    "NGX (via Vetiva Griffin 30 ETF)",
+    ("MAT", "DISC", "STAP", "ENER", "FIN", "COMM", "UTIL"),
+)
+
+INDEXES += tuple(
+    PublicIndex(
+        code=f"JP{fund_code}",
+        name=f"TOPIX-17 {name}",
+        market="XTKS",
+        provider="JPX (via NEXT FUNDS)",
+        source_url=_JAPAN_HOLDINGS_URL.format(fund_code=fund_code),
+        region="Asie",
+        country="Japon",
+        source_kind="nomura_xlsx",
+        trading_location="Tokyo Stock Exchange",
+        currency="JPY",
+        kind="sector",
+        sector=sector,
+    )
+    for fund_code, name, sector in (
+        ("1617", "Foods", "Consumer Staples"),
+        ("1618", "Energy Resources", "Energy"),
+        ("1619", "Construction & Materials", "Industrials"),
+        ("1620", "Raw Materials & Chemicals", "Materials"),
+        ("1621", "Pharmaceutical", "Health Care"),
+        ("1622", "Automobiles & Transportation Equipment", "Consumer Discretionary"),
+        ("1623", "Steel & Nonferrous Metals", "Materials"),
+        ("1624", "Machinery", "Industrials"),
+        ("1625", "Electric Appliances & Precision Instruments", "Information Technology"),
+        ("1626", "IT & Services, Others", "Information Technology"),
+        ("1627", "Electric Power & Gas", "Utilities"),
+        ("1628", "Transportation & Logistics", "Industrials"),
+        ("1629", "Commercial & Wholesale Trade", "Industrials"),
+        ("1630", "Retail Trade", "Consumer Discretionary"),
+        ("1631", "Banks", "Financials"),
+        ("1632", "Financials ex Banks", "Financials"),
+        ("1633", "Real Estate", "Real Estate"),
+    )
+)
+
+INDEXES += tuple(
+    PublicIndex(
+        code=f"MA{suffix}",
+        name=f"MASI {name}",
+        market="XCAS",
+        provider="Bourse de Casablanca",
+        source_url=_CASABLANCA_COMPOSITION_URL,
+        region="Afrique",
+        country="Maroc",
+        source_kind="casablanca",
+        trading_location="Bourse de Casablanca",
+        currency="MAD",
+        kind="sector",
+        sector=sector,
+        source_sector=source_sector,
+    )
+    for suffix, name, sector, source_sector in (
+        ("AGRI", "Agricultural Industry", "Consumer Staples", "Agricultural Industry"),
+        ("BANKS", "Banks", "Financials", "Banks"),
+        ("BEV", "Beverages", "Consumer Staples", "Beverages"),
+        ("CHEM", "Chemicals", "Materials", "Chemicals"),
+        (
+            "BUILD",
+            "Construction & Building Materials",
+            "Industrials",
+            "Construction & Building Materials",
+        ),
+        ("DIST", "Distributors", "Consumer Discretionary", "Distributors"),
+        ("ELEC", "Electricity", "Utilities", "Electricity"),
+        (
+            "ENG",
+            "Engineering & Equipment",
+            "Industrials",
+            "Engineering & Equipment Industrial Goods",
+        ),
+        ("FOOD", "Food Producers & Processors", "Consumer Staples", "Food producers & Processors"),
+        ("PAPER", "Forestry & Paper", "Materials", "Forestry &  Paper"),
+        ("HEALTH", "Health", "Health Care", "Health"),
+        ("HOLD", "Holding Companies", "Financials", "Holding Companies"),
+        ("INS", "Insurance", "Financials", "Insurance"),
+        (
+            "FIN",
+            "Investment Companies & Other Finance",
+            "Financials",
+            "Investment Companies & Other Finance",
+        ),
+        ("LEISURE", "Leisure & Hotels", "Consumer Discretionary", "Leisures and Hotels"),
+        (
+            "TECH",
+            "Software & Computer Services",
+            "Information Technology",
+            "Materials,Software &  Computer Services",
+        ),
+        ("MINING", "Mining", "Materials", "Mining"),
+        ("OIL", "Oil & Gas", "Energy", "Oil & Gas"),
+        ("PHARMA", "Pharmaceutical Industry", "Health Care", "Pharmaceutical Industry"),
+        (
+            "REIT",
+            "Real Estate Investment Companies",
+            "Real Estate",
+            "Real estate investment companies",
+        ),
+        (
+            "REAL",
+            "Real Estate Participation & Promotion",
+            "Real Estate",
+            "Real estate participation and promotion",
+        ),
+        ("TELCO", "Telecommunications", "Communication Services", "Telecommunications"),
+        ("TRANSPORT", "Transport", "Industrials", "Transport"),
+        ("TRANSSERV", "Transportation Services", "Industrials", "Transportation Services"),
+    )
+)
+
+INDEXES += tuple(
+    PublicIndex(
+        code=f"EGXSEC{sector_id}",
+        name=f"EGX {name}",
+        market="XCAI",
+        provider="Egyptian Exchange",
+        source_url=f"{_EGX_API_BASE}/sector-constituents?sectorId={sector_id}",
+        region="Afrique",
+        country="Égypte",
+        source_kind="egx",
+        trading_location="Egyptian Exchange",
+        currency="EGP",
+        kind="sector",
+        sector=sector,
+    )
+    for sector_id, name, sector in (
+        (1, "Banks", "Financials"),
+        (2, "Basic Resources", "Materials"),
+        (7, "Health Care & Pharmaceuticals", "Health Care"),
+        (8, "Industrial Goods, Services & Automobiles", "Industrials"),
+        (11, "Real Estate", "Real Estate"),
+        (16, "Travel & Leisure", "Consumer Discretionary"),
+        (17, "Utilities", "Utilities"),
+        (18, "IT, Media & Communication Services", "Communication Services"),
+        (19, "Food, Beverages & Tobacco", "Consumer Staples"),
+        (20, "Energy & Support Services", "Energy"),
+        (21, "Trade & Distributors", "Consumer Discretionary"),
+        (22, "Shipping & Transportation Services", "Industrials"),
+        (23, "Education Services", "Consumer Discretionary"),
+        (24, "Non-bank Financial Services", "Financials"),
+        (25, "Contracting & Construction Engineering", "Industrials"),
+        (26, "Textile & Durables", "Consumer Discretionary"),
+        (27, "Building Materials", "Materials"),
+        (28, "Paper & Packaging", "Materials"),
+    )
+)
+
+INDEXES += tuple(
+    PublicIndex(
+        code=f"TN{icb}",
+        name=f"TUNINDEX {name}",
+        market="XTUN",
+        provider="Bourse de Tunis",
+        source_url=_TUNIS_COMPOSITION_URL,
+        region="Afrique",
+        country="Tunisie",
+        source_kind="tunis",
+        trading_location="Bourse de Tunis",
+        currency="TND",
+        kind="sector",
+        sector=sector,
+        source_sector=icb,
+    )
+    for icb, name, sector in (
+        ("0001", "Pétrole et Gaz", "Energy"),
+        ("1000", "Matériaux de Base", "Materials"),
+        ("2000", "Industries", "Industrials"),
+        ("3000", "Biens de Consommation", "Consumer Staples"),
+        ("4000", "Santé", "Health Care"),
+        ("5000", "Services aux Consommateurs", "Consumer Discretionary"),
+        ("6000", "Télécommunications", "Communication Services"),
+        ("8000", "Sociétés Financières", "Financials"),
+        ("9000", "Technologie", "Information Technology"),
+    )
+)
+
+INDEXES += tuple(
+    PublicIndex(
+        code=f"BRVM{suffix}",
+        name=f"BRVM - {name}",
+        market="XBRV",
+        provider="BRVM",
+        source_url=f"https://www.brvm.org/fr/secteurs-dactivites/{slug}",
+        region="Afrique",
+        country="BRVM / UEMOA",
+        source_kind="brvm",
+        trading_location="BRVM",
+        currency="XOF",
+        kind="sector",
+        sector=sector,
+    )
+    for suffix, slug, name, sector in (
+        ("STAP", "consommation-de-base", "CONSOMMATION DE BASE", "Consumer Staples"),
+        (
+            "DISC",
+            "consommation-discretionnaire",
+            "CONSOMMATION DISCRÉTIONNAIRE",
+            "Consumer Discretionary",
+        ),
+        ("ENER", "energie", "ÉNERGIE", "Energy"),
+        ("IND", "industriels", "INDUSTRIELS", "Industrials"),
+        ("FIN", "services-financiers", "SERVICES FINANCIERS", "Financials"),
+        ("UTIL", "services-publics", "SERVICES PUBLICS", "Utilities"),
+        ("COMM", "telecommunications", "TÉLÉCOMMUNICATIONS", "Communication Services"),
+    )
+)
+
+INDEXES += (
+    PublicIndex(
+        code="IBEXBANKS",
+        name="IBEX 35 Banks",
+        market="XMAD",
+        provider="BME",
+        source_url="https://www.bolsasymercados.es/en/bme-exchange/indices/ibex.html",
+        region="Europe",
+        country="Espagne",
+        source_kind="static_bme",
+        trading_location="Bolsa de Madrid",
+        kind="sector",
+        sector="Financials",
+    ),
+    PublicIndex(
+        code="IBEXENERGY",
+        name="IBEX 35 Energy",
+        market="XMAD",
+        provider="BME",
+        source_url="https://www.bolsasymercados.es/en/bme-exchange/indices/ibex.html",
+        region="Europe",
+        country="Espagne",
+        source_kind="static_bme",
+        trading_location="Bolsa de Madrid",
+        kind="sector",
+        sector="Energy",
+    ),
+    PublicIndex(
+        code="IBEXCONSTR",
+        name="IBEX 35 Construction",
+        market="XMAD",
+        provider="BME",
+        source_url="https://www.bolsasymercados.es/en/bme-exchange/indices/ibex.html",
+        region="Europe",
+        country="Espagne",
+        source_kind="static_bme",
+        trading_location="Bolsa de Madrid",
+        kind="sector",
+        sector="Industrials",
+    ),
+)
+
+INDEXES += tuple(
+    PublicIndex(
+        code=code,
+        name=name,
+        market="XATH",
+        provider="FTSE/ATHEX",
+        source_url=f"https://www.athexgroup.gr/en/market-data/instruments/indices/{symbol}",
+        region="Europe",
+        country="Grèce",
+        source_kind="athex",
+        trading_location="Euronext Athens",
+        kind="sector",
+        sector=sector,
+    )
+    for code, symbol, name, sector in (
+        (
+            "ATHEXTECH",
+            "FTSE_TT",
+            "FTSE/ATHEX Technology & Telecommunications",
+            "Information Technology",
+        ),
+        ("ATHEXHEALTH", "FTSE_HC", "FTSE/ATHEX Health Care", "Health Care"),
+        ("ATHEXFIN", "FTSE_FS", "FTSE/ATHEX Financial Services", "Financials"),
+        ("ATHEXREAL", "FTSE_RE", "FTSE/ATHEX Real Estate", "Real Estate"),
+        ("ATHEXDISC", "FTSE_CD", "FTSE/ATHEX Consumer Discretionary", "Consumer Discretionary"),
+        ("ATHEXSTAP", "FTSE_CS", "FTSE/ATHEX Consumer Staples", "Consumer Staples"),
+        ("ATHEXIND", "FTSE_IN", "FTSE/ATHEX Industrials", "Industrials"),
+        ("ATHEXMAT", "FTSE_BM", "FTSE/ATHEX Basic Materials", "Materials"),
+        ("ATHEXENER", "FTSE_EU", "FTSE/ATHEX Energy & Utilities", "Energy"),
+    )
 )
 
 _EXCHANGE_MICS = {
+    "BORSA ITALIANA": "XMIL",
+    "BOLSA DE MADRID": "XMAD",
+    "DEUTSCHE BOERSE XETRA": "XETR",
+    "EURONEXT AMSTERDAM": "XAMS",
+    "EURONEXT BRUSSELS": "XBRU",
+    "EURONEXT DUBLIN": "XDUB",
+    "EURONEXT LISBON": "XLIS",
+    "EURONEXT PARIS": "XPAR",
+    "LONDON STOCK EXCHANGE": "XLON",
+    "IRISH STOCK EXCHANGE - ALL MARKET": "XDUB",
     "NASDAQ": "XNAS",
     "NASDAQ GS": "XNAS",
     "NASDAQ GLOBAL SELECT MARKET": "XNAS",
     "NEW YORK STOCK EXCHANGE INC.": "XNYS",
     "NYSE": "XNYS",
     "NYSE ARCA": "ARCX",
+    "NYSE EURONEXT - EURONEXT BRUSSELS": "XBRU",
+    "NYSE EURONEXT - EURONEXT LISBON": "XLIS",
+    "NYSE EURONEXT - EURONEXT PARIS": "XPAR",
+    "OMX NORDIC EXCHANGE COPENHAGEN A/S": "XCSE",
+    "OSLO BORS ASA": "XOSL",
+    "SIX SWISS EXCHANGE": "XSWX",
+    "SHANGHAI STOCK EXCHANGE": "XSHG",
+    "SHENZHEN STOCK EXCHANGE": "XSHE",
+    "TOKYO STOCK EXCHANGE": "XTKS",
+    "JOHANNESBURG STOCK EXCHANGE": "XJSE",
+    "WARSAW STOCK EXCHANGE/EQUITIES/MAIN MARKET": "XWAR",
+    "WIENER BOERSE AG": "XWBO",
+    "XETRA": "XETR",
 }
+
+_COUNTRY_MICS = {
+    "Austria": "XWBO",
+    "Denmark": "XCSE",
+    "Finland": "XHEL",
+    "Norway": "XOSL",
+    "Poland": "XWAR",
+    "Sweden": "XSTO",
+    "China": "XSHG",
+    "Japan": "XTKS",
+    "South Africa": "XJSE",
+    "Morocco": "XCAS",
+    "Egypt": "XCAI",
+    "Nigeria": "XNSA",
+    "Tunisia": "XTUN",
+}
+
+
+def _mic_for_exchange(exchange: object, country: object, fallback: str) -> str:
+    return _EXCHANGE_MICS.get(
+        str(exchange or "").strip().upper(),
+        _COUNTRY_MICS.get(str(country or "").strip(), fallback),
+    )
+
 
 _US_TICKER_ALIASES = {
     "BFB": "BF-B",
@@ -446,10 +1406,31 @@ _IBEX_SMALL_CONSTITUENTS = (
     ("EZE", "Grupo Ezentis"),
 )
 
+_IBEX_BANK_CONSTITUENTS = tuple(
+    constituent
+    for constituent in _IBEX35_CONSTITUENTS
+    if constituent[0] in {"BBVA", "BKT", "CABK", "SAB", "SAN", "UNI"}
+)
+
+_IBEX_ENERGY_CONSTITUENTS = tuple(
+    constituent
+    for constituent in _IBEX35_CONSTITUENTS
+    if constituent[0] in {"ANE", "ELE", "ENG", "IBE", "NTGY", "RED", "REP", "SLR"}
+)
+
+_IBEX_CONSTRUCTION_CONSTITUENTS = tuple(
+    constituent
+    for constituent in _IBEX35_CONSTITUENTS
+    if constituent[0] in {"ACS", "ANA", "FER", "SCYR"}
+)
+
 _BME_CONSTITUENTS = {
     "IBEX35": _IBEX35_CONSTITUENTS,
     "IBEXMEDIUM": _IBEX_MEDIUM_CONSTITUENTS,
     "IBEXSMALL": _IBEX_SMALL_CONSTITUENTS,
+    "IBEXBANKS": _IBEX_BANK_CONSTITUENTS,
+    "IBEXENERGY": _IBEX_ENERGY_CONSTITUENTS,
+    "IBEXCONSTR": _IBEX_CONSTRUCTION_CONSTITUENTS,
 }
 
 
@@ -501,6 +1482,35 @@ class PublicIndexProvider:
         if index.source_kind == "state_street":
             payload = await asyncio.to_thread(self._fetch_bytes, index.source_url)
             return _parse_state_street_composition(index, payload)
+        if index.source_kind == "nomura_xlsx":
+            payload = await asyncio.to_thread(self._fetch_bytes, index.source_url)
+            return _parse_nomura_composition(index, payload)
+        if index.source_kind == "casablanca":
+            payload, actions_html = await asyncio.gather(
+                asyncio.to_thread(self._fetch_json, index.source_url),
+                asyncio.to_thread(
+                    self._fetch_text,
+                    "https://www.casablanca-bourse.com/live-market/actions",
+                ),
+            )
+            return _parse_casablanca_composition(index, payload, actions_html)
+        if index.source_kind == "egx":
+            payload = await asyncio.to_thread(self._fetch_json, index.source_url)
+            return _parse_egx_composition(index, payload)
+        if index.source_kind == "tunis":
+            payload = await asyncio.to_thread(self._fetch_text, index.source_url)
+            return _parse_tunis_composition(index, payload)
+        if index.source_kind == "brvm":
+            payload = await asyncio.to_thread(self._fetch_text, index.source_url)
+            quotes_html = (
+                payload
+                if index.kind == "broad"
+                else await asyncio.to_thread(self._fetch_text, _BRVM_QUOTES_URL)
+            )
+            return _parse_brvm_composition(index, payload, quotes_html)
+        if index.source_kind == "vetiva":
+            payload = await asyncio.to_thread(self._fetch_text, index.source_url)
+            return _parse_vetiva_composition(index, payload)
         if index.source_kind in {"blackrock", "ishares_json", "nasdaq"}:
             payload = await asyncio.to_thread(self._fetch_json, index.source_url)
             if index.source_kind == "blackrock":
@@ -595,6 +1605,7 @@ def _request(url: str) -> Request:
         headers={
             "Accept": "application/json,text/csv,text/plain,*/*",
             "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+            "x-egx-bff-request": "1",
             "User-Agent": "Mozilla/5.0 MK-VIP/0.12 (public index composition)",
         },
     )
@@ -609,7 +1620,7 @@ def _fetch_text(url: str) -> str:
     return _fetch_bytes(url).decode("utf-8-sig")
 
 
-def _fetch_json(url: str) -> dict[str, Any]:
+def _fetch_json(url: str) -> Any:
     return json.loads(_fetch_text(url))
 
 
@@ -625,20 +1636,26 @@ def _parse_blackrock_composition(
         .get("dataPointsByNameMap", {})
     )
     values = {key: point.get("value") for key, point in data.items()}
+    tickers = values.get("ticker") or []
     rows = zip(
-        values.get("ticker") or [],
+        tickers,
         values.get("issueName") or [],
         values.get("assetClass") or [],
         values.get("isin") or [],
         values.get("countryOfRisk") or [],
         values.get("exchange") or [],
         values.get("marketCurrencyCode") or [],
+        values.get("sectorName") or [None] * len(tickers),
         strict=False,
     )
     constituents: list[IndexConstituentRead] = []
     seen: set[str] = set()
-    for ticker, name, asset_class, isin, country, exchange, currency in rows:
+    for ticker, name, asset_class, isin, country, exchange, currency, sector in rows:
         if str(asset_class).strip().casefold() != "equity":
+            continue
+        if index.source_sector and (
+            str(sector or "").strip().casefold() != index.source_sector.casefold()
+        ):
             continue
         normalized_ticker = str(ticker or "").strip().upper()
         normalized_isin = str(isin or "").strip().upper()
@@ -650,7 +1667,7 @@ def _parse_blackrock_composition(
                 name=str(name or normalized_ticker).strip(),
                 ticker=normalized_ticker or None,
                 isin=normalized_isin or None,
-                mic=index.market,
+                mic=_mic_for_exchange(exchange, country, index.market),
                 trading_location=str(exchange or index.trading_location).strip(),
                 country=str(country or index.country).strip(),
                 currency=str(currency or index.currency).strip(),
@@ -669,12 +1686,16 @@ def _parse_ishares_json_composition(
     for row in payload.get("aaData") or []:
         if len(row) < 13 or str(row[3]).strip().casefold() != "equity":
             continue
+        if index.source_sector and (
+            str(row[2] or "").strip().casefold() != index.source_sector.casefold()
+        ):
+            continue
         constituents.append(
             IndexConstituentRead(
                 name=str(row[1]).strip(),
                 ticker=str(row[0]).strip().upper(),
                 isin=str(row[8]).strip().upper() or None,
-                mic=index.market,
+                mic=_mic_for_exchange(row[11], row[10], index.market),
                 trading_location=str(row[11] or index.trading_location).strip(),
                 country=str(row[10] or index.country).strip(),
                 currency=str(row[12] or index.currency).strip(),
@@ -799,17 +1820,41 @@ def _parse_state_street_composition(
 
 
 def _xlsx_rows(payload: bytes) -> list[list[str]]:
+    return _xlsx_sheet_rows(payload, "xl/worksheets/sheet1.xml")
+
+
+def _xlsx_sheet_rows(payload: bytes, sheet_path: str) -> list[list[str]]:
     namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     with ZipFile(BytesIO(payload)) as archive:
-        shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
-        shared = ["".join(item.itertext()) for item in shared_root.findall("m:si", namespace)]
-        sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+        try:
+            shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+            shared = ["".join(item.itertext()) for item in shared_root.findall("m:si", namespace)]
+        except KeyError:
+            shared = []
+        sheet = ElementTree.fromstring(archive.read(sheet_path))
     rows: list[list[str]] = []
     for row in sheet.findall(".//m:row", namespace):
-        values: list[str] = []
-        for cell in row.findall("m:c", namespace):
+        values_by_column: dict[int, str] = {}
+        for position, cell in enumerate(row.findall("m:c", namespace)):
             value = cell.findtext("m:v", default="", namespaces=namespace)
-            values.append(shared[int(value)] if cell.get("t") == "s" and value else value)
+            if cell.get("t") == "s" and value:
+                value = shared[int(value)]
+            elif cell.get("t") == "inlineStr":
+                inline = cell.find("m:is", namespace)
+                value = "".join(inline.itertext()) if inline is not None else ""
+            reference = cell.get("r")
+            if reference:
+                letters = re.match(r"[A-Z]+", str(reference))
+                column = 0
+                for letter in letters.group(0) if letters else "A":
+                    column = column * 26 + ord(letter) - ord("A") + 1
+                column -= 1
+            else:
+                column = position
+            values_by_column[column] = value
+        values = [""] * (max(values_by_column, default=-1) + 1)
+        for column, value in values_by_column.items():
+            values[column] = value
         rows.append(values)
     return rows
 
@@ -848,23 +1893,28 @@ def _parse_ishares_composition(
     constituents: list[IndexConstituentRead] = []
     seen: set[str] = set()
     for row in reader:
-        if row.get("Asset Class", "").strip().casefold() != "equity":
+        if str(row.get("Asset Class") or "").strip().casefold() != "equity":
             continue
-        raw_ticker = row.get("Ticker", "").strip().upper()
+        if index.source_sector and (
+            str(row.get("Sector") or "").strip().casefold() != index.source_sector.casefold()
+        ):
+            continue
+        raw_ticker = str(row.get("Ticker") or "").strip().upper()
         if not raw_ticker or raw_ticker == "-":
             continue
         ticker = _US_TICKER_ALIASES.get(raw_ticker, raw_ticker.replace(".", "-"))
         if ticker in seen:
             continue
-        exchange = row.get("Exchange", "").strip()
+        exchange = str(row.get("Exchange") or "").strip()
+        country = str(row.get("Location") or "").strip() or index.country
         constituents.append(
             IndexConstituentRead(
-                name=row.get("Name", "").strip() or ticker,
+                name=str(row.get("Name") or "").strip() or ticker,
                 ticker=ticker,
-                mic=_EXCHANGE_MICS.get(exchange.upper(), "XNAS"),
-                trading_location=exchange or "États-Unis",
-                country=row.get("Location", "").strip() or "États-Unis",
-                currency=row.get("Currency", "").strip() or "USD",
+                mic=_mic_for_exchange(exchange, country, index.market),
+                trading_location=exchange or index.trading_location or index.country,
+                country=country,
+                currency=str(row.get("Currency") or "").strip() or index.currency,
             )
         )
         seen.add(ticker)
@@ -906,6 +1956,313 @@ def _parse_nasdaq_composition(
     return _composition(index, constituents, str(data.get("date") or "").strip() or None)
 
 
+def _parse_nomura_composition(
+    index: PublicIndex,
+    payload: bytes,
+) -> IndexCompositionRead:
+    rows = _xlsx_sheet_rows(payload, "xl/worksheets/sheet2.xml")
+    header_position = next(
+        (
+            position
+            for position, row in enumerate(rows)
+            if len(row) >= 5 and "ISIN" in str(row[2]).upper() and "NAME" in str(row[4]).upper()
+        ),
+        None,
+    )
+    if header_position is None:
+        raise ProviderDataError(f"La composition {index.name} reçue est illisible.")
+    constituents: list[IndexConstituentRead] = []
+    seen: set[str] = set()
+    for row in rows[header_position + 1 :]:
+        if len(row) < 5:
+            continue
+        ticker = str(row[1] or "").strip().upper()
+        isin = str(row[2] or "").strip().upper()
+        name = str(row[4] or row[3] or ticker).strip()
+        if not ticker or not re.fullmatch(r"JP[A-Z0-9]{10}", isin) or isin in seen:
+            continue
+        constituents.append(
+            IndexConstituentRead(
+                name=name,
+                ticker=ticker,
+                isin=isin,
+                mic="XTKS",
+                trading_location=index.trading_location or "Tokyo Stock Exchange",
+                country="Japon",
+                currency="JPY",
+            )
+        )
+        seen.add(isin)
+    heading = " ".join(str(value) for row in rows[:3] for value in row if value)
+    as_of_match = re.search(
+        r"as of\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+        heading,
+        re.I,
+    )
+    return _composition(
+        index,
+        constituents,
+        as_of_match.group(1).strip() if as_of_match else None,
+    )
+
+
+def _parse_casablanca_composition(
+    index: PublicIndex,
+    payload: Any,
+    actions_html: str,
+) -> IndexCompositionRead:
+    actions: list[dict[str, Any]] = []
+    settings_matches = re.findall(
+        r'<script[^>]+data-drupal-selector="drupal-settings-json"[^>]*>(.*?)</script>',
+        actions_html,
+        re.I | re.S,
+    )
+    for raw_settings in settings_matches:
+        try:
+            settings = json.loads(_plain_html_text(raw_settings))
+        except (TypeError, ValueError):
+            continue
+        candidate = ((settings or {}).get("live_market") or {}).get("actions") or []
+        if candidate:
+            actions = candidate
+            break
+    names_by_symbol = {
+        str(row.get("symbol") or "").strip().upper(): str(
+            ((row.get("emetteur") or {}).get("fr")) or row.get("symbol") or ""
+        ).strip()
+        for row in actions
+        if isinstance(row, dict)
+    }
+    constituents: list[IndexConstituentRead] = []
+    seen: set[str] = set()
+    for row in payload if isinstance(payload, list) else []:
+        instrument = row.get("instrument") or {}
+        ticker = str(instrument.get("fr") or instrument.get("en") or "").strip().upper()
+        source_sector = str(((row.get("sector") or {}).get("en")) or "").strip()
+        if index.source_sector and not _same_text(source_sector, index.source_sector):
+            continue
+        if not ticker or ticker in seen:
+            continue
+        constituents.append(
+            IndexConstituentRead(
+                name=names_by_symbol.get(ticker, ticker),
+                ticker=ticker,
+                mic="XCAS",
+                trading_location="Bourse de Casablanca",
+                country="Maroc",
+                currency="MAD",
+            )
+        )
+        seen.add(ticker)
+    return _composition(index, constituents, None)
+
+
+def _parse_egx_composition(
+    index: PublicIndex,
+    payload: dict[str, Any],
+) -> IndexCompositionRead:
+    data = payload.get("data") or []
+    rows = data.get("items") or [] if isinstance(data, dict) else data
+    constituents: list[IndexConstituentRead] = []
+    seen: set[str] = set()
+    for row in rows:
+        isin = str(row.get("isin") or "").strip().upper()
+        reuters = str(row.get("reuters") or "").strip().upper()
+        ticker = reuters or None
+        key = isin or reuters
+        if not key or key in seen:
+            continue
+        constituents.append(
+            IndexConstituentRead(
+                name=str(row.get("name") or reuters or isin).strip(),
+                ticker=ticker,
+                isin=isin or None,
+                mic="XCAI",
+                trading_location="Egyptian Exchange",
+                country="Égypte",
+                currency="EGP",
+            )
+        )
+        seen.add(key)
+    return _composition(index, constituents, None)
+
+
+def _parse_tunis_composition(
+    index: PublicIndex,
+    payload: str,
+) -> IndexCompositionRead:
+    if index.kind == "sector" and index.source_sector:
+        group_match = re.search(
+            rf'<tbody class="niv1-group" data-icb="{re.escape(index.source_sector)}">'
+            r"(.*?)</tbody>",
+            payload,
+            re.I | re.S,
+        )
+        section = group_match.group(1) if group_match else ""
+        rows = re.findall(r'<tr class="border-table"[^>]*>(.*?)</tr>', section, re.I | re.S)
+        cell_offset = 3
+    else:
+        next_id = "tunindex20" if index.code == "TUNINDEX" else "indices-sectoriels"
+        section_match = re.search(
+            rf'id="{index.code.lower()}">(.*?)id="{next_id}"', payload, re.I | re.S
+        )
+        section = section_match.group(1) if section_match else ""
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", section, re.I | re.S)
+        cell_offset = 1
+    constituents: list[IndexConstituentRead] = []
+    seen: set[str] = set()
+    for row in rows:
+        cells = [
+            _plain_html_text(cell) for cell in re.findall(r"<td[^>]*>(.*?)</td>", row, re.I | re.S)
+        ]
+        if len(cells) < cell_offset + 3:
+            continue
+        isin = cells[cell_offset].strip().upper()
+        if index.kind == "sector":
+            name = cells[cell_offset + 1].strip()
+            ticker = cells[cell_offset + 2].strip().upper()
+        else:
+            ticker = cells[cell_offset + 1].strip().upper()
+            name = cells[cell_offset + 2].strip()
+        if not re.fullmatch(r"TN[A-Z0-9]{10}", isin) or not ticker or isin in seen:
+            continue
+        constituents.append(
+            IndexConstituentRead(
+                name=name or ticker,
+                ticker=ticker,
+                isin=isin,
+                mic="XTUN",
+                trading_location="Bourse de Tunis",
+                country="Tunisie",
+                currency="TND",
+            )
+        )
+        seen.add(isin)
+    date_match = re.search(r"/sites/default/files/(\d{4}-\d{2})/", section)
+    return _composition(index, constituents, date_match.group(1) if date_match else None)
+
+
+def _parse_brvm_composition(
+    index: PublicIndex,
+    payload: str,
+    quotes_html: str,
+) -> IndexCompositionRead:
+    names_by_ticker: dict[str, str] = {}
+    quote_table = next(
+        (
+            table
+            for table in re.findall(r"<table[^>]*>.*?</table>", quotes_html, re.I | re.S)
+            if "Symbole" in table and "Nom" in table
+        ),
+        "",
+    )
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", quote_table, re.I | re.S):
+        cells = [
+            _plain_html_text(cell) for cell in re.findall(r"<td[^>]*>(.*?)</td>", row, re.I | re.S)
+        ]
+        if len(cells) >= 2 and cells[0]:
+            names_by_ticker[cells[0].strip().upper()] = cells[1].strip()
+    if index.kind == "sector":
+        tickers = re.findall(
+            r'<article[^>]+class="[^"]*node-cours-actions[^"]*".*?'
+            r"<h2><a[^>]*>([^<]+)</a></h2>",
+            payload,
+            re.I | re.S,
+        )
+    else:
+        tickers = list(names_by_ticker)
+    constituents = [
+        IndexConstituentRead(
+            name=names_by_ticker.get(ticker.strip().upper(), ticker.strip().upper()),
+            ticker=ticker.strip().upper(),
+            mic="XBRV",
+            trading_location="BRVM",
+            country="BRVM / UEMOA",
+            currency="XOF",
+        )
+        for ticker in dict.fromkeys(tickers)
+        if ticker.strip()
+    ]
+    return _composition(index, constituents, None)
+
+
+_NGX_TICKER_INFO = {
+    "ACCESSCORP": ("Access Holdings", "Financials"),
+    "AIRTELAFRI": ("Airtel Africa", "Communication Services"),
+    "ARADEL": ("Aradel Holdings", "Energy"),
+    "BUACEMENT": ("BUA Cement", "Materials"),
+    "BUAFOODS": ("BUA Foods", "Consumer Staples"),
+    "DANGCEM": ("Dangote Cement", "Materials"),
+    "DANGSUGAR": ("Dangote Sugar Refinery", "Consumer Staples"),
+    "ETI": ("Ecobank Transnational", "Financials"),
+    "FCMB": ("FCMB Group", "Financials"),
+    "FIDELITYBK": ("Fidelity Bank", "Financials"),
+    "FIRSTHOLDCO": ("First HoldCo", "Financials"),
+    "GEREGU": ("Geregu Power", "Utilities"),
+    "GTCO": ("Guaranty Trust Holding", "Financials"),
+    "GUINNESS": ("Guinness Nigeria", "Consumer Staples"),
+    "INTBREW": ("International Breweries", "Consumer Staples"),
+    "MTNN": ("MTN Nigeria Communications", "Communication Services"),
+    "NB": ("Nigerian Breweries", "Consumer Staples"),
+    "NESTLE": ("Nestlé Nigeria", "Consumer Staples"),
+    "NASCON": ("NASCON Allied Industries", "Consumer Staples"),
+    "OKOMUOIL": ("Okomu Oil Palm", "Consumer Staples"),
+    "PRESCO": ("Presco", "Consumer Staples"),
+    "SEPLAT": ("Seplat Energy", "Energy"),
+    "STANBIC": ("Stanbic IBTC Holdings", "Financials"),
+    "TRANSCOHOT": ("Transcorp Hotels", "Consumer Discretionary"),
+    "UNILEVER": ("Unilever Nigeria", "Consumer Staples"),
+    "TRANSPOWER": ("Transcorp Power", "Utilities"),
+    "UBA": ("United Bank for Africa", "Financials"),
+    "HBMNG": ("HBM Nigeria", "Materials"),
+    "WEMABANK": ("Wema Bank", "Financials"),
+    "ZENITHBANK": ("Zenith Bank", "Financials"),
+}
+
+
+def _parse_vetiva_composition(
+    index: PublicIndex,
+    payload: str,
+) -> IndexCompositionRead:
+    section_match = re.search(
+        r"Portfolio Delivery Constituents(.*?)(?:Disclaimer|DISCLAIMER)",
+        payload,
+        re.I | re.S,
+    )
+    section = section_match.group(1) if section_match else ""
+    tickers = [
+        _plain_html_text(value).upper()
+        for value in re.findall(
+            r'<td[^>]+class="[^"]*value[^"]*"[^>]*>(.*?)</td>',
+            section,
+            re.I | re.S,
+        )
+    ]
+    constituents: list[IndexConstituentRead] = []
+    for ticker in dict.fromkeys(tickers):
+        if not ticker:
+            continue
+        name, sector = _NGX_TICKER_INFO.get(ticker, (ticker, None))
+        if index.source_sector and sector != index.source_sector:
+            continue
+        constituents.append(
+            IndexConstituentRead(
+                name=name,
+                ticker=ticker,
+                mic="XNSA",
+                trading_location="Nigerian Exchange",
+                country="Nigeria",
+                currency="NGN",
+            )
+        )
+    date_match = re.search(r"Date \(Close\).*?(\d{4}-\d{2}-\d{2})", payload, re.I | re.S)
+    return _composition(index, constituents, date_match.group(1) if date_match else None)
+
+
+def _same_text(left: str, right: str) -> bool:
+    return " ".join(left.split()).casefold() == " ".join(right.split()).casefold()
+
+
 def _composition(
     index: PublicIndex,
     constituents: list[IndexConstituentRead],
@@ -930,4 +2287,6 @@ def _summary(index: PublicIndex) -> dict[str, str | None]:
         "provider": index.provider,
         "region": index.region,
         "country": index.country,
+        "kind": index.kind,
+        "sector": index.sector,
     }

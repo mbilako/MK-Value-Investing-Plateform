@@ -13,12 +13,22 @@ from mkvip.providers.email import EmailSender, SmtpEmailSender
 from mkvip.providers.esef import ESEFFilingsProvider
 from mkvip.providers.fallback import FallbackFinancialDataProvider
 from mkvip.providers.index_catalog import IndexCatalogProvider
+from mkvip.providers.market_universe import (
+    MarketSecurity,
+    MKVIPIndexUniverseProvider,
+    YahooNationalMarketUniverseProvider,
+)
 from mkvip.providers.sec import SecEdgarProvider
 from mkvip.providers.yahoo import YahooExecutionGuard, YahooFinanceProvider
 from mkvip.repositories.company import CompanyRepository
+from mkvip.repositories.market_scan import (
+    MarketScanRepository,
+    SqlAlchemyMarketScanRepository,
+)
 from mkvip.repositories.sqlalchemy import SqlAlchemyCompanyRepository
 from mkvip.schemas.auth import UserRead
 from mkvip.services.ai_usage import AIUsageService
+from mkvip.services.market_scans import MarketScanService
 from mkvip.services.yahoo_imports import YahooImportAdmission
 
 
@@ -76,6 +86,81 @@ def get_company_repository(
     current_user: CurrentUser,
 ) -> CompanyRepository:
     return SqlAlchemyCompanyRepository(session, current_user.id)
+
+
+def get_market_scan_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: CurrentUser,
+) -> MarketScanRepository:
+    return SqlAlchemyMarketScanRepository(session, current_user.id)
+
+
+async def execute_market_scan(scan_id, owner_id) -> None:
+    """Run a persisted scan with its own database session after the HTTP response."""
+    from mkvip.db.session import SessionFactory
+
+    settings = get_settings()
+    async with SessionFactory() as session:
+        repository = SqlAlchemyMarketScanRepository(session, owner_id)
+        scan = await repository.get(scan_id)
+        if scan is None:
+            return
+        yahoo_guard = YahooExecutionGuard(
+            max_concurrency=max(settings.yahoo_max_concurrency, 2),
+            response_timeout_seconds=max(
+                settings.yahoo_response_timeout_seconds,
+                60,
+            ),
+        )
+        yahoo = YahooFinanceProvider(
+            execution_guard=yahoo_guard,
+        )
+        company_repository = SqlAlchemyCompanyRepository(session, owner_id)
+        companies = await company_repository.list()
+        latest_financials = {}
+        for snapshot in await company_repository.list_all_financial_analyses():
+            latest_financials.setdefault(snapshot.company_id, snapshot)
+        known_universe = []
+        for company in companies:
+            snapshot = latest_financials.get(company.id)
+            pe_ratio = (
+                snapshot.market_cap / snapshot.net_income
+                if snapshot is not None and snapshot.net_income > 0
+                else None
+            )
+            price_to_book = (
+                snapshot.market_cap / snapshot.total_equity
+                if snapshot is not None and snapshot.total_equity > 0
+                else None
+            )
+            known_universe.append(
+                MarketSecurity(
+                    ticker=company.provider_symbols.get("yahoo", company.ticker),
+                    name=company.name,
+                    exchange=company.exchange,
+                    country=company.country,
+                    currency=company.currency,
+                    market_cap=(snapshot.market_cap * 1_000_000 if snapshot else None),
+                    pe_ratio=pe_ratio,
+                    price_to_book=price_to_book,
+                    mk_score=company.latest_mk_score,
+                )
+            )
+        complete_market_provider = YahooNationalMarketUniverseProvider(yahoo_guard)
+        service = MarketScanService(
+            repository,
+            complete_market_provider,
+            yahoo,
+            index_universe_provider=MKVIPIndexUniverseProvider(
+                _get_index_provider(),
+                yahoo,
+                concurrency=settings.yahoo_max_concurrency,
+            ),
+            national_universe_provider=complete_market_provider,
+            known_universe=known_universe,
+            concurrency=settings.yahoo_max_concurrency,
+        )
+        await service.run(scan_id, scan.criteria)
 
 
 @lru_cache

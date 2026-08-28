@@ -14,8 +14,12 @@ La plateforme dispose maintenant d’un premier flux d’analyse exécutable :
 - import automatique de jusqu’à dix exercices publics avec fusion annuelle
   Yahoo Finance, SEC EDGAR et ESEF européen ;
 - explorateur classé par zone et par pays avec trois indices pour chacun des
-  onze pays européens couverts, plus Dow Jones, S&P 500 et Nasdaq-100, sans
-  saisie manuelle de ticker ;
+  onze pays européens couverts, plus Dow Jones, S&P 500, Nasdaq-100 et CSI 300,
+  sans saisie manuelle de ticker ;
+- catalogue sectoriel intégré aux zones Europe, Amérique et Asie : les pays
+  États-Unis et Chine regroupent respectivement les onze secteurs GICS du
+  S&P 500 et du CSI 300, aux côtés des familles STOXX Europe 600 et des indices
+  nationaux européens, avec compositions publiques actualisées ;
 - audit reproductible de la couverture des composantes d’indices ;
 - modification, archivage ou suppression d’une entreprise dans les deux vues ;
 - calcul de dix ratios, six indicateurs et trois scores explicables ;
@@ -53,7 +57,8 @@ Le parcours applicatif commence par un compte personnel vérifié :
 3. ouvrir « Sécurité » pour configurer le MFA, conserver les codes de
    récupération et contrôler les sessions actives ;
 4. utiliser « Explorer les indices » pour sélectionner une ou plusieurs
-   composantes des grands indices français, européens ou américains ;
+   composantes des grands indices ou des indices sectoriels classés dans leur
+   zone géographique ;
 5. utiliser « Charger l’historique » pour récupérer jusqu’aux dix derniers
    exercices structurés disponibles et calculer un MK Score par année ;
 6. ouvrir l’analyse d’une entreprise prête pour consulter ses fondamentaux,

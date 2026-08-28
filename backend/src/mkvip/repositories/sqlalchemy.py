@@ -14,6 +14,7 @@ from mkvip.analysis.scoring import ScoringAnalysis
 from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
 from mkvip.models.company import CompanyOrm
 from mkvip.models.financial import FinancialSnapshotOrm
+from mkvip.models.price import PricePointOrm
 from mkvip.models.scoring import ScoringAnalysisOrm
 from mkvip.models.valuation import ValuationAnalysisOrm
 from mkvip.repositories.company import DuplicateTickerError
@@ -27,6 +28,7 @@ from mkvip.schemas.financial import (
     FinancialAnalysisRead,
     FinancialSnapshotCreate,
 )
+from mkvip.schemas.price import PriceHistoryRead, PricePointCreate, PricePointRead
 from mkvip.schemas.scoring import ScoringAnalysisRead
 from mkvip.schemas.valuation import ValuationAnalysisRead
 
@@ -174,6 +176,24 @@ class SqlAlchemyCompanyRepository:
         await self._session.commit()
         return True
 
+    async def delete_many(self, company_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]:
+        requested_ids = list(dict.fromkeys(company_ids))
+        if not requested_ids:
+            return []
+        records = list(
+            await self._session.scalars(
+                select(CompanyOrm).where(
+                    CompanyOrm.owner_id == self._owner_id,
+                    CompanyOrm.id.in_(requested_ids),
+                )
+            )
+        )
+        for record in records:
+            await self._session.delete(record)
+        await self._session.commit()
+        deleted = {record.id for record in records}
+        return [company_id for company_id in requested_ids if company_id in deleted]
+
     async def get_financial_analysis(
         self,
         company_id: uuid.UUID,
@@ -287,6 +307,71 @@ class SqlAlchemyCompanyRepository:
             (FinancialAnalysisRead.model_validate(record) for record in records),
             key=lambda record: record.fiscal_year,
             reverse=True,
+        )
+
+    async def list_price_history(
+        self,
+        company_id: uuid.UUID,
+    ) -> PriceHistoryRead | None:
+        await self._get_owned_company_record(company_id)
+        records = list(
+            await self._session.scalars(
+                select(PricePointOrm)
+                .where(PricePointOrm.company_id == company_id)
+                .order_by(PricePointOrm.date)
+            )
+        )
+        if not records:
+            return None
+        return PriceHistoryRead(
+            company_id=company_id,
+            currency=records[-1].currency,
+            source=records[-1].source,
+            points=[PricePointRead.model_validate(record) for record in records],
+            updated_at=max(record.updated_at for record in records),
+        )
+
+    async def replace_price_history(
+        self,
+        company_id: uuid.UUID,
+        points: Sequence[PricePointCreate],
+        *,
+        currency: str,
+        source: str,
+    ) -> PriceHistoryRead:
+        company = await self._get_owned_company_record(company_id)
+        existing_records = list(
+            await self._session.scalars(
+                select(PricePointOrm).where(PricePointOrm.company_id == company_id)
+            )
+        )
+        existing_by_date = {record.date: record for record in existing_records}
+        requested_dates = {point.date for point in points}
+        refreshed_at = datetime.now(UTC)
+        for record in existing_records:
+            if record.date not in requested_dates:
+                await self._session.delete(record)
+        records: list[PricePointOrm] = []
+        for point in points:
+            record = existing_by_date.get(point.date)
+            if record is None:
+                record = PricePointOrm(company_id=company_id, date=point.date)
+            record.close = point.close
+            record.adjusted_close = point.adjusted_close
+            record.currency = currency
+            record.source = source
+            record.updated_at = refreshed_at
+            records.append(record)
+        self._session.add_all(records)
+        if company.status != CompanyStatus.READY.value:
+            company.status = CompanyStatus.PARTIAL.value
+        await self._session.commit()
+        return PriceHistoryRead(
+            company_id=company_id,
+            currency=currency,
+            source=source,
+            points=[PricePointRead.model_validate(point) for point in points],
+            updated_at=refreshed_at,
         )
 
     async def list_valuation_analyses(

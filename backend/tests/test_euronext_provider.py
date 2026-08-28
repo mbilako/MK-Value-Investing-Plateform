@@ -4,33 +4,33 @@ from mkvip.providers.euronext import EuronextIndex, EuronextIndexProvider, _pars
 def test_supported_indices_include_major_euronext_markets() -> None:
     indices = EuronextIndexProvider(fetch_json=lambda _: {}).list_indices()
     names = [index.name for index in indices]
-    assert names == [
+    assert {
         "CAC 40",
-        "CAC Next 20",
-        "SBF 120",
         "AEX",
-        "AMX",
-        "AEX Small Cap",
         "BEL 20",
-        "BEL Mid",
-        "BEL Small",
         "PSI",
-        "PSI All-Share",
-        "PSI Industrials",
         "ISEQ 20",
-        "ISEQ All Share",
+        "CAC Financials",
+        "AEX Technology",
+        "BEL Health Care",
+        "PSI Industrials",
         "ISEQ Financial",
-    ]
+    } <= set(names)
+    assert len([index for index in indices if index.kind == "sector"]) == 52
     assert {
         country: len([index for index in indices if index.country == country])
         for country in {index.country for index in indices}
     } == {
-        "France": 3,
-        "Pays-Bas": 3,
-        "Belgique": 3,
-        "Portugal": 3,
-        "Irlande": 3,
+        "France": 14,
+        "Pays-Bas": 14,
+        "Belgique": 14,
+        "Portugal": 11,
+        "Irlande": 12,
     }
+    sectors = {index.code: index.sector for index in indices if index.kind == "sector"}
+    assert sectors["PSIIND"] == "Industrials"
+    assert sectors["ISEQFIN"] == "Financials"
+    assert sectors["CACHEALTH"] == "Health Care"
 
 
 def test_parses_euronext_composition_rows() -> None:

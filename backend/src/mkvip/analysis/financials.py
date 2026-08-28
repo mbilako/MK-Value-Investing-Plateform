@@ -167,6 +167,8 @@ def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
     assert snapshot.current_liabilities is not None
     assert snapshot.financial_debt is not None
     assert snapshot.cash is not None
+    total_liabilities = snapshot.total_assets - snapshot.total_equity
+    adjusted_equity = snapshot.total_equity + (snapshot.treasury_stock_value or 0)
     ratios = {
         "ebitda_margin": (snapshot.ebitda / snapshot.revenue if snapshot.revenue > 0 else None),
         "depreciation_to_ebit": (
@@ -183,7 +185,9 @@ def analyse_financials(snapshot: FinancialSnapshotCreate) -> FinancialAnalysis:
         ),
         "net_margin": (snapshot.net_income / snapshot.revenue if snapshot.revenue > 0 else None),
         "financial_leverage": (
-            snapshot.financial_debt / snapshot.total_equity if snapshot.total_equity > 0 else None
+            total_liabilities / adjusted_equity
+            if total_liabilities >= 0 and adjusted_equity > 0
+            else None
         ),
         "current_ratio": snapshot.current_assets / snapshot.current_liabilities,
         "market_cap_to_assets": snapshot.market_cap / snapshot.total_assets,

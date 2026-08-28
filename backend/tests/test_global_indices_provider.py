@@ -7,11 +7,11 @@ from mkvip.providers.global_indices import PublicIndexProvider
 from mkvip.providers.index_catalog import IndexCatalogProvider
 
 
-def test_catalog_exposes_three_indices_for_every_european_country() -> None:
+def test_catalog_exposes_general_and_sector_indices_for_every_european_country() -> None:
     indices = [
         index
         for index in IndexCatalogProvider().list_indices()
-        if index.region == "Europe"
+        if index.region == "Europe" and index.country != "Europe"
     ]
     counts = {
         country: len([index for index in indices if index.country == country])
@@ -19,18 +19,22 @@ def test_catalog_exposes_three_indices_for_every_european_country() -> None:
     }
 
     assert counts == {
-        "Allemagne": 3,
-        "Belgique": 3,
-        "Espagne": 3,
-        "France": 3,
-        "Grèce": 3,
-        "Irlande": 3,
-        "Italie": 3,
-        "Pays-Bas": 3,
-        "Portugal": 3,
-        "Royaume-Uni": 3,
-        "Suisse": 3,
+        "Allemagne": 13,
+        "Belgique": 14,
+        "Espagne": 6,
+        "France": 14,
+        "Grèce": 12,
+        "Irlande": 12,
+        "Italie": 13,
+        "Pays-Bas": 14,
+        "Portugal": 11,
+        "Royaume-Uni": 14,
+        "Suisse": 13,
     }
+    assert all(
+        any(index.country == country and index.kind == "sector" for index in indices)
+        for country in counts
+    )
 
 
 def test_lists_public_indices_by_country() -> None:
@@ -38,6 +42,7 @@ def test_lists_public_indices_by_country() -> None:
         fetch_text=lambda _: "",
         fetch_json=lambda _: {},
     ).list_indices()
+    indices = [index for index in indices if index.kind == "broad"]
 
     assert [(index.code, index.country) for index in indices] == [
         ("DAX40", "Allemagne"),
@@ -61,7 +66,90 @@ def test_lists_public_indices_by_country() -> None:
         ("DOWJONES", "États-Unis"),
         ("SP500", "États-Unis"),
         ("NASDAQ100", "États-Unis"),
+        ("CSI300", "Chine"),
+        ("TOPIX", "Japon"),
+        ("NIKKEI225", "Japon"),
+        ("MSCIZA", "Afrique du Sud"),
+        ("MASI", "Maroc"),
+        ("EGX30", "Égypte"),
+        ("NGX30", "Nigeria"),
+        ("TUNINDEX", "Tunisie"),
+        ("TUNINDEX20", "Tunisie"),
+        ("BRVMCOMPOSITE", "BRVM / UEMOA"),
     ]
+
+
+def test_groups_united_states_and_china_under_continental_regions() -> None:
+    indices = {
+        index.code: index
+        for index in PublicIndexProvider().list_indices()
+        if index.code in {"DOWJONES", "SP500", "NASDAQ100", "CSI300"}
+    }
+
+    assert {code: (index.region, index.country) for code, index in indices.items()} == {
+        "DOWJONES": ("Amérique", "États-Unis"),
+        "SP500": ("Amérique", "États-Unis"),
+        "NASDAQ100": ("Amérique", "États-Unis"),
+        "CSI300": ("Asie", "Chine"),
+    }
+
+
+def test_lists_sector_indices_in_each_geographic_region() -> None:
+    indices = [index for index in PublicIndexProvider().list_indices() if index.kind == "sector"]
+
+    assert {
+        region: len([index for index in indices if index.region == region])
+        for region in {index.region for index in indices}
+    } == {"Europe": 59, "Amérique": 11, "Asie": 28, "Afrique": 74}
+    assert {index.sector for index in indices if index.region == "Europe"} == {
+        "Communication Services",
+        "Consumer Discretionary",
+        "Consumer Staples",
+        "Energy",
+        "Financials",
+        "Health Care",
+        "Industrials",
+        "Information Technology",
+        "Materials",
+        "Real Estate",
+        "Utilities",
+    }
+    assert {index.sector for index in indices if index.region == "Amérique"} == {
+        "Communication Services",
+        "Consumer Discretionary",
+        "Consumer Staples",
+        "Energy",
+        "Financials",
+        "Health Care",
+        "Industrials",
+        "Information Technology",
+        "Materials",
+        "Real Estate",
+        "Utilities",
+    }
+    assert {index.sector for index in indices if index.region == "Asie"} == {
+        "Communication Services",
+        "Consumer Discretionary",
+        "Consumer Staples",
+        "Energy",
+        "Financials",
+        "Health Care",
+        "Industrials",
+        "Information Technology",
+        "Materials",
+        "Real Estate",
+        "Utilities",
+    }
+    assert {index.country for index in indices if index.region == "Afrique"} == {
+        "Afrique du Sud",
+        "BRVM / UEMOA",
+        "Maroc",
+        "Égypte",
+        "Nigeria",
+        "Tunisie",
+    }
+    assert all(index.name.startswith("S&P 500 ") for index in indices if index.region == "Amérique")
+    assert all("Russell" not in index.name for index in indices)
 
 
 @pytest.mark.asyncio
@@ -152,6 +240,336 @@ async def test_parses_blackrock_dax_holdings_and_ignores_cash() -> None:
 
 
 @pytest.mark.asyncio
+async def test_preserves_european_sector_metadata_and_component_market() -> None:
+    def point(value, formatted_value=None):
+        return {"value": value, "formattedValue": formatted_value}
+
+    payload = {
+        "componentsByNameMap": {
+            "holdings": {
+                "containersByNameMap": {
+                    "all": {
+                        "dataPointsByNameMap": {
+                            "asOfDate": point(20260813, "13/Aug/2026"),
+                            "ticker": point(["SAN", "NOVO B"]),
+                            "issueName": point(["BANCO SANTANDER SA", "NOVO NORDISK CLASS B"]),
+                            "assetClass": point(["Equity", "Equity"]),
+                            "isin": point(["ES0113900J37", "DK0062498333"]),
+                            "countryOfRisk": point(["Spain", "Denmark"]),
+                            "exchange": point(["Bolsa De Madrid", "Nasdaq Omx Nordic"]),
+                            "marketCurrencyCode": point(["EUR", "DKK"]),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    composition = await PublicIndexProvider(fetch_json=lambda _: payload).get_composition(
+        "EUROPEBANKS"
+    )
+
+    assert composition.kind == "sector"
+    assert composition.sector == "Financials"
+    assert [company.mic for company in composition.constituents] == ["XMAD", "XCSE"]
+
+
+@pytest.mark.asyncio
+async def test_filters_a_dax_national_sector_from_blackrock_holdings() -> None:
+    def point(value, formatted_value=None):
+        return {"value": value, "formattedValue": formatted_value}
+
+    payload = {
+        "componentsByNameMap": {
+            "holdings": {
+                "containersByNameMap": {
+                    "all": {
+                        "dataPointsByNameMap": {
+                            "asOfDate": point(20260815, "15/Aug/2026"),
+                            "ticker": point(["SAP", "ALV"]),
+                            "issueName": point(["SAP SE", "ALLIANZ SE"]),
+                            "assetClass": point(["Equity", "Equity"]),
+                            "isin": point(["DE0007164600", "DE0008404005"]),
+                            "countryOfRisk": point(["Germany", "Germany"]),
+                            "exchange": point(["Xetra", "Xetra"]),
+                            "marketCurrencyCode": point(["EUR", "EUR"]),
+                            "sectorName": point(["Information Technology", "Financials"]),
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    composition = await PublicIndexProvider(fetch_json=lambda _: payload).get_composition("DETECH")
+
+    assert composition.country == "Allemagne"
+    assert composition.kind == "sector"
+    assert composition.sector == "Information Technology"
+    assert [company.ticker for company in composition.constituents] == ["SAP"]
+
+
+@pytest.mark.asyncio
+async def test_filters_a_swiss_national_sector_from_ishares_json() -> None:
+    payload = {
+        "aaData": [
+            [
+                "NOVN",
+                "NOVARTIS AG",
+                "Health Care",
+                "Equity",
+                {},
+                {},
+                {},
+                {},
+                "CH0012005267",
+                {},
+                "Switzerland",
+                "SIX Swiss Exchange",
+                "CHF",
+            ],
+            [
+                "UBSG",
+                "UBS GROUP AG",
+                "Financials",
+                "Equity",
+                {},
+                {},
+                {},
+                {},
+                "CH0244767585",
+                {},
+                "Switzerland",
+                "SIX Swiss Exchange",
+                "CHF",
+            ],
+        ]
+    }
+
+    composition = await PublicIndexProvider(fetch_json=lambda _: payload).get_composition(
+        "CHHEALTH"
+    )
+
+    assert composition.country == "Suisse"
+    assert composition.kind == "sector"
+    assert [company.ticker for company in composition.constituents] == ["NOVN"]
+
+
+@pytest.mark.asyncio
+async def test_parses_us_sector_holdings() -> None:
+    payload = "\n".join(
+        [
+            "iShares U.S. Healthcare ETF",
+            'Fund Holdings as of,"Aug 13, 2026"',
+            (
+                "Ticker,Name,Sector,Asset Class,Market Value,Weight (%),"
+                "Notional Value,Quantity,Price,Location,Exchange,Currency,"
+                "FX Rate,Market Currency,Accrual Date"
+            ),
+            (
+                '"LLY","ELI LILLY","Health Care","Equity","1","1","1",'
+                '"1","1","United States","NYSE","USD","1","USD","-"'
+            ),
+            (
+                '"AAPL","APPLE INC","Information Technology","Equity","1","1","1",'
+                '"1","1","United States","NASDAQ","USD","1","USD","-"'
+            ),
+        ]
+    )
+    composition = await PublicIndexProvider(fetch_text=lambda _: payload).get_composition(
+        "USHEALTH"
+    )
+
+    assert composition.kind == "sector"
+    assert composition.sector == "Health Care"
+    assert [company.ticker for company in composition.constituents] == ["LLY"]
+
+
+@pytest.mark.asyncio
+async def test_parses_csi_300_and_filters_its_gics_sectors() -> None:
+    payload = "\n".join(
+        [
+            'Fund Holdings as of,"14-Aug-2026"',
+            (
+                "Ticker,Name,Sector,Asset Class,Market Value,Weight (%),"
+                "Notional Value,Shares,Price,Location,Exchange,Currency,"
+                "FX Rate,Market Currency"
+            ),
+            (
+                '"300308","ZHONGJI INNOLIGHT A","Information Technology",'
+                '"Equity","1","1","1","1","1","China",'
+                '"Shenzhen Stock Exchange","CNY","1","CNY"'
+            ),
+            (
+                '"600519","KWEICHOW MOUTAI A","Consumer Staples","Equity",'
+                '"1","1","1","1","1","China","Shanghai Stock Exchange",'
+                '"CNY","1","CNY"'
+            ),
+        ]
+    )
+    provider = PublicIndexProvider(fetch_text=lambda _: payload)
+
+    broad = await provider.get_composition("CSI300")
+    technology = await provider.get_composition("CNTECH")
+
+    assert broad.as_of == "14-Aug-2026"
+    assert [company.ticker for company in broad.constituents] == ["300308", "600519"]
+    assert [company.mic for company in broad.constituents] == ["XSHE", "XSHG"]
+    assert [company.currency for company in broad.constituents] == ["CNY", "CNY"]
+    assert [company.ticker for company in technology.constituents] == ["300308"]
+    assert technology.kind == "sector"
+    assert technology.sector == "Information Technology"
+
+
+@pytest.mark.asyncio
+async def test_parses_japan_topix_17_workbook() -> None:
+    provider = PublicIndexProvider(fetch_bytes=lambda _: _nomura_workbook())
+
+    composition = await provider.get_composition("JP1617")
+
+    assert composition.country == "Japon"
+    assert composition.as_of == "July 31, 2026"
+    assert [company.ticker for company in composition.constituents] == ["2914", "2802"]
+    assert [company.isin for company in composition.constituents] == [
+        "JP3726800000",
+        "JP3119600009",
+    ]
+    assert all(company.mic == "XTKS" for company in composition.constituents)
+
+
+@pytest.mark.asyncio
+async def test_parses_masi_and_filters_an_official_sector() -> None:
+    payload = [
+        {
+            "instrument": {"fr": "ATW"},
+            "sector": {"en": "Banks                                             "},
+        },
+        {"instrument": {"fr": "MNG"}, "sector": {"en": "Mining"}},
+    ]
+    actions = """
+    <script data-drupal-selector="drupal-settings-json" type="application/json">
+      {"live_market":{"actions":[
+        {"symbol":"ATW","emetteur":{"fr":"ATTIJARIWAFA BANK"}},
+        {"symbol":"MNG","emetteur":{"fr":"MANAGEM"}}
+      ]}}
+    </script>
+    """
+    provider = PublicIndexProvider(
+        fetch_json=lambda _: payload,
+        fetch_text=lambda _: actions,
+    )
+
+    broad = await provider.get_composition("MASI")
+    banks = await provider.get_composition("MABANKS")
+
+    assert [company.name for company in broad.constituents] == [
+        "ATTIJARIWAFA BANK",
+        "MANAGEM",
+    ]
+    assert [company.ticker for company in banks.constituents] == ["ATW"]
+    assert banks.sector == "Financials"
+
+
+@pytest.mark.asyncio
+async def test_parses_egx_broad_and_sector_payloads() -> None:
+    broad_payload = {
+        "data": {
+            "items": [
+                {
+                    "isin": "EGS60121C018",
+                    "reuters": "COMI.CA",
+                    "name": "Commercial International Bank",
+                }
+            ]
+        }
+    }
+    sector_payload = {
+        "data": [
+            {
+                "isin": "EGS60301C016",
+                "name": "Housing & Development Bank",
+            }
+        ]
+    }
+
+    def fetch_json(url: str):
+        return sector_payload if "sector-constituents" in url else broad_payload
+
+    provider = PublicIndexProvider(fetch_json=fetch_json)
+    broad = await provider.get_composition("EGX30")
+    banks = await provider.get_composition("EGXSEC1")
+
+    assert broad.constituents[0].ticker == "COMI.CA"
+    assert banks.constituents[0].ticker is None
+    assert banks.constituents[0].isin == "EGS60301C016"
+
+
+@pytest.mark.asyncio
+async def test_parses_tunindex_and_its_sector_groups() -> None:
+    payload = """
+    <div id="tunindex">
+      <a href="/sites/default/files/2026-05/composition.pdf">PDF</a>
+      <table><tr><td>1</td><td>TN0001100254</td><td>SFBT</td><td>SFBT</td></tr></table>
+    </div>
+    <div id="tunindex20"></div>
+    <div id="indices-sectoriels">
+      <tbody class="niv1-group" data-icb="8000">
+        <tr class="table-primary-indice"><td>8000</td></tr>
+        <tr class="border-table"><td>8300</td><td>TNINDEX</td><td>Banques</td>
+          <td>TN0001800457</td><td>BIAT</td><td>BIAT</td></tr>
+      </tbody>
+    </div>
+    """
+    provider = PublicIndexProvider(fetch_text=lambda _: payload)
+
+    broad = await provider.get_composition("TUNINDEX")
+    financials = await provider.get_composition("TN8000")
+
+    assert broad.as_of == "2026-05"
+    assert broad.constituents[0].ticker == "SFBT"
+    assert financials.constituents[0].isin == "TN0001800457"
+
+
+@pytest.mark.asyncio
+async def test_parses_brvm_composite_and_sector_pages() -> None:
+    quotes = """
+    <table><thead><tr><th>Symbole</th><th>Nom</th></tr></thead><tbody>
+      <tr><td>TTLS</td><td>TOTALENERGIES MARKETING SÉNÉGAL</td></tr>
+      <tr><td>ORAC</td><td>ORANGE CÔTE D'IVOIRE</td></tr>
+    </tbody></table>
+    """
+    energy = """
+    <article class="node node-cours-actions node-teaser"><h2><a>TTLS</a></h2></article>
+    """
+
+    def fetch_text(url: str) -> str:
+        return energy if url.endswith("/energie") else quotes
+
+    provider = PublicIndexProvider(fetch_text=fetch_text)
+    broad = await provider.get_composition("BRVMCOMPOSITE")
+    sector = await provider.get_composition("BRVMENER")
+
+    assert len(broad.constituents) == 2
+    assert sector.constituents[0].name == "TOTALENERGIES MARKETING SÉNÉGAL"
+
+
+@pytest.mark.asyncio
+async def test_parses_current_ngx30_etf_constituents_and_sector_views() -> None:
+    payload = """
+    <p>Date (Close)</p><td class="value">2026-08-24</td>
+    <h3>Portfolio Delivery Constituents</h3>
+    <td class="value">GTCO</td><td class="value">SEPLAT</td>
+    <h3>Disclaimer</h3>
+    """
+    provider = PublicIndexProvider(fetch_text=lambda _: payload)
+
+    broad = await provider.get_composition("NGX30")
+    financials = await provider.get_composition("NGFIN")
+
+    assert [company.ticker for company in broad.constituents] == ["GTCO", "SEPLAT"]
+    assert [company.name for company in financials.constituents] == ["Guaranty Trust Holding"]
+
+
+@pytest.mark.asyncio
 async def test_builds_ibex_35_official_snapshot() -> None:
     composition = await PublicIndexProvider().get_composition("IBEX35")
 
@@ -194,9 +612,7 @@ async def test_parses_all_borsa_italiana_pages() -> None:
     def fetch_text(url: str) -> str:
         return second_page if "page=2" in url else first_page
 
-    composition = await PublicIndexProvider(fetch_text=fetch_text).get_composition(
-        "FTSEITMID"
-    )
+    composition = await PublicIndexProvider(fetch_text=fetch_text).get_composition("FTSEITMID")
 
     assert [company.name for company in composition.constituents] == ["Acea", "Generali"]
     assert [company.isin for company in composition.constituents] == [
@@ -274,6 +690,40 @@ def _state_street_workbook() -> bytes:
     with ZipFile(output, "w") as archive:
         archive.writestr("xl/sharedStrings.xml", shared_xml)
         archive.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+    return output.getvalue()
+
+
+def _nomura_workbook() -> bytes:
+    rows = [
+        ["1617", "NEXT FUNDS TOPIX-17 FOODS ETF", "", "", "", "", "", ""],
+        ["", "as of July 31, 2026", "", "", "ISIN", "JP3046560003", "", ""],
+        ["No.", "Code", "ISIN Code", "Japanese Name", "Name", "Shares", "Value", "%"],
+        ["1", "2914", "JP3726800000", "JT", "JAPAN TOBACCO INC.", "1", "1", "1"],
+        ["2", "2802", "JP3119600009", "AJINOMOTO", "AJINOMOTO CO.,INC.", "1", "1", "1"],
+    ]
+    shared = [value for row in rows for value in row]
+    position = 0
+    xml_rows = []
+    for row_number, row in enumerate(rows, start=1):
+        cells = []
+        for column, _value in enumerate(row, start=1):
+            reference = f"{chr(64 + column)}{row_number}"
+            cells.append(f'<c r="{reference}" t="s"><v>{position}</v></c>')
+            position += 1
+        xml_rows.append(f'<row r="{row_number}">{"".join(cells)}</row>')
+    namespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    shared_xml = (
+        f'<sst xmlns="{namespace}">'
+        + "".join(f"<si><t>{value}</t></si>" for value in shared)
+        + "</sst>"
+    )
+    sheet_xml = (
+        f'<worksheet xmlns="{namespace}"><sheetData>{"".join(xml_rows)}</sheetData></worksheet>'
+    )
+    output = BytesIO()
+    with ZipFile(output, "w") as archive:
+        archive.writestr("xl/sharedStrings.xml", shared_xml)
+        archive.writestr("xl/worksheets/sheet2.xml", sheet_xml)
     return output.getvalue()
 
 

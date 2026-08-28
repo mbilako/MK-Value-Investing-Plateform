@@ -37,6 +37,7 @@ class ProviderCompanyProfile:
     quote_currency: str | None = None
     sector: str | None = None
     industry: str | None = None
+    business_summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ class ProviderCashFlow:
 class ProviderPricePoint:
     timestamp: str
     close: float
+    adjusted_close: float | None = None
 
 
 class FinancialDataProvider(Protocol):

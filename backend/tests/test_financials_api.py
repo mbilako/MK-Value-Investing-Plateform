@@ -84,9 +84,9 @@ def test_import_financials_calculates_rules_and_marks_company_ready(
     body = response.json()
     assert body["company_id"] == company_id
     assert body["fiscal_year"] == 2025
-    assert body["mk_score"] == 100.0
+    assert body["mk_score"] == 90.0
     assert body["quality_score"] == 100.0
-    assert body["safety_score"] == 100.0
+    assert body["safety_score"] == 75.0
     assert {indicator["key"]: indicator["value"] for indicator in body["indicators"]} == {
         "free_cash_flow": 260.0,
         "free_cash_flow_margin": 0.26,
@@ -102,18 +102,22 @@ def test_import_financials_calculates_rules_and_marks_company_ready(
         "capex_to_net_income": 0.16,
         "pe_ratio": 18.0,
         "net_margin": 0.25,
-        "financial_leverage": 0.6,
+        "financial_leverage": 3.0,
         "current_ratio": 2.4,
         "market_cap_to_assets": 1.125,
         "net_debt_to_ebitda": 1.111111,
     }
-    assert {metric["status"] for metric in body["metrics"]} == {"pass"}
+    assert {metric["status"] for metric in body["metrics"]} == {"pass", "fail"}
+    leverage = next(
+        metric for metric in body["metrics"] if metric["key"] == "financial_leverage"
+    )
+    assert leverage["label"] == "Effet de levier ajusté"
 
     companies = client.get("/api/v1/companies").json()
     assert companies[0]["status"] == "ready"
-    assert companies[0]["latest_mk_score"] == 100.0
+    assert companies[0]["latest_mk_score"] == 90.0
     assert companies[0]["latest_quality_score"] == 100.0
-    assert companies[0]["latest_safety_score"] == 100.0
+    assert companies[0]["latest_safety_score"] == 75.0
 
 
 def test_import_financials_rejects_unknown_company(client: TestClient) -> None:
@@ -195,6 +199,9 @@ def test_automatic_import_creates_latest_available_analysis(
                 market_cap=4_500_000_000,
                 sector="Industrials",
                 industry="Specialty Chemicals",
+                business_summary=(
+                    "Air Liquide supplies gases and services to industry and health care."
+                ),
             )
 
         async def get_income_statements(
@@ -253,10 +260,13 @@ def test_automatic_import_creates_latest_available_analysis(
     body = response.json()
     assert body["company_id"] == company_id
     assert body["snapshots"][0]["source"] == ("Public Test Data · AI.PA · exercice 2025")
-    assert body["snapshots"][0]["mk_score"] == 100.0
+    assert body["snapshots"][0]["mk_score"] == 90.0
     company = client.get("/api/v1/companies").json()[0]
     assert company["sector"] == "Industrials"
     assert company["industry"] == "Specialty Chemicals"
+    assert company["business_summary"] == (
+        "Air Liquide supplies gases and services to industry and health care."
+    )
 
 
 def test_automatic_import_builds_history_and_refreshes_existing_years(
@@ -331,6 +341,7 @@ def test_automatic_import_builds_history_and_refreshes_existing_years(
                 ProviderPricePoint(
                     timestamp=f"{year}-12-31T00:00:00",
                     close=45 if year == 2025 else 40,
+                    adjusted_close=44 if year == 2025 else 38,
                 )
                 for year in years
             ]
@@ -352,6 +363,118 @@ def test_automatic_import_builds_history_and_refreshes_existing_years(
     assert len(second.json()["snapshots"]) == 2
     assert second.json()["snapshots"][0]["closing_price"] == 45
     assert second.json()["snapshots"][0]["shares_outstanding"] == 100
+    assert second.json()["price_history"]["currency"] == "EUR"
+    assert second.json()["price_history"]["source"] == "Yahoo Finance"
+    assert second.json()["price_history"]["points"] == [
+        {"date": "2024-12-31", "close": 40.0, "adjusted_close": 38.0},
+        {"date": "2025-12-31", "close": 45.0, "adjusted_close": 44.0},
+    ]
+
+    cached = client.get(f"/api/v1/companies/{company_id}/financials")
+    assert cached.status_code == 200
+    assert cached.json()["price_history"]["points"][-1]["adjusted_close"] == 44
+
+
+def test_price_history_import_refreshes_the_company_activity_profile(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    from mkvip.providers.base import ProviderCompanyProfile, ProviderPricePoint
+
+    class PriceProvider:
+        name = "Public price test"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="Air Liquide",
+                exchange="Euronext Paris",
+                country="France",
+                currency="EUR",
+                market_cap=4_500_000_000,
+                sector="Basic Materials",
+                industry="Specialty Chemicals",
+                business_summary=(
+                    "Air Liquide supplies gases and services to industry and health care."
+                ),
+            )
+
+        async def get_price_history(self, _ticker: str) -> list[ProviderPricePoint]:
+            return [
+                ProviderPricePoint(timestamp="2000-01-03", close=30),
+                ProviderPricePoint(timestamp="2026-08-18", close=180),
+            ]
+
+    app.dependency_overrides[get_financial_data_provider] = PriceProvider
+    try:
+        response = client.post(
+            f"/api/v1/companies/{company_id}/financials/prices/automatic",
+        )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+
+    assert response.status_code == 200
+    assert response.json()["points"][0]["date"] == "2000-01-03"
+    company = client.get("/api/v1/companies").json()[0]
+    assert company["status"] == "partial"
+    assert company["sector"] == "Materials"
+    assert company["industry"] == "Specialty Chemicals"
+    assert company["business_summary"] == (
+        "Air Liquide supplies gases and services to industry and health care."
+    )
+
+
+def test_automatic_import_falls_back_to_public_profile_and_prices(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    from mkvip.providers.base import ProviderCompanyProfile, ProviderPricePoint
+
+    class PriceOnlyProvider:
+        name = "Public price-only test"
+
+        async def get_profile(self, ticker: str) -> ProviderCompanyProfile:
+            return ProviderCompanyProfile(
+                ticker=ticker,
+                name="Air Liquide",
+                exchange="Euronext Paris",
+                country="France",
+                currency="EUR",
+                market_cap=4_500_000_000,
+                sector="Basic Materials",
+                industry="Specialty Chemicals",
+                business_summary="Air Liquide supplies gases and services.",
+            )
+
+        async def get_income_statements(self, _ticker: str) -> list:
+            return []
+
+        async def get_balance_sheet(self, _ticker: str) -> list:
+            return []
+
+        async def get_cash_flow(self, _ticker: str) -> list:
+            return []
+
+        async def get_price_history(self, _ticker: str) -> list[ProviderPricePoint]:
+            return [
+                ProviderPricePoint(timestamp="2025-12-31", close=165),
+                ProviderPricePoint(timestamp="2026-08-18", close=180),
+            ]
+
+    app.dependency_overrides[get_financial_data_provider] = PriceOnlyProvider
+    try:
+        response = client.post(
+            f"/api/v1/companies/{company_id}/financials/automatic",
+        )
+    finally:
+        app.dependency_overrides.pop(get_financial_data_provider, None)
+
+    assert response.status_code == 201
+    assert response.json()["snapshots"] == []
+    assert response.json()["price_history"]["points"][-1]["close"] == 180
+    company = client.get("/api/v1/companies").json()[0]
+    assert company["status"] == "partial"
+    assert company["business_summary"] == "Air Liquide supplies gases and services."
 
 
 def test_automatic_import_rejects_a_company_already_in_flight(

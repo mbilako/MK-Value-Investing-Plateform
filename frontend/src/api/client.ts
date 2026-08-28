@@ -1,4 +1,4 @@
-export type CompanyStatus = "pending" | "ready" | "error";
+export type CompanyStatus = "pending" | "partial" | "ready" | "error";
 
 export interface CompanyPayload {
   name: string;
@@ -8,6 +8,7 @@ export interface CompanyPayload {
   currency: string;
   sector?: string | null;
   industry?: string | null;
+  business_summary?: string | null;
   isin?: string | null;
   cik?: string | null;
   lei?: string | null;
@@ -33,6 +34,12 @@ export interface IndexSummary {
   provider: string;
   region?: string;
   country?: string;
+  kind?: "broad" | "sector";
+  sector?: string | null;
+}
+
+export interface CompanyBulkDeleteResult {
+  deleted_ids: string[];
 }
 
 export interface IndexConstituent {
@@ -191,6 +198,21 @@ export interface FinancialHistory {
   company_id: string;
   snapshots: FinancialAnalysis[];
   trend: FinancialTrend;
+  price_history?: PriceHistory | null;
+}
+
+export interface PricePoint {
+  date: string;
+  close: number;
+  adjusted_close: number | null;
+}
+
+export interface PriceHistory {
+  company_id: string;
+  currency: string;
+  source: string;
+  points: PricePoint[];
+  updated_at: string | null;
 }
 
 export interface ValuationAssumptions {
@@ -398,6 +420,87 @@ export interface ScreenerPreparation {
   }>;
 }
 
+export type MarketScanStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export interface NationalMarket {
+  code: string;
+  name: string;
+  region: string;
+  currency: string;
+  exchanges: string[];
+}
+
+export interface MarketScanCriteria {
+  market: "US" | "INDEX" | "COUNTRY" | "MKVIP";
+  index_code: string | null;
+  country_code: string | null;
+  exchanges: Array<"NASDAQ" | "NYSE" | "AMEX">;
+  years: number;
+  performance_direction: "decline" | "gain" | "any";
+  minimum_decline_pct: number;
+  minimum_market_cap: number | null;
+  maximum_market_cap: number | null;
+  maximum_pe_ratio: number | null;
+  maximum_price_to_book: number | null;
+  minimum_dividend_yield_pct: number | null;
+  minimum_mk_score: number | null;
+  minimum_annualized_return_pct: number | null;
+  maximum_volatility_pct: number | null;
+  minimum_drawdown_pct: number | null;
+  sort_by: "performance" | "annualized_return" | "volatility" | "max_drawdown" | "market_cap" | "pe_ratio" | "price_to_book" | "dividend_yield" | "mk_score";
+  sort_direction: "asc" | "desc";
+  result_limit: number | null;
+  ordinary_shares_only: boolean;
+}
+
+export interface MarketScanResult {
+  id: string;
+  ticker: string;
+  name: string;
+  exchange: string;
+  country: string;
+  currency: string;
+  market_cap: number | null;
+  pe_ratio: number | null;
+  price_to_book: number | null;
+  dividend_yield_pct: number | null;
+  mk_score: number | null;
+  start_date: string;
+  end_date: string;
+  start_price: number;
+  end_price: number;
+  performance_pct: number;
+  annualized_return_pct: number | null;
+  volatility_pct: number | null;
+  max_drawdown_pct: number | null;
+  price_source: string;
+}
+
+export interface MarketScan {
+  id: string;
+  status: MarketScanStatus;
+  criteria: MarketScanCriteria;
+  request_text: string | null;
+  universe_source: string;
+  price_source: string;
+  total_securities: number;
+  processed_securities: number;
+  matched_securities: number;
+  failed_securities: number;
+  insufficient_history_securities: number;
+  progress_pct: number;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  results: MarketScanResult[];
+}
+
+export type MarketScanListItem = Omit<
+  MarketScan,
+  "universe_source" | "price_source" | "results"
+>;
+
 export type AIAnalysisMode = "summary" | "comparison" | "question";
 
 export interface AIAnalysisPayload {
@@ -461,11 +564,20 @@ export interface CompanyClient {
     limit?: number;
   }): Promise<ScreenerPreparation>;
   analyzeWithAI?(payload: AIAnalysisPayload): Promise<AIAnalysis>;
+  listMarketScans?(): Promise<MarketScanListItem[]>;
+  listNationalMarkets?(): Promise<NationalMarket[]>;
+  createMarketScan?(criteria: MarketScanCriteria): Promise<MarketScan>;
+  createMarketScanFromQuestion?(question: string): Promise<MarketScan>;
+  getMarketScan?(id: string): Promise<MarketScan>;
+  retryMarketScan?(id: string): Promise<MarketScan>;
+  cancelMarketScan?(id: string): Promise<MarketScan>;
+  exportMarketScan?(id: string): Promise<void>;
   createCompany(payload: CompanyPayload): Promise<Company>;
   updateCompany(id: string, payload: Partial<CompanyPayload>): Promise<Company>;
   archiveCompany(id: string): Promise<Company>;
   restoreCompany(id: string): Promise<Company>;
   deleteCompany(id: string): Promise<void>;
+  deleteCompanies(ids: string[]): Promise<CompanyBulkDeleteResult>;
   listIndices(): Promise<IndexSummary[]>;
   getIndex(code: string): Promise<IndexComposition>;
   addIndexCompanies(companies: IndexCompanySelection[]): Promise<IndexBulkAddResult>;
@@ -475,6 +587,7 @@ export interface CompanyClient {
   ): Promise<FinancialAnalysis>;
   importFinancialsAutomatically(companyId: string): Promise<FinancialHistory>;
   getFinancialHistory(companyId: string): Promise<FinancialHistory>;
+  importPriceHistoryAutomatically(companyId: string): Promise<PriceHistory>;
   listValuations(companyId: string): Promise<ValuationAnalysis[]>;
   createValuation(
     companyId: string,
@@ -551,6 +664,25 @@ export function createApiClient(): CompanyClient {
       return undefined as T;
     }
     return response.json() as Promise<T>;
+  }
+
+  async function download(path: string): Promise<void> {
+    const response = await fetch(`${apiUrl}${path}`, { credentials: "include" });
+    if (!response.ok) {
+      const errorBody: unknown = await response.json().catch(() => null);
+      throw new ApiError(response.status, getErrorMessage(errorBody, response.status));
+    }
+    const disposition = response.headers.get("Content-Disposition") ?? "";
+    const filename = disposition.match(/filename="?([^";]+)"?/)?.[1]
+      ?? "MK-VIP_scan_marche.xlsx";
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   return {
@@ -650,6 +782,29 @@ export function createApiClient(): CompanyClient {
       request<Company>(`/companies/${id}/restore`, { method: "POST" }),
     deleteCompany: (id) =>
       request<void>(`/companies/${id}`, { method: "DELETE" }),
+    deleteCompanies: (ids) =>
+      request<CompanyBulkDeleteResult>("/companies/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ company_ids: ids }),
+      }),
+    listMarketScans: () => request<MarketScanListItem[]>("/market-scans"),
+    listNationalMarkets: () => request<NationalMarket[]>("/market-scans/national-markets"),
+    createMarketScan: (criteria) =>
+      request<MarketScan>("/market-scans", {
+        method: "POST",
+        body: JSON.stringify({ criteria }),
+      }),
+    createMarketScanFromQuestion: (question) =>
+      request<MarketScan>("/market-scans/from-question", {
+        method: "POST",
+        body: JSON.stringify({ question }),
+      }),
+    getMarketScan: (id) => request<MarketScan>(`/market-scans/${id}`),
+    retryMarketScan: (id) =>
+      request<MarketScan>(`/market-scans/${id}/retry`, { method: "POST" }),
+    cancelMarketScan: (id) =>
+      request<MarketScan>(`/market-scans/${id}/cancel`, { method: "POST" }),
+    exportMarketScan: (id) => download(`/market-scans/${id}/export.xlsx`),
     listIndices: () => request<IndexSummary[]>("/indices"),
     getIndex: (code) => request<IndexComposition>(`/indices/${code}`),
     addIndexCompanies: (companies) =>
@@ -669,6 +824,11 @@ export function createApiClient(): CompanyClient {
       ),
     getFinancialHistory: (companyId) =>
       request<FinancialHistory>(`/companies/${companyId}/financials`),
+    importPriceHistoryAutomatically: (companyId) =>
+      request<PriceHistory>(
+        `/companies/${companyId}/financials/prices/automatic`,
+        { method: "POST" },
+      ),
     listValuations: (companyId) =>
       request<ValuationAnalysis[]>(`/companies/${companyId}/valuations`),
     createValuation: (companyId, payload) =>

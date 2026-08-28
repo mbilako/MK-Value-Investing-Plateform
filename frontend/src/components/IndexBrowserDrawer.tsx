@@ -17,10 +17,34 @@ interface IndexBrowserDrawerProps {
 const constituentKey = (company: IndexComposition["constituents"][number]) =>
   company.isin ?? company.ticker ?? company.name;
 
-const regionOrder = ["Europe", "États-Unis"];
+const regionOrder = ["Europe", "Amérique", "Asie", "Afrique"];
+
+const regionKeys: Record<string, string> = {
+  Europe: "europe",
+  Amérique: "america",
+  Asie: "asia",
+  Afrique: "africa",
+};
 
 const byFrenchName = (left: string, right: string) =>
   left.localeCompare(right, "fr", { sensitivity: "base" });
+
+const sectorLabels: Record<string, string> = {
+  "Communication Services": "Services de communication",
+  "Consumer Discretionary": "Consommation discrétionnaire",
+  "Consumer Staples": "Biens de consommation essentiels",
+  Energy: "Énergie",
+  Financials: "Finance",
+  "Health Care": "Santé",
+  Industrials: "Industrie",
+  "Information Technology": "Technologies de l’information",
+  Materials: "Matériaux",
+  "Real Estate": "Immobilier",
+  Utilities: "Services aux collectivités",
+};
+
+const sectorLabel = (sector?: string | null) =>
+  (sector && sectorLabels[sector]) || sector || "Autres secteurs";
 
 export function IndexBrowserDrawer({
   client,
@@ -31,6 +55,17 @@ export function IndexBrowserDrawer({
   const [composition, setComposition] = useState<IndexComposition | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expandedRegion, setExpandedRegion] = useState("Europe");
+  const [expandedCountryByRegion, setExpandedCountryByRegion] = useState<
+    Record<string, string>
+  >({
+    Europe: "France",
+    Amérique: "États-Unis",
+    Asie: "Chine",
+    Afrique: "Afrique du Sud",
+  });
+  const [expandedRegionalSectors, setExpandedRegionalSectors] = useState<
+    Record<string, boolean>
+  >({ Europe: true });
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -63,9 +98,20 @@ export function IndexBrowserDrawer({
         if (!active) return;
         setIndices(items);
         const initialIndex =
-          items.find((item) => (item.region ?? "Europe") === "Europe") ?? items[0];
+          items.find(
+            (item) =>
+              (item.region ?? "Europe") === "Europe" && item.kind === "sector",
+          )
+          ?? items.find((item) => (item.region ?? "Europe") === "Europe")
+          ?? items[0];
         if (initialIndex) {
           setExpandedRegion(initialIndex.region ?? "Europe");
+          if (initialIndex.country && initialIndex.country !== "Europe") {
+            setExpandedCountryByRegion((current) => ({
+              ...current,
+              [initialIndex.region ?? "Europe"]: initialIndex.country ?? "",
+            }));
+          }
           void loadComposition(initialIndex.code);
         }
       })
@@ -155,49 +201,242 @@ export function IndexBrowserDrawer({
                 (index) => (index.region ?? "Europe") === region,
               );
               if (!regionalIndices.length) return null;
+              const regionalSectorIndices = regionalIndices.filter(
+                (index) => index.kind === "sector" && index.country === "Europe",
+              );
+              const nationalIndices = regionalIndices.filter(
+                (index) => !regionalSectorIndices.includes(index),
+              );
               const countries = Array.from(
-                regionalIndices.reduce((groups, index) => {
+                nationalIndices.reduce((groups, index) => {
                   const country = index.country ?? "Non renseigné";
                   groups.set(country, [...(groups.get(country) ?? []), index]);
                   return groups;
                 }, new Map<string, IndexSummary[]>()),
               ).sort(([left], [right]) => byFrenchName(left, right));
               const isExpanded = expandedRegion === region;
+              const areRegionalSectorsExpanded = Boolean(
+                expandedRegionalSectors[region],
+              );
+              const regionKey = regionKeys[region] ?? region
+                .toLocaleLowerCase("fr")
+                .replace(/[^a-z0-9]+/g, "-");
               return (
                 <section key={region} aria-label={`Indices ${region}`}>
                   <button
                     className="index-region-toggle"
                     aria-expanded={isExpanded}
-                    onClick={() => setExpandedRegion(isExpanded ? "" : region)}
+                    onClick={() => {
+                      if (isExpanded) {
+                        setExpandedRegion("");
+                        return;
+                      }
+                      setExpandedRegion(region);
+                      const preferredCountry =
+                        expandedCountryByRegion[region] ?? countries[0]?.[0];
+                      const nextIndices = preferredCountry
+                        ? countries.find(([country]) => country === preferredCountry)?.[1]
+                        : regionalSectorIndices;
+                      if (
+                        nextIndices?.[0]
+                        && (composition?.region ?? "Europe") !== region
+                      ) {
+                        void loadComposition(nextIndices[0].code);
+                      }
+                    }}
                   >
                     <span>{region}</span>
                     <ChevronDown aria-hidden="true" size={18} />
                   </button>
                   {isExpanded && (
-                    <div className="index-countries">
-                      {countries.map(([country, countryIndices]) => (
-                        <div className="index-country" key={country}>
-                          <span>{country}</span>
-                          <div
-                            className="index-tabs"
-                            role="tablist"
-                            aria-label={`Indices ${country}`}
+                    <div className="index-region-content">
+                      {regionalSectorIndices.length > 0 && (
+                        <div className="index-catalog-group">
+                          <button
+                            id={`${regionKey}-regional-sector-toggle`}
+                            className="index-group-toggle"
+                            aria-expanded={areRegionalSectorsExpanded}
+                            aria-controls={`${regionKey}-regional-sector-panel`}
+                            onClick={() => {
+                              const nextExpanded = !areRegionalSectorsExpanded;
+                              setExpandedRegionalSectors((current) => ({
+                                ...current,
+                                [region]: nextExpanded,
+                              }));
+                              if (
+                                nextExpanded
+                                && regionalSectorIndices[0]
+                                && !regionalSectorIndices.some(
+                                  (index) => index.code === composition?.code,
+                                )
+                              ) {
+                                void loadComposition(regionalSectorIndices[0].code);
+                              }
+                            }}
                           >
-                            {[...countryIndices]
-                              .sort((left, right) => byFrenchName(left.name, right.name))
-                              .map((index) => (
-                                <button
-                                  key={index.code}
-                                  role="tab"
-                                  aria-selected={composition?.code === index.code}
-                                  onClick={() => void loadComposition(index.code)}
-                                >
-                                  {index.name}
-                                </button>
-                              ))}
-                          </div>
+                            <span>
+                              <strong>Indices sectoriels régionaux</strong>
+                              <small>
+                                {regionalSectorIndices.length} indice
+                                {regionalSectorIndices.length > 1 ? "s" : ""} · {region}
+                              </small>
+                            </span>
+                            <ChevronDown aria-hidden="true" size={18} />
+                          </button>
+                          {areRegionalSectorsExpanded && (
+                            <div
+                              id={`${regionKey}-regional-sector-panel`}
+                              className="index-sector-grid"
+                              role="tablist"
+                              aria-label={`Indices sectoriels régionaux ${region}`}
+                            >
+                              {[...regionalSectorIndices]
+                                .sort((left, right) => {
+                                  const sectorOrder = byFrenchName(
+                                    sectorLabel(left.sector),
+                                    sectorLabel(right.sector),
+                                  );
+                                  return (
+                                    sectorOrder
+                                    || byFrenchName(left.name, right.name)
+                                  );
+                                })
+                                .map((index) => (
+                                  <button
+                                    key={index.code}
+                                    role="tab"
+                                    aria-selected={composition?.code === index.code}
+                                    onClick={() => {
+                                      void loadComposition(index.code);
+                                    }}
+                                  >
+                                    <strong>{sectorLabel(index.sector)}</strong>
+                                    <small>{index.name}</small>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      )}
+                      {countries.length > 0 && (
+                        <div className="index-countries" aria-label={`Marchés ${region}`}>
+                          {countries.map(([country, countryIndices]) => {
+                            const generalIndices = countryIndices.filter(
+                              (index) => (index.kind ?? "broad") === "broad",
+                            );
+                            const sectorIndices = countryIndices.filter(
+                              (index) => index.kind === "sector",
+                            );
+                            const isCountryExpanded =
+                              expandedCountryByRegion[region] === country;
+                            const countryKey = `${regionKey}-${country
+                              .toLocaleLowerCase("fr")
+                              .replace(/[^a-z0-9]+/g, "-")}`;
+                            return (
+                              <section className="index-country" key={country}>
+                                <button
+                                  id={`${countryKey}-toggle`}
+                                  className="index-country-toggle"
+                                  aria-expanded={isCountryExpanded}
+                                  aria-controls={`${countryKey}-panel`}
+                                  onClick={() => {
+                                    setExpandedCountryByRegion((current) => ({
+                                      ...current,
+                                      [region]: isCountryExpanded ? "" : country,
+                                    }));
+                                    if (
+                                      !isCountryExpanded
+                                      && countryIndices[0]
+                                      && !countryIndices.some(
+                                        (index) => index.code === composition?.code,
+                                      )
+                                    ) {
+                                      void loadComposition(
+                                        (generalIndices[0] ?? sectorIndices[0]).code,
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <span>
+                                    <strong>{country}</strong>
+                                    <small>
+                                      {generalIndices.length} indice
+                                      {generalIndices.length > 1 ? "s" : ""} général
+                                      {generalIndices.length > 1 ? "aux" : ""} · {sectorIndices.length} indice
+                                      {sectorIndices.length > 1 ? "s" : ""} sectoriel
+                                      {sectorIndices.length > 1 ? "s" : ""}
+                                    </small>
+                                  </span>
+                                  <ChevronDown aria-hidden="true" size={18} />
+                                </button>
+                                {isCountryExpanded && (
+                                  <div
+                                    id={`${countryKey}-panel`}
+                                    className="index-country-content"
+                                    role="region"
+                                    aria-labelledby={`${countryKey}-toggle`}
+                                  >
+                                    {generalIndices.length > 0 && (
+                                      <div className="index-country-group">
+                                        <p>Indices généraux</p>
+                                        <div
+                                          className="index-tabs"
+                                          role="tablist"
+                                          aria-label={`Indices généraux ${country}`}
+                                        >
+                                          {[...generalIndices]
+                                            .sort((left, right) =>
+                                              byFrenchName(left.name, right.name),
+                                            )
+                                            .map((index) => (
+                                              <button
+                                                key={index.code}
+                                                role="tab"
+                                                aria-selected={composition?.code === index.code}
+                                                onClick={() => void loadComposition(index.code)}
+                                              >
+                                                {index.name}
+                                              </button>
+                                            ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {sectorIndices.length > 0 && (
+                                      <div className="index-country-group">
+                                        <p>Indices sectoriels nationaux</p>
+                                        <div
+                                          className="index-sector-grid"
+                                          role="tablist"
+                                          aria-label={`Indices sectoriels ${country}`}
+                                        >
+                                          {[...sectorIndices]
+                                            .sort((left, right) =>
+                                              byFrenchName(
+                                                sectorLabel(left.sector),
+                                                sectorLabel(right.sector),
+                                              ),
+                                            )
+                                            .map((index) => (
+                                              <button
+                                                key={index.code}
+                                                role="tab"
+                                                aria-selected={composition?.code === index.code}
+                                                onClick={() => void loadComposition(index.code)}
+                                              >
+                                                <strong>{sectorLabel(index.sector)}</strong>
+                                                <small>{index.name}</small>
+                                              </button>
+                                            ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </section>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </section>
@@ -238,9 +477,22 @@ export function IndexBrowserDrawer({
             </button>
           </div>
           {composition && (
-            <p className="index-meta">
-              {composition.constituents.length} composantes · composition au {composition.as_of ?? "dernier relevé"} · source {composition.provider}
-            </p>
+            <>
+              <p className="index-meta">
+                {composition.constituents.length} composantes
+                {composition.kind === "sector" && composition.sector
+                  ? ` · secteur ${sectorLabel(composition.sector)}`
+                  : ""}
+                {` · composition au ${composition.as_of ?? "dernier relevé"} · source ${composition.provider}`}
+              </p>
+              {composition.kind === "sector"
+                && composition.constituents.length < 5 && (
+                  <p className="index-diversification-warning" role="status">
+                    Diversification limitée : cet indice ne contient que {composition.constituents.length} composante
+                    {composition.constituents.length > 1 ? "s" : ""}.
+                  </p>
+                )}
+            </>
           )}
           {error && <p className="form-error">{error}</p>}
           {loading ? (

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { FileUp, Inbox, Landmark, Search, Settings2, Star } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileUp, Inbox, Landmark, Search, Settings2, Star, Trash2 } from "lucide-react";
 
 import type { Company } from "../api/client";
 
@@ -11,6 +11,7 @@ interface CompanyUniverseProps {
   onAnalysis: (company: Company) => void;
   onManage: (company: Company) => void;
   onToggleFavorite: (company: Company, isFavorite: boolean) => void;
+  onDeleteSelected: (companyIds: string[]) => Promise<void>;
 }
 
 const INDEX_LABELS: Record<string, string> = {
@@ -60,8 +61,14 @@ export function CompanyUniverse({
   onAnalysis,
   onManage,
   onToggleFavorite,
+  onDeleteSelected,
 }: CompanyUniverseProps) {
   const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const scoreFor = (company: Company) =>
     scores[company.id] ?? company.latest_mk_score;
   const universeCompanies = useMemo(
@@ -77,6 +84,69 @@ export function CompanyUniverse({
         .includes(normalizedQuery),
     );
   }, [query, universeCompanies]);
+  const filteredIds = useMemo(
+    () => filteredCompanies.map((company) => company.id),
+    [filteredCompanies],
+  );
+  const allFilteredSelected = filteredIds.length > 0
+    && filteredIds.every((companyId) => selectedIds.has(companyId));
+  const someFilteredSelected = filteredIds.some((companyId) => selectedIds.has(companyId));
+
+  useEffect(() => {
+    const universeIds = new Set(universeCompanies.map((company) => company.id));
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((companyId) => universeIds.has(companyId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [universeCompanies]);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someFilteredSelected && !allFilteredSelected;
+    }
+  }, [allFilteredSelected, someFilteredSelected]);
+
+  const toggleSelection = (companyId: string) => {
+    setConfirmingDelete(false);
+    setDeleteError(null);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(companyId)) next.delete(companyId);
+      else next.add(companyId);
+      return next;
+    });
+  };
+
+  const toggleAllFiltered = () => {
+    setConfirmingDelete(false);
+    setDeleteError(null);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      filteredIds.forEach((companyId) => {
+        if (allFilteredSelected) next.delete(companyId);
+        else next.add(companyId);
+      });
+      return next;
+    });
+  };
+
+  const deleteSelected = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDeleteSelected([...selectedIds]);
+      setSelectedIds(new Set());
+      setConfirmingDelete(false);
+    } catch (caughtError) {
+      setDeleteError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "La suppression groupée n’a pas pu être effectuée.",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <section
@@ -94,8 +164,60 @@ export function CompanyUniverse({
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
+      {selectedIds.size > 0 && (
+        <div className="universe-bulk-actions">
+          <strong>
+            {selectedIds.size} valeur{selectedIds.size > 1 ? "s" : ""} sélectionnée{selectedIds.size > 1 ? "s" : ""}
+          </strong>
+          {confirmingDelete ? (
+            <div className="universe-bulk-confirmation" role="alert">
+              <p>
+                Supprimer définitivement {selectedIds.size} valeur{selectedIds.size > 1 ? "s" : ""}
+                et toutes leurs analyses associées ?
+              </p>
+              <button
+                type="button"
+                className="button button--ghost"
+                disabled={deleting}
+                onClick={() => setConfirmingDelete(false)}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="button button--danger"
+                disabled={deleting}
+                onClick={() => void deleteSelected()}
+              >
+                <Trash2 aria-hidden="true" size={17} />
+                {deleting ? "Suppression…" : "Confirmer la suppression groupée"}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="button button--danger"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 aria-hidden="true" size={17} />
+              Supprimer la sélection
+            </button>
+          )}
+          {deleteError && <p className="form-error">{deleteError}</p>}
+        </div>
+      )}
       <div className="company-table">
         <div className="company-table__head" role="row">
+          <label className="company-selection" title="Sélectionner toutes les valeurs affichées">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              checked={allFilteredSelected}
+              disabled={filteredIds.length === 0}
+              onChange={toggleAllFiltered}
+            />
+            <span className="sr-only">Sélectionner toutes les valeurs affichées</span>
+          </label>
           <span>Entreprise</span>
           <span>Ticker</span>
           <span>Place de cotation</span>
@@ -105,7 +227,20 @@ export function CompanyUniverse({
         {universeCompanies.length ? (
           <div className="company-table__body">
             {filteredCompanies.map((company) => (
-              <div className="company-table__row" role="row" key={company.id}>
+              <div
+                className="company-table__row"
+                data-selected={selectedIds.has(company.id) || undefined}
+                role="row"
+                key={company.id}
+              >
+                <label className="company-selection">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(company.id)}
+                    onChange={() => toggleSelection(company.id)}
+                  />
+                  <span className="sr-only">Sélectionner {company.name}</span>
+                </label>
                 <div className="company-name-cell">
                   <strong>{company.name}</strong>
                   {company.index_memberships?.length ? (
@@ -120,16 +255,7 @@ export function CompanyUniverse({
                 <span>{company.exchange}</span>
                 <span>{company.country}</span>
                 <div className="company-row-actions">
-                  {company.status === "pending" ? (
-                    <button
-                      className="company-action"
-                      onClick={() => onFinancialImport(company)}
-                      aria-label={`Importer les données financières pour ${company.name}`}
-                    >
-                      <FileUp aria-hidden="true" size={16} />
-                      Charger l’historique
-                    </button>
-                  ) : (
+                  {company.status === "ready" ? (
                     <button
                       className="company-status company-status--ready company-analysis"
                       onClick={() => onAnalysis(company)}
@@ -140,6 +266,34 @@ export function CompanyUniverse({
                       {scoreFor(company) != null && (
                         <strong>MK Score {scoreFor(company)}</strong>
                       )}
+                    </button>
+                  ) : company.status === "partial" ? (
+                    <div className="company-partial-actions">
+                      <button
+                        className="company-status company-status--partial company-analysis"
+                        onClick={() => onAnalysis(company)}
+                        aria-label={`Voir les données disponibles pour ${company.name}`}
+                      >
+                        <span className="status-dot" aria-hidden="true" />
+                        <span>Données partielles</span>
+                      </button>
+                      <button
+                        className="row-manage"
+                        onClick={() => onFinancialImport(company)}
+                        aria-label={`Réessayer l’import financier pour ${company.name}`}
+                        title="Réessayer l’import financier"
+                      >
+                        <FileUp aria-hidden="true" size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="company-action"
+                      onClick={() => onFinancialImport(company)}
+                      aria-label={`Importer les données financières pour ${company.name}`}
+                    >
+                      <FileUp aria-hidden="true" size={16} />
+                      Charger l’historique
                     </button>
                   )}
                   <button

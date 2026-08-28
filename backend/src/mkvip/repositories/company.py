@@ -9,6 +9,7 @@ from mkvip.analysis.scoring import ScoringAnalysis
 from mkvip.analysis.valuation import ValuationAnalysis, ValuationAssumptions
 from mkvip.schemas.company import CompanyCreate, CompanyRead, CompanyUpdate
 from mkvip.schemas.financial import FinancialAnalysisRead, FinancialSnapshotCreate
+from mkvip.schemas.price import PriceHistoryRead, PricePointCreate
 from mkvip.schemas.scoring import ScoringAnalysisRead
 from mkvip.schemas.valuation import ValuationAnalysisRead
 
@@ -33,6 +34,8 @@ class CompanyRepository(Protocol):
     async def restore(self, company_id: uuid.UUID) -> CompanyRead | None: ...
 
     async def delete(self, company_id: uuid.UUID) -> bool: ...
+
+    async def delete_many(self, company_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]: ...
 
     async def get_financial_analysis(
         self,
@@ -59,6 +62,20 @@ class CompanyRepository(Protocol):
         company_id: uuid.UUID,
         analyses: Sequence[tuple[FinancialSnapshotCreate, FinancialAnalysis]],
     ) -> list[FinancialAnalysisRead]: ...
+
+    async def list_price_history(
+        self,
+        company_id: uuid.UUID,
+    ) -> PriceHistoryRead | None: ...
+
+    async def replace_price_history(
+        self,
+        company_id: uuid.UUID,
+        points: Sequence[PricePointCreate],
+        *,
+        currency: str,
+        source: str,
+    ) -> PriceHistoryRead: ...
 
     async def list_valuation_analyses(
         self,

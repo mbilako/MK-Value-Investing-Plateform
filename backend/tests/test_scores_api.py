@@ -81,11 +81,11 @@ def test_creates_and_lists_explainable_global_scores(client: TestClient) -> None
     assert body["valuation_analysis_id"] == valuation_id
     assert {component["key"]: component["score"] for component in body["components"]} == {
         "quality": 0,
-        "safety": 75,
+        "safety": 50,
         "value": 7.77,
         "moat": 50,
     }
-    assert body["global_score"] == 33.19
+    assert body["global_score"] == 26.94
     assert body["signal"] == "caution"
     assert body["signal_label"] == "Prudence"
     assert len(body["insights"]) == 4

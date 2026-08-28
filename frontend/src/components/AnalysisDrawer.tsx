@@ -12,6 +12,7 @@ import type {
 } from "../api/client";
 import { ScorePanel } from "./ScorePanel";
 import { ValuationPanel } from "./ValuationPanel";
+import { PriceHistoryChart } from "./PriceHistoryChart";
 
 interface AnalysisDrawerProps {
   company: Company;
@@ -42,6 +43,8 @@ type FundamentalKey =
 type ComparisonKey =
   | "revenue"
   | "pe_ratio"
+  | "current_ratio"
+  | "market_cap_to_assets"
   | "gross_margin"
   | "net_margin"
   | "interest_burden"
@@ -61,8 +64,6 @@ type HistoryColumnKey =
   | "roe"
   | "equity_to_assets"
   | "operating_cash_flow"
-  | "gross_margin"
-  | "net_margin"
   | "interest_burden"
   | "discount"
   | "stock_bond_yield"
@@ -88,6 +89,8 @@ const FUNDAMENTAL_ORDER: FundamentalKey[] = [
 const COMPARISON_ORDER: ComparisonKey[] = [
   "revenue",
   "pe_ratio",
+  "current_ratio",
+  "market_cap_to_assets",
   "gross_margin",
   "net_margin",
   "interest_burden",
@@ -108,8 +111,6 @@ const HISTORY_ORDER: HistoryColumnKey[] = [
   "roe",
   "equity_to_assets",
   "operating_cash_flow",
-  "gross_margin",
-  "net_margin",
   "interest_burden",
   "discount",
   "stock_bond_yield",
@@ -136,23 +137,27 @@ const FUNDAMENTAL_LABELS: Record<FundamentalKey, string> = {
 const COMPARISON_LABELS: Record<ComparisonKey, string> = {
   revenue: "Revenus",
   pe_ratio: "Cours / bénéfice (PER)",
+  current_ratio: "Current ratio",
+  market_cap_to_assets: "Capitalisation boursière / total actif",
   gross_margin: "Marge brute",
   net_margin: "Marge nette",
   interest_burden: "Poids de la dette financière",
   discount: "Décote",
   stock_bond_yield: "Rendement de l’action-obligation",
-  leverage: "Effet de levier",
+  leverage: "Effet de levier ajusté",
   debt_level: "Niveau d’endettement",
 };
 
 const COMPARISON_FORMULAS: Record<ComparisonKey, string> = {
   revenue: "Chiffre d’affaires publié",
   pe_ratio: "Capitalisation boursière / résultat net",
+  current_ratio: "Actif circulant / passif exigible",
+  market_cap_to_assets: "Capitalisation boursière / total actif",
   gross_margin: "EBITDA / chiffre d’affaires",
   net_margin: "Résultat net / chiffre d’affaires",
   interest_burden: "Charges d’intérêts / EBIT",
   discount: "Capitalisation boursière / actif circulant",
-  stock_bond_yield: "EBITDA / capitalisation boursière",
+  stock_bond_yield: "Résultat avant impôt / capitalisation boursière totale",
   leverage: "Passif total / (capitaux propres + réserve d’actions propres)",
   debt_level: "Dette financière nette / EBITDA",
 };
@@ -168,12 +173,10 @@ const HISTORY_LABELS: Record<HistoryColumnKey, string> = {
   roe: "ROE",
   equity_to_assets: "Fonds propres / actif",
   operating_cash_flow: "Cash-flow d’exploitation",
-  gross_margin: "Marge brute",
-  net_margin: "Marge nette",
   interest_burden: "Poids dette financière",
   discount: "Décote",
   stock_bond_yield: "Rendement action-obligation",
-  leverage: "Effet de levier",
+  leverage: "Effet de levier ajusté",
   debt_level: "Niveau d’endettement",
   mk_score: "MK Score",
 };
@@ -182,6 +185,8 @@ const THRESHOLDS: Partial<
   Record<ComparisonKey, { value: number; direction: "above" | "below" }>
 > = {
   pe_ratio: { value: 20, direction: "below" },
+  current_ratio: { value: 2, direction: "above" },
+  market_cap_to_assets: { value: 1.5, direction: "below" },
   gross_margin: { value: 0.4, direction: "above" },
   net_margin: { value: 0.2, direction: "above" },
   interest_burden: { value: 0.15, direction: "below" },
@@ -189,6 +194,60 @@ const THRESHOLDS: Partial<
   leverage: { value: 0.8, direction: "below" },
   debt_level: { value: 2.5, direction: "below" },
 };
+
+const SECTOR_LABELS: Record<string, string> = {
+  "Communication Services": "services de communication",
+  "Consumer Discretionary": "consommation discrétionnaire",
+  "Consumer Staples": "biens de consommation courante",
+  Energy: "énergie",
+  Financials: "services financiers",
+  "Health Care": "santé",
+  Industrials: "industrie",
+  "Information Technology": "technologies de l’information",
+  Materials: "matériaux",
+  "Real Estate": "immobilier",
+  Utilities: "services aux collectivités",
+};
+
+function compactBusinessSummary(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 900) return normalized;
+  const excerpt = normalized.slice(0, 900);
+  const sentenceEnd = Math.max(
+    excerpt.lastIndexOf(". "),
+    excerpt.lastIndexOf("! "),
+    excerpt.lastIndexOf("? "),
+  );
+  if (sentenceEnd >= 450) return excerpt.slice(0, sentenceEnd + 1);
+  const wordEnd = excerpt.lastIndexOf(" ");
+  return `${excerpt.slice(0, wordEnd)}…`;
+}
+
+function activitySummary(company: Company): { text: string; source: string } {
+  if (company.business_summary?.trim()) {
+    return {
+      text: compactBusinessSummary(company.business_summary),
+      source: "Profil public de l’entreprise",
+    };
+  }
+  const sector = company.sector
+    ? SECTOR_LABELS[company.sector] ?? company.sector
+    : null;
+  if (company.industry || sector) {
+    const activity = company.industry
+      ? `dans l’activité « ${company.industry} »`
+      : `dans le secteur ${sector}`;
+    const sectorDetail = company.industry && sector ? `, rattachée au secteur ${sector}` : "";
+    return {
+      text: `${company.name} exerce principalement ${activity}${sectorDetail}. L’entreprise est établie en ${company.country} et ses titres sont négociés sur ${company.exchange}.`,
+      source: "Résumé basé sur la classification disponible",
+    };
+  }
+  return {
+    text: `Le résumé détaillé de ${company.name} n’est pas encore disponible. Rechargez l’historique financier pour actualiser son profil public.`,
+    source: "Profil à actualiser",
+  };
+}
 
 function formatAmount(value: number | null | undefined, currency: string): string {
   if (value == null) return "N/A";
@@ -221,6 +280,10 @@ function comparisonValue(key: ComparisonKey, snapshot: FinancialAnalysis): numbe
       return snapshot.revenue;
     case "pe_ratio":
       return ratio(snapshot.market_cap, snapshot.net_income);
+    case "current_ratio":
+      return ratio(snapshot.current_assets, snapshot.current_liabilities);
+    case "market_cap_to_assets":
+      return ratio(snapshot.market_cap, snapshot.total_assets);
     case "gross_margin":
       return ratio(snapshot.ebitda, snapshot.revenue);
     case "net_margin":
@@ -230,7 +293,7 @@ function comparisonValue(key: ComparisonKey, snapshot: FinancialAnalysis): numbe
     case "discount":
       return ratio(snapshot.market_cap, snapshot.current_assets);
     case "stock_bond_yield":
-      return ratio(snapshot.ebitda, snapshot.market_cap);
+      return ratio(snapshot.pretax_income, snapshot.market_cap);
     case "leverage": {
       const totalLiabilities = snapshot.total_assets - snapshot.total_equity;
       if (totalLiabilities < 0) return null;
@@ -251,7 +314,13 @@ function formatComparisonValue(
   currency: string,
 ): string {
   if (key === "revenue") return formatAmount(value, currency);
-  if (key === "pe_ratio" || key === "leverage" || key === "debt_level") {
+  if (
+    key === "pe_ratio"
+    || key === "current_ratio"
+    || key === "market_cap_to_assets"
+    || key === "leverage"
+    || key === "debt_level"
+  ) {
     return formatMultiple(value);
   }
   return formatRatio(value);
@@ -270,7 +339,13 @@ function formatComparisonDelta(
       signDisplay: "always",
     })} %`;
   }
-  if (key === "pe_ratio" || key === "leverage" || key === "debt_level") {
+  if (
+    key === "pe_ratio"
+    || key === "current_ratio"
+    || key === "market_cap_to_assets"
+    || key === "leverage"
+    || key === "debt_level"
+  ) {
     return `${(current - previous).toLocaleString("fr-FR", {
       maximumFractionDigits: 2,
       signDisplay: "always",
@@ -296,7 +371,11 @@ function comparisonTone(key: ComparisonKey, value: number | null): string {
 function thresholdLabel(key: ComparisonKey): string | null {
   const rule = THRESHOLDS[key];
   if (rule == null) return null;
-  const formatted = key === "pe_ratio" || key === "leverage" || key === "debt_level"
+  const formatted = key === "pe_ratio"
+    || key === "current_ratio"
+    || key === "market_cap_to_assets"
+    || key === "leverage"
+    || key === "debt_level"
     ? `${rule.value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}×`
     : `${(rule.value * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
   return `Seuil vert : ${rule.direction === "above" ? ">" : "<"} ${formatted}`;
@@ -429,8 +508,6 @@ function historyValue(key: HistoryColumnKey, snapshot: FinancialAnalysis): strin
       return formatRatio(ratio(snapshot.total_equity, snapshot.total_assets));
     case "operating_cash_flow":
       return formatAmount(snapshot.operating_cash_flow, snapshot.currency);
-    case "gross_margin":
-    case "net_margin":
     case "interest_burden":
     case "discount":
     case "stock_bond_yield":
@@ -483,6 +560,7 @@ export function AnalysisDrawer({
     "mkvip.analysis.history-order",
     HISTORY_ORDER,
   );
+  const activity = activitySummary(company);
 
   return (
     <div className="drawer-layer" role="presentation">
@@ -510,8 +588,30 @@ export function AnalysisDrawer({
         <div className="analysis-drawer__body">
           {loading && <p className="analysis-message">Chargement de l’analyse…</p>}
           {error && <p className="form-error" role="alert">{error}</p>}
-          {!loading && !error && !latest && (
-            <p className="analysis-message">Aucune analyse disponible.</p>
+          {!loading && !error && !latest && history && (
+            <>
+              <p className="analysis-message analysis-message--partial">
+                Les cours et le profil public sont disponibles. Les comptes annuels
+                structurés ne sont pas fournis par les sources gratuites connectées ;
+                aucun ratio ni MK Score n’est donc calculé avec des données incomplètes.
+              </p>
+              <section
+                className="analysis-section business-summary"
+                aria-labelledby="business-summary-title"
+              >
+                <div className="analysis-section__head">
+                  <h3 id="business-summary-title">Résumé de l’activité</h3>
+                  <span>{activity.source}</span>
+                </div>
+                <p>{activity.text}</p>
+                <div className="business-summary__facts" aria-label="Informations sur l’activité">
+                  {company.sector && <span>{SECTOR_LABELS[company.sector] ?? company.sector}</span>}
+                  {company.industry && <span>{company.industry}</span>}
+                  <span>{company.country}</span>
+                </div>
+              </section>
+              <PriceHistoryChart history={history.price_history} />
+            </>
           )}
           {latest && history && (
             <>
@@ -519,6 +619,24 @@ export function AnalysisDrawer({
                 <span>{history.snapshots.length} exercice{history.snapshots.length > 1 ? "s" : ""} disponible{history.snapshots.length > 1 ? "s" : ""}</span>
                 <span>{trend?.first_year}–{trend?.last_year}</span>
               </div>
+
+              <section
+                className="analysis-section business-summary"
+                aria-labelledby="business-summary-title"
+              >
+                <div className="analysis-section__head">
+                  <h3 id="business-summary-title">Résumé de l’activité</h3>
+                  <span>{activity.source}</span>
+                </div>
+                <p>{activity.text}</p>
+                <div className="business-summary__facts" aria-label="Informations sur l’activité">
+                  {company.sector && <span>{SECTOR_LABELS[company.sector] ?? company.sector}</span>}
+                  {company.industry && <span>{company.industry}</span>}
+                  <span>{company.country}</span>
+                </div>
+              </section>
+
+              <PriceHistoryChart history={history.price_history} />
 
               <section className="mk-score-summary" aria-label="Dernier MK Score">
                 <div>

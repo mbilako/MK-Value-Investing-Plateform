@@ -15,6 +15,9 @@ const company: Company = {
   exchange: "Euronext Paris",
   country: "France",
   currency: "EUR",
+  sector: "Financials",
+  industry: "Banks - Diversified",
+  business_summary: "BNP Paribas provides retail banking, corporate financing, investment, insurance, and asset-management services to individuals and businesses.",
   isin: "FR0000131104",
   cik: null,
   lei: null,
@@ -87,6 +90,80 @@ describe("AnalysisDrawer financial institutions", () => {
   beforeEach(() => window.localStorage.clear());
   afterEach(cleanup);
 
+  it("shows the business summary card before the stock-price history", () => {
+    render(
+      <AnalysisDrawer
+        company={company}
+        history={history}
+        valuations={[]}
+        scores={[]}
+        loading={false}
+        error={null}
+        onCreateValuation={async () => {
+          throw new Error("not expected");
+        }}
+        onCreateScore={async () => {
+          throw new Error("not expected");
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    const summary = screen.getByRole("heading", { name: "Résumé de l’activité" });
+    const prices = screen.getByRole("heading", { name: "Historique du cours de bourse" });
+    expect(screen.getByText(/provides retail banking/)).toBeInTheDocument();
+    expect(summary.compareDocumentPosition(prices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows public profile and prices when structured accounts are unavailable", () => {
+    const partialHistory: FinancialHistory = {
+      company_id: company.id,
+      snapshots: [],
+      trend: {
+        periods: 0,
+        first_year: null,
+        last_year: null,
+        revenue_cagr: null,
+        net_income_cagr: null,
+        free_cash_flow_cagr: null,
+      },
+      price_history: {
+        company_id: company.id,
+        currency: "EUR",
+        source: "Yahoo Finance",
+        points: [
+          { date: "2025-12-31", close: 14.2, adjusted_close: 14.2 },
+          { date: "2026-08-18", close: 15.1, adjusted_close: 15.1 },
+        ],
+        updated_at: "2026-08-18T00:00:00Z",
+      },
+    };
+
+    render(
+      <AnalysisDrawer
+        company={{ ...company, status: "partial" }}
+        history={partialHistory}
+        valuations={[]}
+        scores={[]}
+        loading={false}
+        error={null}
+        onCreateValuation={async () => {
+          throw new Error("not expected");
+        }}
+        onCreateScore={async () => {
+          throw new Error("not expected");
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/Les cours et le profil public sont disponibles/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Résumé de l’activité" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Historique du cours de bourse" })).toBeInTheDocument();
+    expect(screen.queryByText("Aucune analyse disponible.")).not.toBeInTheDocument();
+    expect(screen.queryByText("MK Score", { selector: "span" })).not.toBeInTheDocument();
+  });
+
   it("uses the same movable fundamental layout for every sector", () => {
     render(
       <AnalysisDrawer
@@ -143,7 +220,7 @@ describe("AnalysisDrawer financial institutions", () => {
     expect(cardsAfter[1]).toHaveTextContent("Revenus publiés");
   });
 
-  it("compares the last two fiscal years and adds the requested ratios to history", () => {
+  it("compares the last two fiscal years and keeps the requested ratios in history", () => {
     const latest: FinancialAnalysis = {
       ...analysis,
       id: "analysis-latest",
@@ -156,6 +233,7 @@ describe("AnalysisDrawer financial institutions", () => {
       pretax_income: 160,
       market_cap: 800,
       current_assets: 1_000,
+      current_liabilities: 400,
       financial_debt: 500,
       cash: 100,
       total_assets: 1_000,
@@ -174,6 +252,7 @@ describe("AnalysisDrawer financial institutions", () => {
       pretax_income: 100,
       market_cap: 1_000,
       current_assets: 800,
+      current_liabilities: 500,
       financial_debt: 600,
       cash: 100,
       total_assets: 900,
@@ -218,39 +297,50 @@ describe("AnalysisDrawer financial institutions", () => {
     const favorablePe = comparisonView.getByText("3,2×").closest("strong");
     expect(favorablePe).toHaveClass("comparison-value--favorable");
     expect(comparisonView.getByText("2024 : 12,5×")).toBeInTheDocument();
+    const favorableCurrentRatio = comparisonView.getByText("2,5×").closest("strong");
+    expect(favorableCurrentRatio).toHaveClass("comparison-value--favorable");
+    expect(comparisonView.getByText("2024 : 1,6×")).toBeInTheDocument();
+    const favorableMarketCapToAssets = comparisonView.getByText("0,8×").closest("strong");
+    expect(favorableMarketCapToAssets).toHaveClass("comparison-value--favorable");
+    expect(comparisonView.getByText("2024 : 1,11×")).toBeInTheDocument();
+    expect(comparisonView.getByText("Current ratio")).toBeInTheDocument();
+    expect(
+      comparisonView.getByText("Capitalisation boursière / total actif"),
+    ).toBeInTheDocument();
     const unfavorableMargin = comparisonView.getByText("35 %").closest("strong");
     expect(unfavorableMargin).toHaveClass("comparison-value--unfavorable");
     const favorableNetMargin = comparisonView.getByText("25 %").closest("strong");
     expect(favorableNetMargin).toHaveClass("comparison-value--favorable");
-    expect(comparisonView.getByText("43,8 %")).toBeInTheDocument();
+    const stockBondYieldCard = comparisonView
+      .getByText("Rendement de l’action-obligation")
+      .closest("article");
+    expect(stockBondYieldCard).not.toBeNull();
+    expect(stockBondYieldCard).toHaveAttribute(
+      "title",
+      "Résultat avant impôt / capitalisation boursière totale",
+    );
+    expect(within(stockBondYieldCard as HTMLElement).getByText("20 %")).toBeInTheDocument();
+    expect(
+      within(stockBondYieldCard as HTMLElement).getByText("2024 : 10 %"),
+    ).toBeInTheDocument();
     const unfavorableLeverage = comparisonView.getByText("1,2×").closest("strong");
     expect(unfavorableLeverage).toHaveClass("comparison-value--unfavorable");
+    expect(comparisonView.getByText("Effet de levier ajusté")).toBeInTheDocument();
     expect(comparisonView.getByText("Seuil vert : > 40 %")).toBeInTheDocument();
     expect(comparisonView.getByText("Seuil vert : > 20 %")).toBeInTheDocument();
     expect(comparisonView.getByText("Seuil vert : < 20×")).toBeInTheDocument();
+    expect(comparisonView.getByText("Seuil vert : > 2×")).toBeInTheDocument();
+    expect(comparisonView.getByText("Seuil vert : < 1,5×")).toBeInTheDocument();
 
     const annualHistory = screen.getByRole("table", { name: "Historique fondamental" });
-    expect(within(annualHistory).getByRole("columnheader", { name: /Marge brute/ })).toBeInTheDocument();
-    expect(within(annualHistory).getByRole("columnheader", { name: /Marge nette/ })).toBeInTheDocument();
+    expect(within(annualHistory).queryByRole("columnheader", { name: /Marge brute/ })).not.toBeInTheDocument();
+    expect(within(annualHistory).queryByRole("columnheader", { name: /Marge nette/ })).not.toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Poids dette financière/ })).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Décote/ })).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Rendement action-obligation/ })).toBeInTheDocument();
-    expect(within(annualHistory).getByRole("columnheader", { name: /Effet de levier/ })).toBeInTheDocument();
+    expect(
+      within(annualHistory).getByRole("columnheader", { name: /Effet de levier ajusté/ }),
+    ).toBeInTheDocument();
     expect(within(annualHistory).getByRole("columnheader", { name: /Niveau d’endettement/ })).toBeInTheDocument();
-    expect(
-      within(annualHistory).getByText("35 %", {
-        selector: ".comparison-value--unfavorable",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(annualHistory).getByText("40 %", {
-        selector: ".comparison-value--unfavorable",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(annualHistory).getByText("25 %", {
-        selector: ".comparison-value--favorable",
-      }),
-    ).toBeInTheDocument();
   });
 });
